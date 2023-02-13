@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<robot name="ff">
+  <material name="white">
+    <color rgba="1 1 1 1"/>
+  </material>
+
+  <link name="robot/base">
+    <visual>
+      <origin xyz="0 0 -0.12" rpy="1.570796327 0 0" />
+      <geometry>
+        <mesh filename="package://ff_viz/model/ff_mesh.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="white"/>
+    </visual>
+  </link>
+</robot>
