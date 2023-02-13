@@ -1,6 +1,5 @@
 #include <chrono>
 #include <cmath>
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -16,11 +15,15 @@
 #include "ff_msgs/msg/pose2_d_stamped.hpp"
 
 using namespace std::chrono_literals;
+using namespace std::placeholders;
 
 class TableRenderer : public rclcpp::Node {
  public:
   TableRenderer(const std::string& name) : rclcpp::Node(name) {
     auto robot_names = this->declare_parameter<std::vector<std::string>>("robot_name", {"robot"});
+    pose_subs_.resize(robot_names.size());
+    transform_msgs_.resize(robot_names.size());
+
     // build marker for the table
     marker_msg_.ns = "table";
     marker_msg_.id = 0;
@@ -44,22 +47,26 @@ class TableRenderer : public rclcpp::Node {
     marker_msg_.color.a = 1.0;
     marker_msg_.lifetime = rclcpp::Duration::from_seconds(0);
 
-    // build pose msg
-    transform_msg_.header.frame_id = "map";
-    transform_msg_.child_frame_id = robot_names[0] + "/base";
-    transform_msg_.transform.rotation.x = 0.0;
-    transform_msg_.transform.rotation.y = 0.0;
-    transform_msg_.transform.rotation.z = 0.0;
-    transform_msg_.transform.rotation.w = 1.0;
-    transform_msg_.transform.translation.x = 0.0;
-    transform_msg_.transform.translation.y = 0.0;
-    transform_msg_.transform.translation.z = 0.0;
+    for (size_t i = 0; i < robot_names.size(); ++i) {
+      // build pose messages
+      transform_msgs_[i] = std::make_unique<geometry_msgs::msg::TransformStamped>();
+      transform_msgs_[i]->header.frame_id = "map";
+      transform_msgs_[i]->child_frame_id = robot_names[i] + "/base";
+      transform_msgs_[i]->transform.rotation.x = 0.0;
+      transform_msgs_[i]->transform.rotation.y = 0.0;
+      transform_msgs_[i]->transform.rotation.z = 0.0;
+      transform_msgs_[i]->transform.rotation.w = 1.0;
+      transform_msgs_[i]->transform.translation.x = 0.0;
+      transform_msgs_[i]->transform.translation.y = 0.0;
+      transform_msgs_[i]->transform.translation.z = 0.0;
 
-    pose_sub_ = this->create_subscription<ff_msgs::msg::Pose2DStamped>(
-      "/robot/estimator/pose",
-      10,
-      std::bind(&TableRenderer::PoseCallback, this, std::placeholders::_1)
-    );
+      // create pose subscription
+      pose_subs_[i] = this->create_subscription<ff_msgs::msg::Pose2DStamped>(
+        robot_names[i] + "/estimator/pose",
+        10,
+        [this, i](const ff_msgs::msg::Pose2DStamped::SharedPtr msg){ this->PoseCallback(i, msg); }
+      );
+    }
 
     // marker publisher
     marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("table_marker", 10);
@@ -73,13 +80,13 @@ class TableRenderer : public rclcpp::Node {
 
  private:
   rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::Subscription<ff_msgs::msg::Pose2DStamped>::SharedPtr pose_sub_;
+  std::vector<rclcpp::Subscription<ff_msgs::msg::Pose2DStamped>::SharedPtr> pose_subs_;
 
   visualization_msgs::msg::Marker marker_msg_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
 
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-  geometry_msgs::msg::TransformStamped transform_msg_;
+  std::vector<geometry_msgs::msg::TransformStamped::UniquePtr> transform_msgs_;
 
   void VizUpdate() {
     // render table
@@ -87,20 +94,22 @@ class TableRenderer : public rclcpp::Node {
     marker_pub_->publish(marker_msg_);
 
     // render robot state
-    tf_broadcaster_->sendTransform(transform_msg_);
+    for (size_t i = 0; i < transform_msgs_.size(); ++i) {
+      tf_broadcaster_->sendTransform(*transform_msgs_[i]);
+    }
   }
 
-  void PoseCallback(const ff_msgs::msg::Pose2DStamped::SharedPtr msg) {
-    transform_msg_.transform.translation.x = msg->x;
-    transform_msg_.transform.translation.y = msg->y;
-    transform_msg_.transform.translation.z = 0.15;
+  void PoseCallback(const size_t idx, const ff_msgs::msg::Pose2DStamped::SharedPtr msg) {
+    transform_msgs_[idx]->transform.translation.x = msg->x;
+    transform_msgs_[idx]->transform.translation.y = msg->y;
+    transform_msgs_[idx]->transform.translation.z = 0.15;
 
     tf2::Quaternion q;
     q.setRPY(0, 0, msg->theta);
-    transform_msg_.transform.rotation.x = q.x();
-    transform_msg_.transform.rotation.y = q.y();
-    transform_msg_.transform.rotation.z = q.z();
-    transform_msg_.transform.rotation.w = q.w();
+    transform_msgs_[idx]->transform.rotation.x = q.x();
+    transform_msgs_[idx]->transform.rotation.y = q.y();
+    transform_msgs_[idx]->transform.rotation.z = q.z();
+    transform_msgs_[idx]->transform.rotation.w = q.w();
   }
 };
 
