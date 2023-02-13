@@ -14,9 +14,6 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
-# find 3rd party dependencies
-find_package(ff_msgs REQUIRED)
-
 add_executable(renderer_node src/renderer_node.cpp)
 target_include_directories(renderer_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -29,9 +26,6 @@ ament_target_dependencies(renderer_node
   tf2
   tf2_ros
   visualization_msgs
-
-  # 3rd party deps
-  ff_msgs
 )
 
 install(TARGETS renderer_node
