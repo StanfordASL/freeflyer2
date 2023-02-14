@@ -18,7 +18,7 @@ using namespace std::placeholders;
 
 class Renderer : public rclcpp::Node {
  public:
-  Renderer(const std::string& name) : rclcpp::Node(name) {
+  explicit Renderer(const std::string& name) : rclcpp::Node(name) {
     auto robot_names = this->declare_parameter<std::vector<std::string>>("robot_name", {"robot"});
     pose_subs_.resize(robot_names.size());
     transform_msgs_.resize(robot_names.size());

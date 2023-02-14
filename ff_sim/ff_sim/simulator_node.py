@@ -15,6 +15,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import TwistStamped, PoseStamped, WrenchStamped
 from std_msgs.msg import Float64, Float64MultiArray
 
+from ff_params import RobotParams
+
 def simulate_contact(
     state: np.ndarray,
     robot_radius: float,
@@ -64,18 +66,7 @@ class FreeFlyerSimulator(Node):
         # robot name
         p_robot_name = self.declare_parameter("robot_name", "robot")
         self.robot_name = p_robot_name.get_parameter_value().string_value
-
-        # dynamics params
-        p_dynamics = self.declare_parameters("dynamics", [
-            ("mass", 16.),                      # true total mass [kg]
-            ("inertia", 0.18),                  # true inertia at robot CoM (no payload) [kg*m^2]
-            ("CoM_offset", [0., 0.]),           # CoM offset, in body frame [m]
-            ("force_const", [0.005, 0.005]),    # Constant force (e.g. table tilt), in world frame [N]
-        ])
-        self.m = p_dynamics[0].get_parameter_value().double_value
-        self.J = p_dynamics[1].get_parameter_value().double_value
-        self.p0 = np.array(p_dynamics[2].get_parameter_value().double_array_value)
-        self.F_tilt = np.array(p_dynamics[3].get_parameter_value().double_array_value)
+        self.p = RobotParams(self, self.robot_name)
 
         # obstacles
         p_obstacles = self.declare_parameters("obstacles",[
@@ -91,35 +82,10 @@ class FreeFlyerSimulator(Node):
             "cyl_heights": p_obstacles[3].get_parameter_value().double_array_value,
         }
 
-        # robot params
-        p_robot = self.declare_parameters("robot", [
-            ("f_max_per_thruster", 0.2),        # max force in [N] of one thruster
-            ("thrusters_lever_arm", 0.11461),   # lever arm, in [m]
-            ("robot_radius", 0.1),              # total radius of robot, in [m]
-        ])
-        self.F_MAX_PER_THRUSTER = p_robot[0].get_parameter_value().double_value
-        self.THRUSTERS_LEVER_ARM = p_robot[1].get_parameter_value().double_value
-        self.radius = p_robot[2].get_parameter_value().double_value
-
-        p_actuators = self.declare_parameters("actuator", [
-            ("B_ideal", False),         # if True, then ideal input response
-            ("F_max", 0.4),             # force max, in [N]
-            ("M_max", 0.05),            # moment / torque max, in [Nm]
-            ("min_inp_percent", 0.05),  # in [0,0.15]  - inputs are zero close to min input
-            ("max_inp_percent", 0.95),  # in [0.8,1.0] - inflexion pt for input sat (PWMs overlapping)
-            ("gamma_min", 500.),        # in [100,1000] - sharpness for inp saturation close to min inp
-            ("gamma_max", 500.),        # in [100,1000] - sharpness for inp saturation close to max inp
-        ])
-        self.B_ideal = p_actuators[0].get_parameter_value().bool_value
-        self.F_max = p_actuators[1].get_parameter_value().double_value
-        self.M_max = p_actuators[2].get_parameter_value().double_value
-        self.min_inp_percent = p_actuators[3].get_parameter_value().double_value
-        self.max_inp_percent = p_actuators[4].get_parameter_value().double_value
-        self.gamma_min = p_actuators[5].get_parameter_value().double_value
-        self.gamma_max = p_actuators[6].get_parameter_value().double_value
+        self.B_ideal = self.declare_parameter("B_ideal", False).get_parameter_value().bool_value
 
         # simulation params
-        p_sim = self.declare_parameters("simulation", [
+        p_sim = self.declare_parameters("", [
             ("sim_dt", 0.01),                   # update period in [s]
             ("discretization", "Euler"),        # discretization scheme from {"Euler", "RungeKutta"}
             ("x_0", [0.6, 2., 0., 0., 0., 0.]), # initial state
@@ -159,6 +125,9 @@ class FreeFlyerSimulator(Node):
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
     def sim_loop(self) -> None:
+        if not self.p.loaded:
+            return
+
         now = self.get_clock().now().to_msg()
 
         # Get thrusters forces
@@ -188,7 +157,8 @@ class FreeFlyerSimulator(Node):
 
         # simulate contacts
         if self.B_sim_contacts:
-            x_next, W_contact, B_contact = simulate_contact(x_next, self.radius, self.obstacles)
+            radius = self.p.dynamics["radius"]
+            x_next, W_contact, B_contact = simulate_contact(x_next, radius, self.obstacles)
 
             wrench_ext_msg = WrenchStamped()
             wrench_ext_msg.header.stamp = now
@@ -254,8 +224,8 @@ class FreeFlyerSimulator(Node):
         #     <--       -->
         #      (5)     (6)
 
-        Fmax = self.F_MAX_PER_THRUSTER
-        dist = self.THRUSTERS_LEVER_ARM
+        Fmax = self.p.actuators["F_max_per_thruster"]
+        dist = self.p.actuators["thrusters_lever_arm"]
 
         u_dc = thrusters_dutycycles_vec
 
@@ -268,10 +238,17 @@ class FreeFlyerSimulator(Node):
         return np.array([F_x, F_y]), M
 
     def actuators_mapping(self, u_cmd):
+        F_max = self.p.actuators["F_body_max"]
+        M_max = self.p.actuators["M_body_max"]
+        min_inp_percent = self.p.actuators["min_inp_percent"]
+        max_inp_percent = self.p.actuators["max_inp_percent"]
+        gamma_min = self.p.actuators["gamma_min"]
+        gamma_max = self.p.actuators["gamma_max"]
+
         # returns the true wrench u from a commanded wrench u
-        u_max = np.array([self.F_max, self.F_max, self.M_max])*np.ones_like(u_cmd)
-        u_min = self.min_inp_percent * u_max
-        d_max = self.max_inp_percent * u_max # inflexion point where input saturation occurs (due to PWMs overlapping)
+        u_max = np.array([F_max, F_max, M_max])*np.ones_like(u_cmd)
+        u_min = min_inp_percent * u_max
+        d_max = max_inp_percent * u_max # inflexion point where input saturation occurs (due to PWMs overlapping)
 
         # ideal
         u = u_cmd
@@ -284,10 +261,10 @@ class FreeFlyerSimulator(Node):
             # k=1 corresponds to sigmoid, and k=\infty is step function.
             return 1./(1. + np.exp(-k*x))
 
-        u = np_sigmoid_sharp(u-u_min, self.gamma_min)*u + np_sigmoid_sharp(-u-u_min, self.gamma_min)*u
+        u = np_sigmoid_sharp(u-u_min, gamma_min)*u + np_sigmoid_sharp(-u-u_min, gamma_min)*u
 
         # increase close to 100%
-        u = u + np_sigmoid_sharp(u-d_max, self.gamma_max)*u + np_sigmoid_sharp(-u-d_max, self.gamma_max)*u
+        u = u + np_sigmoid_sharp(u-d_max, gamma_max)*u + np_sigmoid_sharp(-u-d_max, gamma_max)*u
 
         # saturate
         u = np.maximum(-u_max,
@@ -304,7 +281,10 @@ class FreeFlyerSimulator(Node):
         Continuous time dynamics.
         Returns f, s.t. \dot(x) = f(x,u)
         """
-        m, J, p0, F_tilt  = self.m, self.J, self.p0, self.F_tilt
+        m = self.p.dynamics["mass"]
+        J = self.p.dynamics["inertia"]
+        p0 = self.p.dynamics["CoM_offset"]
+        F_tilt = self.p.dynamics["force_const"]
 
         # Apply nonlinear actuators mapping
         if not self.B_ideal:
