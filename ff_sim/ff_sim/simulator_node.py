@@ -4,6 +4,7 @@
       to a state evolution over time
 ----------------------------------------------- """
 
+import math
 import sys
 import numpy as np
 import typing as T
@@ -204,6 +205,10 @@ class FreeFlyerSimulator(Node):
         pose.header.stamp = now
         pose.header.frame_id = "map"
         pose.pose.position.x, pose.pose.position.y = self.x_cur[:2]
+        pose.pose.orientation.x = 0.
+        pose.pose.orientation.y = 0.
+        pose.pose.orientation.z = math.sin(self.x_cur[2] / 2)
+        pose.pose.orientation.w = math.cos(self.x_cur[2] / 2)
 
         twist = TwistStamped()
         twist.header.stamp = now
@@ -225,7 +230,7 @@ class FreeFlyerSimulator(Node):
         self.x_cur[:3] = np.array([
             msg.pose.position.x,
             msg.pose.position.y,
-            msg.pose.orientation.z,
+            2 * math.acos(msg.pose.orientation.w),
         ])
 
     def update_twist_init_cb(self, msg: TwistStamped) -> None:
