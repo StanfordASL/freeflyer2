@@ -16,9 +16,9 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-class TableRenderer : public rclcpp::Node {
+class Renderer : public rclcpp::Node {
  public:
-  TableRenderer(const std::string& name) : rclcpp::Node(name) {
+  Renderer(const std::string& name) : rclcpp::Node(name) {
     auto robot_names = this->declare_parameter<std::vector<std::string>>("robot_name", {"robot"});
     pose_subs_.resize(robot_names.size());
     transform_msgs_.resize(robot_names.size());
@@ -74,7 +74,7 @@ class TableRenderer : public rclcpp::Node {
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     // periodically send out marker message
-    timer_ = this->create_wall_timer(20ms, std::bind(&TableRenderer::VizUpdate, this));
+    timer_ = this->create_wall_timer(20ms, std::bind(&Renderer::VizUpdate, this));
   }
 
  private:
@@ -112,7 +112,7 @@ class TableRenderer : public rclcpp::Node {
 
 int main(int argc, char ** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<TableRenderer>("renderer_node"));
+  rclcpp::spin(std::make_shared<Renderer>("renderer_node"));
   rclcpp::shutdown();
   return 0;
 }
