@@ -108,19 +108,19 @@ class FreeFlyerSimulator(Node):
 
         # subscribers
         self.sub_wheel_cmd_vel = self.create_subscription(Float64,
-            f"/{self.robot_name}/commands/velocity", self.update_wheel_cmd_vel_cb, 10)
+            "commands/velocity", self.update_wheel_cmd_vel_cb, 10)
         self.sub_thrusters_cmd_dutycycle = self.create_subscription(Float64MultiArray,
-            f"/{self.robot_name}/commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10)
+            "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10)
         self.sub_pose_init = self.create_subscription(PoseStamped,
-            f"/{self.robot_name}/pose_init", self.update_pose_init_cb, 10)
+            "pose_init", self.update_pose_init_cb, 10)
         self.sub_twist_init = self.create_subscription(PoseStamped,
-            f"/{self.robot_name}/twist_init", self.update_twist_init_cb, 10)
+            "twist_init", self.update_twist_init_cb, 10)
 
         # ground truth publishers
-        self.pub_pose = self.create_publisher(PoseStamped, f"/{self.robot_name}/gt/pose", 10)
-        self.pub_twist = self.create_publisher(TwistStamped, f"/{self.robot_name}/gt/twist", 10)
-        self.pub_wrench = self.create_publisher(WrenchStamped, f"/{self.robot_name}/gt/wrench", 10)
-        self.pub_ext_force = self.create_publisher(WrenchStamped, f"/{self.robot_name}/gt/ext_force", 10)
+        self.pub_pose = self.create_publisher(PoseStamped, f"gt/pose", 10)
+        self.pub_twist = self.create_publisher(TwistStamped, f"gt/twist", 10)
+        self.pub_wrench = self.create_publisher(WrenchStamped, f"gt/wrench", 10)
+        self.pub_ext_force = self.create_publisher(WrenchStamped, f"gt/ext_force", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 

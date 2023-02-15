@@ -61,7 +61,7 @@ class Renderer : public rclcpp::Node {
 
       // create pose subscription
       pose_subs_[i] = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-        robot_names[i] + "/gt/pose",
+        "/" + robot_names[i] + "/gt/pose",
         10,
         [this, i](const geometry_msgs::msg::PoseStamped::SharedPtr msg){ this->PoseCallback(i, msg); }
       );
