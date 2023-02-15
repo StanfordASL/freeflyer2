@@ -57,8 +57,8 @@ void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world
   const double sin_theta = std::sin(theta);
 
   ff_msgs::msg::Wrench2D wrench_body = wrench_world;
-  wrench_body.fx = cos_theta * wrench_world.fx - sin_theta * wrench_world.fy;
-  wrench_body.fy = sin_theta * wrench_world.fx + cos_theta * wrench_world.fy;
+  wrench_body.fx = cos_theta * wrench_world.fx + sin_theta * wrench_world.fy;
+  wrench_body.fy = -sin_theta * wrench_world.fx + cos_theta * wrench_world.fy;
 
   SetBodyWrench(wrench_body);
 }

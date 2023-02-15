@@ -4,7 +4,6 @@
       to a state evolution over time
 ----------------------------------------------- """
 
-import math
 import sys
 import numpy as np
 import typing as T

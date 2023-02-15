@@ -35,6 +35,7 @@ def generate_launch_description():
             package="rviz2",
             executable="rviz2",
             name="rviz2",
+            namespace=robot_name,
             arguments=[
                 "-d",
                 os.path.join(get_package_share_directory("ff_viz"), "rviz", "default.rviz"),

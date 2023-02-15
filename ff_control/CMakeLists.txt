@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
 find_package(ff_msgs REQUIRED)
@@ -36,13 +37,13 @@ install(
 )
 
 add_executable(wrench_ctrl_node src/wrench_ctrl_node.cpp)
-target_include_directories(wrench_ctrl_node PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_compile_features(wrench_ctrl_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(wrench_ctrl_node rclcpp ff_msgs ff_params ctrl_lib)
+target_link_libraries(wrench_ctrl_node ctrl_lib)
 
-install(TARGETS wrench_ctrl_node
+add_executable(pd_ctrl_node src/pd_ctrl_node.cpp)
+target_link_libraries(pd_ctrl_node ctrl_lib)
+ament_target_dependencies(pd_ctrl_node geometry_msgs)
+
+install(TARGETS wrench_ctrl_node pd_ctrl_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
