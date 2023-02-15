@@ -11,9 +11,9 @@
 
 namespace ff {
 
-class LowLevelController : public rclcpp::Node {
+class LowLevelController : virtual public rclcpp::Node {
  public:
-  explicit LowLevelController(const std::string& node_name);
+  LowLevelController();
 
  protected:
   const ff::RobotParams p_;

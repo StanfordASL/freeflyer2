@@ -11,8 +11,7 @@ import typing as T
 import rclpy
 from rclpy.node import Node
 
-from ff_msgs.msg import Twist2DStamped, Pose2DStamped, Wrench2DStamped, \
-                        ThrusterCommand, WheelVelCommand
+from ff_msgs.msg import FreeFlyerStateStamped, Wrench2DStamped, ThrusterCommand, WheelVelCommand
 
 from ff_params import RobotParams
 
@@ -107,14 +106,11 @@ class FreeFlyerSimulator(Node):
             "commands/velocity", self.update_wheel_cmd_vel_cb, 10)
         self.sub_thrusters_cmd_dutycycle = self.create_subscription(ThrusterCommand,
             "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10)
-        self.sub_pose_init = self.create_subscription(Pose2DStamped,
-            "pose_init", self.update_pose_init_cb, 10)
-        self.sub_twist_init = self.create_subscription(Pose2DStamped,
-            "twist_init", self.update_twist_init_cb, 10)
+        self.sub_state_init = self.create_subscription(FreeFlyerStateStamped,
+            "state_init", self.update_state_init_cb, 10)
 
         # ground truth publishers
-        self.pub_pose = self.create_publisher(Pose2DStamped, f"gt/pose", 10)
-        self.pub_twist = self.create_publisher(Twist2DStamped, f"gt/twist", 10)
+        self.pub_state = self.create_publisher(FreeFlyerStateStamped, f"gt/state", 10)
         self.pub_wrench = self.create_publisher(Wrench2DStamped, f"gt/wrench", 10)
         self.pub_ext_force = self.create_publisher(Wrench2DStamped, f"gt/ext_force", 10)
 
@@ -167,19 +163,18 @@ class FreeFlyerSimulator(Node):
         self.x_cur = x_next
 
         # Save as a message
-        pose = Pose2DStamped()
-        pose.header.stamp = now
-        pose.header.frame_id = "map"
-        pose.pose.x, pose.pose.y, pose.pose.theta = self.x_cur[:3]
-
-        twist = Twist2DStamped()
-        twist.header.stamp = now
-        twist.header.frame_id = "map"
-        twist.twist.vx, twist.twist.vy, twist.twist.wz = self.x_cur[3:]
+        state = FreeFlyerStateStamped()
+        state.header.stamp = now
+        state.header.frame_id = "map"
+        state.state.pose.x = self.x_cur[0]
+        state.state.pose.y = self.x_cur[1]
+        state.state.pose.theta = self.x_cur[2]
+        state.state.twist.vx = self.x_cur[3]
+        state.state.twist.vy = self.x_cur[4]
+        state.state.twist.wz = self.x_cur[5]
 
         # Publish
-        self.pub_pose.publish(pose)
-        self.pub_twist.publish(twist)
+        self.pub_state.publish(state)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
@@ -188,18 +183,14 @@ class FreeFlyerSimulator(Node):
         # Saturate controls so within [0,1] (in %)
         self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0., 1.)
 
-    def update_pose_init_cb(self, msg: Pose2DStamped) -> None:
-        self.x_cur[:3] = np.array([
-            msg.pose.x,
-            msg.pose.y,
-            msg.pose.theta,
-        ])
-
-    def update_twist_init_cb(self, msg: Twist2DStamped) -> None:
-        self.x_cur[3:] = np.array([
-            msg.twist.vx,
-            msg.twist.vy,
-            msg.twist.wz,
+    def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
+        self.x_cur = np.array([
+            msg.state.pose.x,
+            msg.state.pose.y,
+            msg.state.pose.theta,
+            msg.state.twist.vx,
+            msg.state.twist.vy,
+            msg.state.twist.wz,
         ])
 
     def thrusters_dutycycle_to_body_wrench(self, thrusters_dutycycles_vec):

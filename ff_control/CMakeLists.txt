@@ -13,7 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(ff_msgs REQUIRED)
 find_package(ff_params REQUIRED)
 
-add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp)
+add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp src/keyboard_ctrl.cpp src/linear_ctrl.cpp)
 target_include_directories(ctrl_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -36,14 +36,14 @@ install(
   INCLUDES DESTINATION include
 )
 
-add_executable(wrench_ctrl_node src/wrench_ctrl_node.cpp)
+add_executable(wrench_ctrl_node src/nodes/wrench_ctrl_node.cpp)
 target_link_libraries(wrench_ctrl_node ctrl_lib)
 
-add_executable(pd_ctrl_node src/pd_ctrl_node.cpp)
+add_executable(pd_ctrl_node src/nodes/pd_ctrl_node.cpp)
 target_link_libraries(pd_ctrl_node ctrl_lib)
 ament_target_dependencies(pd_ctrl_node geometry_msgs)
 
-add_executable(key_teleop_node src/key_teleop_node.cpp)
+add_executable(key_teleop_node src/nodes/key_teleop_node.cpp)
 target_link_libraries(key_teleop_node ctrl_lib)
 
 install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node

@@ -10,7 +10,7 @@ namespace ff {
 
 class WrenchController : public LowLevelController  {
  public:
-  using LowLevelController::LowLevelController;
+   WrenchController();
 
  protected:
   void SetBodyWrench(const ff_msgs::msg::Wrench2D& wrench_body, bool use_wheel = false);

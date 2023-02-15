@@ -4,6 +4,10 @@ using ff_msgs::msg::Wrench2D;
 
 namespace ff {
 
+WrenchController::WrenchController()
+  : rclcpp::Node("wrench_ctrl_node"),
+    LowLevelController() {}
+
 void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel) {
   if (use_wheel) {
     // TODO(alvin): support wheel velocity control in the future or remove?

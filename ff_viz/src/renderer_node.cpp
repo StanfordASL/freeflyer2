@@ -10,7 +10,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <visualization_msgs/msg/marker.hpp>
 
-#include "ff_msgs/msg/pose2_d_stamped.hpp"
+#include "ff_msgs/msg/free_flyer_state_stamped.hpp"
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -19,7 +19,7 @@ class Renderer : public rclcpp::Node {
  public:
   explicit Renderer(const std::string& name) : rclcpp::Node(name) {
     auto robot_names = this->declare_parameter<std::vector<std::string>>("robot_name", {"robot"});
-    pose_subs_.resize(robot_names.size());
+    state_subs_.resize(robot_names.size());
     transform_msgs_.resize(robot_names.size());
 
     // build marker for the table
@@ -59,10 +59,12 @@ class Renderer : public rclcpp::Node {
       transform_msgs_[i]->transform.translation.z = 0.0;
 
       // create pose subscription
-      pose_subs_[i] = this->create_subscription<ff_msgs::msg::Pose2DStamped>(
-        "/" + robot_names[i] + "/gt/pose",
+      state_subs_[i] = this->create_subscription<ff_msgs::msg::FreeFlyerStateStamped>(
+        "/" + robot_names[i] + "/gt/state",
         10,
-        [this, i](const ff_msgs::msg::Pose2DStamped::SharedPtr msg){ this->PoseCallback(i, msg); }
+        [this, i](const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg){
+          this->StateCallback(i, msg);
+        }
       );
     }
 
@@ -78,7 +80,7 @@ class Renderer : public rclcpp::Node {
 
  private:
   rclcpp::TimerBase::SharedPtr timer_;
-  std::vector<rclcpp::Subscription<ff_msgs::msg::Pose2DStamped>::SharedPtr> pose_subs_;
+  std::vector<rclcpp::Subscription<ff_msgs::msg::FreeFlyerStateStamped>::SharedPtr> state_subs_;
 
   visualization_msgs::msg::Marker marker_msg_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
@@ -97,15 +99,15 @@ class Renderer : public rclcpp::Node {
     }
   }
 
-  void PoseCallback(const size_t idx, const ff_msgs::msg::Pose2DStamped::SharedPtr msg) {
-    transform_msgs_[idx]->transform.translation.x = msg->pose.x;
-    transform_msgs_[idx]->transform.translation.y = msg->pose.y;
+  void StateCallback(const size_t idx, const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg) {
+    transform_msgs_[idx]->transform.translation.x = msg->state.pose.x;
+    transform_msgs_[idx]->transform.translation.y = msg->state.pose.y;
     transform_msgs_[idx]->transform.translation.z = 0.15;
 
     transform_msgs_[idx]->transform.rotation.x = 0.;
     transform_msgs_[idx]->transform.rotation.y = 0.;
-    transform_msgs_[idx]->transform.rotation.z = std::sin(msg->pose.theta / 2);
-    transform_msgs_[idx]->transform.rotation.w = std::cos(msg->pose.theta / 2);
+    transform_msgs_[idx]->transform.rotation.z = std::sin(msg->state.pose.theta / 2);
+    transform_msgs_[idx]->transform.rotation.w = std::cos(msg->state.pose.theta / 2);
   }
 };
 

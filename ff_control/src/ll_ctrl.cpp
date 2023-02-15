@@ -5,8 +5,8 @@ using ff_msgs::msg::WheelVelCommand;
 
 namespace ff {
 
-LowLevelController::LowLevelController(const std::string& node_name)
-  : rclcpp::Node(node_name),
+LowLevelController::LowLevelController()
+  : rclcpp::Node("ll_ctrl_node"),
     p_(this) {
   thruster_pub_ = this->create_publisher<ThrusterCommand>("commands/duty_cycle", 10);
   wheel_pub_ = this->create_publisher<WheelVelCommand>("commands/velocity", 10);
