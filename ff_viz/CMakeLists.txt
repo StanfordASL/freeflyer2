@@ -10,9 +10,10 @@ find_package(ament_cmake REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rviz2 REQUIRED)
-find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
+
+find_package(ff_msgs REQUIRED)
 
 add_executable(renderer_node src/renderer_node.cpp)
 target_include_directories(renderer_node PUBLIC
@@ -22,9 +23,10 @@ target_compile_features(renderer_node PUBLIC c_std_99 cxx_std_17)  # Require C99
 ament_target_dependencies(renderer_node
   geometry_msgs
   rclcpp
-  tf2
   tf2_ros
   visualization_msgs
+
+  ff_msgs
 )
 
 install(TARGETS renderer_node

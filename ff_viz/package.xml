@@ -11,9 +11,10 @@
 
   <depend>geometry_msgs</depend>
   <depend>rclcpp</depend>
-  <depend>tf2</depend>
   <depend>tf2_ros</depend>
   <depend>visualization_msgs</depend>
+
+  <depend>ff_msgs</depend>
 
   <exec_depend>rviz2</exec_depend>
   <exec_depend>xacro</exec_depend>

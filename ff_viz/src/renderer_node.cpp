@@ -7,11 +7,10 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/transform_datatypes.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <visualization_msgs/msg/marker.hpp>
+
+#include "ff_msgs/msg/pose2_d_stamped.hpp"
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -60,10 +59,10 @@ class Renderer : public rclcpp::Node {
       transform_msgs_[i]->transform.translation.z = 0.0;
 
       // create pose subscription
-      pose_subs_[i] = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+      pose_subs_[i] = this->create_subscription<ff_msgs::msg::Pose2DStamped>(
         "/" + robot_names[i] + "/gt/pose",
         10,
-        [this, i](const geometry_msgs::msg::PoseStamped::SharedPtr msg){ this->PoseCallback(i, msg); }
+        [this, i](const ff_msgs::msg::Pose2DStamped::SharedPtr msg){ this->PoseCallback(i, msg); }
       );
     }
 
@@ -79,7 +78,7 @@ class Renderer : public rclcpp::Node {
 
  private:
   rclcpp::TimerBase::SharedPtr timer_;
-  std::vector<rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr> pose_subs_;
+  std::vector<rclcpp::Subscription<ff_msgs::msg::Pose2DStamped>::SharedPtr> pose_subs_;
 
   visualization_msgs::msg::Marker marker_msg_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
@@ -98,15 +97,15 @@ class Renderer : public rclcpp::Node {
     }
   }
 
-  void PoseCallback(const size_t idx, const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    transform_msgs_[idx]->transform.translation.x = msg->pose.position.x;
-    transform_msgs_[idx]->transform.translation.y = msg->pose.position.y;
+  void PoseCallback(const size_t idx, const ff_msgs::msg::Pose2DStamped::SharedPtr msg) {
+    transform_msgs_[idx]->transform.translation.x = msg->pose.x;
+    transform_msgs_[idx]->transform.translation.y = msg->pose.y;
     transform_msgs_[idx]->transform.translation.z = 0.15;
 
-    transform_msgs_[idx]->transform.rotation.x = msg->pose.orientation.x;
-    transform_msgs_[idx]->transform.rotation.y = msg->pose.orientation.y;
-    transform_msgs_[idx]->transform.rotation.z = msg->pose.orientation.z;
-    transform_msgs_[idx]->transform.rotation.w = msg->pose.orientation.w;
+    transform_msgs_[idx]->transform.rotation.x = 0.;
+    transform_msgs_[idx]->transform.rotation.y = 0.;
+    transform_msgs_[idx]->transform.rotation.z = std::sin(msg->pose.theta / 2);
+    transform_msgs_[idx]->transform.rotation.w = std::cos(msg->pose.theta / 2);
   }
 };
 

@@ -8,9 +8,9 @@
   <license>TODO: License declaration</license>
 
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
 
+  <exec_depend>ff_msgs</exec_depend>
   <exec_depend>ff_params</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
