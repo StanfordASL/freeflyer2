@@ -63,10 +63,7 @@ class FreeFlyerSimulator(Node):
         super().__init__("ff_sim_node")
         self.x_dim = 6  # state dimension
 
-        # robot name
-        p_robot_name = self.declare_parameter("robot_name", "robot")
-        self.robot_name = p_robot_name.get_parameter_value().string_value
-        self.p = RobotParams(self, self.robot_name)
+        self.p = RobotParams(self)
 
         # obstacles
         p_obstacles = self.declare_parameters("obstacles",[

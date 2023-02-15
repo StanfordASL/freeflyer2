@@ -19,8 +19,5 @@ def generate_launch_description():
             executable="simulator_node",
             name="simulator_node",
             namespace=robot_name,
-            parameters=[{
-                "robot_name": robot_name,
-            }],
         ),
     ])

@@ -9,9 +9,9 @@ from rcl_interfaces.srv import GetParameters
 class RobotParams:
     def __init__(self,
                  node: Node,
-                 robot_name: str,
                  param_ready_cb: T.Optional[T.Callable[[], None]] = None):
-        cli = node.create_client(GetParameters, f"/{robot_name}/robot_params_node/get_parameters")
+        robot_name = node.get_namespace()
+        cli = node.create_client(GetParameters, f"{robot_name}/robot_params_node/get_parameters")
         self.node = node
         self.param_ready_cb = param_ready_cb
 

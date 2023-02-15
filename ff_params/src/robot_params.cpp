@@ -7,10 +7,10 @@ using namespace std::placeholders;
 
 namespace ff {
 
-RobotParams::RobotParams(rclcpp::Node* node, const std::string& robot_name)
+RobotParams::RobotParams(rclcpp::Node* node)
   : loaded_(false),
     param_client_(std::make_shared<rclcpp::AsyncParametersClient>(
-      node, "/" + robot_name + "/robot_params_node")) {
+      node, std::string(node->get_namespace()) + "/robot_params_node")) {
   while (!param_client_->service_is_ready()) {
     param_client_->wait_for_service(5s);
     RCLCPP_INFO(node->get_logger(), "parameter service not ready, retrying...");

@@ -34,7 +34,7 @@ class RobotParams {
   DynamicsParams dynamics;
   ActuatorParams actuators;
 
-  RobotParams(rclcpp::Node* node, const std::string& robot_name);
+  RobotParams(rclcpp::Node* node);
 
   bool Loaded() const;
 
