@@ -19,8 +19,8 @@ using namespace std::placeholders;
 
 class PDControlNode : public ff::WrenchController {
  public:
-  PDControlNode(const std::string& node_name)
-    : ff::WrenchController(node_name),
+  PDControlNode()
+    : ff::WrenchController("pd_control_node"),
       pose_{}, twist_{}, pose_des_{},
       gain_f(declare_parameter("gain_f", 2.0)),
       gain_df(declare_parameter("gain_df", 10.0)),
@@ -86,7 +86,7 @@ class PDControlNode : public ff::WrenchController {
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<PDControlNode>("pd_ctrl_node"));
+  rclcpp::spin(std::make_shared<PDControlNode>());
   rclcpp::shutdown();
   return 0;
 }

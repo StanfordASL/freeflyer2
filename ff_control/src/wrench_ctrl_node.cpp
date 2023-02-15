@@ -13,7 +13,7 @@ using namespace std::placeholders;
 
 class WrenchControlNode : public ff::WrenchController {
  public:
-  WrenchControlNode(const std::string& node_name) : ff::WrenchController(node_name) {
+  WrenchControlNode() : ff::WrenchController("wrench_control_node") {
     wrench_body_sub_ = this->create_subscription<ff_msgs::msg::Wrench2D>(
       "ctrl/wrench_body", 10, std::bind(&WrenchControlNode::WrenchBodyCallback, this, _1));
     wrench_world_sub_ = this->create_subscription<ff_msgs::msg::Wrench2D>(
@@ -44,7 +44,7 @@ class WrenchControlNode : public ff::WrenchController {
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<WrenchControlNode>("wrench_ctrl_node"));
+  rclcpp::spin(std::make_shared<WrenchControlNode>());
   rclcpp::shutdown();
   return 0;
 }

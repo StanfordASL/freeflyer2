@@ -43,7 +43,10 @@ add_executable(pd_ctrl_node src/pd_ctrl_node.cpp)
 target_link_libraries(pd_ctrl_node ctrl_lib)
 ament_target_dependencies(pd_ctrl_node geometry_msgs)
 
-install(TARGETS wrench_ctrl_node pd_ctrl_node
+add_executable(key_teleop_node src/key_teleop_node.cpp)
+target_link_libraries(key_teleop_node ctrl_lib)
+
+install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
