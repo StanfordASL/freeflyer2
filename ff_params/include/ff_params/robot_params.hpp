@@ -1,5 +1,4 @@
-#ifndef ROBOT_PARAMS_HPP_
-#define ROBOT_PARAMS_HPP_
+#pragma once
 
 #include <atomic>
 #include <future>
@@ -46,5 +45,3 @@ class RobotParams {
 };
 
 } // namespace ff
-
-#endif // ROBOT_PARAMS_HPP_
