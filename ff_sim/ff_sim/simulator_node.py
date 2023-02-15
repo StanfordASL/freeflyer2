@@ -12,8 +12,8 @@ import typing as T
 import rclpy
 from rclpy.node import Node
 
-from ff_msgs.msg import Twist2DStamped, Pose2DStamped, Wrench2DStamped
-from std_msgs.msg import Float64, Float64MultiArray
+from ff_msgs.msg import Twist2DStamped, Pose2DStamped, Wrench2DStamped, \
+                        ThrusterCommand, WheelVelCommand
 
 from ff_params import RobotParams
 
@@ -104,9 +104,9 @@ class FreeFlyerSimulator(Node):
         assert self.x_cur.shape[0]==self.x_dim, "Wrong size of initial state."
 
         # subscribers
-        self.sub_wheel_cmd_vel = self.create_subscription(Float64,
+        self.sub_wheel_cmd_vel = self.create_subscription(WheelVelCommand,
             "commands/velocity", self.update_wheel_cmd_vel_cb, 10)
-        self.sub_thrusters_cmd_dutycycle = self.create_subscription(Float64MultiArray,
+        self.sub_thrusters_cmd_dutycycle = self.create_subscription(ThrusterCommand,
             "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10)
         self.sub_pose_init = self.create_subscription(Pose2DStamped,
             "pose_init", self.update_pose_init_cb, 10)
@@ -182,12 +182,12 @@ class FreeFlyerSimulator(Node):
         self.pub_pose.publish(pose)
         self.pub_twist.publish(twist)
 
-    def update_wheel_cmd_vel_cb(self, msg: Float64) -> None:
-        self.wheel_vel_cmd = msg.data
+    def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
+        self.wheel_vel_cmd = msg.velocity
 
-    def update_thrusters_dutycycle_cmd_cb(self, msg: Float64MultiArray) -> None:
+    def update_thrusters_dutycycle_cmd_cb(self, msg: ThrusterCommand) -> None:
         # Saturate controls so within [0,1] (in %)
-        self.thrusters_dutycycle_cmd = np.clip(msg.data, 0., 1.)
+        self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0., 1.)
 
     def update_pose_init_cb(self, msg: Pose2DStamped) -> None:
         self.x_cur[:3] = np.array([

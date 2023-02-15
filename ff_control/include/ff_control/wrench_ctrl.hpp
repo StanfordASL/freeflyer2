@@ -2,15 +2,20 @@
 
 #include <string>
 
-#include <geometry_msgs/msg/wrench.hpp>
-
 #include "ff_control/ll_ctrl.hpp"
+
+#include "ff_msgs/msg/wrench2_d.hpp"
 
 namespace ff {
 
 class WrenchController : public LowLevelController  {
+ public:
+  using LowLevelController::LowLevelController;
+
  protected:
-  void SetWrench(const geometry_msgs::msg::Wrench& wrench, bool use_wheel = false);
+  void SetBodyWrench(const ff_msgs::msg::Wrench2D& wrench_body, bool use_wheel = false);
+
+  void SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world, double theta);
 };
 
 } // namespace ff

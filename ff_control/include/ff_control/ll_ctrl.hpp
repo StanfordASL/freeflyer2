@@ -1,12 +1,12 @@
 #pragma once
 
+#include <array>
 #include <string>
-#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/float64.hpp>
-#include <std_msgs/msg/float64_multi_array.hpp>
 
+#include "ff_msgs/msg/thruster_command.hpp"
+#include "ff_msgs/msg/wheel_vel_command.hpp"
 #include "ff_params/robot_params.hpp"
 
 namespace ff {
@@ -18,12 +18,12 @@ class LowLevelController : public rclcpp::Node {
  protected:
   const ff::RobotParams p_;
 
-  void SetThrustDutyCycle(const std_msgs::msg::Float64MultiArray& msg);
-  void SetWheelVelocity(const std_msgs::msg::Float64& msg);
+  void SetThrustDutyCycle(const std::array<double, 8>& duty_cycle);
+  void SetWheelVelocity(const double& velocity);
 
  private:
-  rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr thruster_pub_;
-  rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr wheel_pub_;
+  rclcpp::Publisher<ff_msgs::msg::ThrusterCommand>::SharedPtr thruster_pub_;
+  rclcpp::Publisher<ff_msgs::msg::WheelVelCommand>::SharedPtr wheel_pub_;
 };
 
 } // namespace ff
