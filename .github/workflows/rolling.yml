@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build_docker:
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:jammy
