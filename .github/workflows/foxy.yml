@@ -6,11 +6,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
-  workflow_dispatch:
-
 jobs:
-  build:
-    runs-on: ubuntu-20.04
+  build_docker:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:focal
     steps:
       - name: cancle preivious run
         uses: styfle/cancel-workflow-action@0.11.0
