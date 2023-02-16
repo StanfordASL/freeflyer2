@@ -14,9 +14,14 @@ LinearController::LinearController()
     "gt/state", 10, std::bind(&LinearController::StateCallback, this, _1));
 }
 
-LinearController::StateVec LinearController::GetState() const {
+bool LinearController::GetState(StateVec* state) const {
   std::lock_guard<std::mutex> lock(state_mtx_);
-  return state_;
+
+  if (state) {
+    *state = state_;
+  }
+
+  return state_ready_;
 }
 
 void LinearController::State2Vec(const ff_msgs::msg::FreeFlyerState& state, StateVec* vec) const {
@@ -29,7 +34,12 @@ void LinearController::State2Vec(const ff_msgs::msg::FreeFlyerState& state, Stat
 }
 
 void LinearController::SendControl(const StateVec& state_des, const FeedbackMat& K) {
-  const StateVec state_cur = GetState();
+  StateVec state_cur;
+  if (!GetState(&state_cur)) {
+    RCLCPP_WARN(this->get_logger(), "SendControl ignored, state not yet ready");
+    return ;
+  }
+
   const ControlVec u = K * (state_des - state_cur);
 
   Wrench2D wrench_world{};
@@ -49,6 +59,8 @@ void LinearController::StateCallback(const FreeFlyerStateStamped::SharedPtr msg)
   std::lock_guard<std::mutex> lock(state_mtx_);
 
   State2Vec(msg->state, &state_);
+
+  state_ready_ = true;
 }
 
 } // namespace ff

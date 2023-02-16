@@ -11,20 +11,22 @@
 namespace ff {
 
 class LinearController : public WrenchController {
+ public:
   using StateVec = Eigen::Vector<double, 6>;        // [x, y, theta, vx, vy, wz]
   using ControlVec = Eigen::Vector<double, 3>;      // [fx, fy, tz]
   using FeedbackMat = Eigen::Matrix<double, 3, 6>;
 
- public:
   LinearController();
 
  protected:
   /**
    * @brief get the current state of the robot
    *
-   * @return state in Vector6d
+   * @param state output StateVec pointer
+   *
+   * @return true if state is ready
    */
-  StateVec GetState() const;
+  bool GetState(StateVec* state) const;
 
   /**
    * @brief convert FreeFlyerState to StateVec
@@ -52,6 +54,7 @@ class LinearController : public WrenchController {
 
  private:
   StateVec state_;
+  bool state_ready_ = false;
   mutable std::mutex state_mtx_;
 
   rclcpp::Subscription<ff_msgs::msg::FreeFlyerStateStamped>::SharedPtr state_sub_;
