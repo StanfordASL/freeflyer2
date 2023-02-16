@@ -36,7 +36,7 @@ char KeyboardController::GetKey() {
 void KeyboardController::KeyUpdate() {
   const char key = getchar();
   if (key < 0) {
-    if (this->get_clock()->now() - last_key_time_ > 1s) {
+    if (this->get_clock()->now() - last_key_time_ > 400ms) {
       last_key_.store(0);
     }
   } else {

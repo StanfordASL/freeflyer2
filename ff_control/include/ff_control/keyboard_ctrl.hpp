@@ -16,7 +16,7 @@ class KeyboardController : virtual public rclcpp::Node {
   /**
    * @brief get the last key press
    *
-   * @return the last key, 0 if nothing is pressed within 1 second
+   * @return the last key, 0 if nothing is pressed within 0.4 seconds
    */
   char GetKey();
 
