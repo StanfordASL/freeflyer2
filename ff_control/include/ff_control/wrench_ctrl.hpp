@@ -28,6 +28,9 @@ class WrenchController : public LowLevelController  {
    * @param theta         rotational state of the freeflyer
    */
   void SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world, double theta);
+
+ private:
+  ff_msgs::msg::Wrench2D ClipWrench(const ff_msgs::msg::Wrench2D& wrench) const;
 };
 
 } // namespace ff

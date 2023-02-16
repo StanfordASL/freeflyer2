@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "ff_control/wrench_ctrl.hpp"
 
 using ff_msgs::msg::Wrench2D;
@@ -16,9 +18,11 @@ void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel
     std::array<double, 8> duty_cycle;
     duty_cycle.fill(0);
 
+    const Wrench2D wrench_body_clipped = ClipWrench(wrench_body);
+
     // convert force
-    const double u_Fx = wrench_body.fx / (2 * p_.actuators.F_max_per_thruster);
-    const double u_Fy = wrench_body.fy / (2 * p_.actuators.F_max_per_thruster);
+    const double u_Fx = wrench_body_clipped.fx / (2 * p_.actuators.F_max_per_thruster);
+    const double u_Fy = wrench_body_clipped.fy / (2 * p_.actuators.F_max_per_thruster);
     if (u_Fx > 0) {
       duty_cycle[2] = u_Fx;
       duty_cycle[5] = u_Fx;
@@ -35,7 +39,7 @@ void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel
     }
 
     // convert torque
-    const double u_M = wrench_body.tz /
+    const double u_M = wrench_body_clipped.tz /
       (4 * p_.actuators.F_max_per_thruster * p_.actuators.thrusters_lever_arm);
     if (u_M > 0) {
       for (const int& i : {1, 3, 5, 7}) {
@@ -65,6 +69,19 @@ void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world
   wrench_body.fy = -sin_theta * wrench_world.fx + cos_theta * wrench_world.fy;
 
   SetBodyWrench(wrench_body);
+}
+
+Wrench2D WrenchController::ClipWrench(const Wrench2D& wrench) const {
+  Wrench2D wrench_clipped;
+  const double force = std::sqrt(wrench.fx * wrench.fx + wrench.fy * wrench.fy);
+  const double force_scale = std::min(p_.actuators.F_body_max / force, 1.0);
+  const double torque_scale = std::min(p_.actuators.M_body_max / std::abs(wrench.tz), 1.0);
+
+  wrench_clipped.fx = wrench.fx * force_scale;
+  wrench_clipped.fy = wrench.fy * force_scale;
+  wrench_clipped.tz = wrench.tz * torque_scale;
+
+  return wrench_clipped;
 }
 
 } // namespace ff

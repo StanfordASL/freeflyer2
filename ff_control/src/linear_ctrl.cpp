@@ -7,6 +7,15 @@ using ff_msgs::msg::Wrench2D;
 
 namespace ff {
 
+static void State2Vec(const ff_msgs::msg::FreeFlyerState& state, LinearController::StateVec* vec) {
+  (*vec)[0] = state.pose.x;
+  (*vec)[1] = state.pose.y;
+  (*vec)[2] = state.pose.theta;
+  (*vec)[3] = state.twist.vx;
+  (*vec)[4] = state.twist.vy;
+  (*vec)[5] = state.twist.wz;
+}
+
 LinearController::LinearController()
   : rclcpp::Node("linear_ctrl_node"),
     WrenchController() {
@@ -22,15 +31,6 @@ bool LinearController::GetState(StateVec* state) const {
   }
 
   return state_ready_;
-}
-
-void LinearController::State2Vec(const ff_msgs::msg::FreeFlyerState& state, StateVec* vec) const {
-  (*vec)[0] = state.pose.x;
-  (*vec)[1] = state.pose.y;
-  (*vec)[2] = state.pose.theta;
-  (*vec)[3] = state.twist.vx;
-  (*vec)[4] = state.twist.vy;
-  (*vec)[5] = state.twist.wz;
 }
 
 void LinearController::SendControl(const StateVec& state_des, const FeedbackMat& K) {

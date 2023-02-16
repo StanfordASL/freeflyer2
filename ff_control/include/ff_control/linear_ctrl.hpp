@@ -29,14 +29,6 @@ class LinearController : public WrenchController {
   bool GetState(StateVec* state) const;
 
   /**
-   * @brief convert FreeFlyerState to StateVec
-   *
-   * @param state FreeFlyerState input
-   * @param vec   StateVec output
-   */
-  void State2Vec(const ff_msgs::msg::FreeFlyerState& state, StateVec* vec) const;
-
-  /**
    * @brief send linear feedback control command
    *
    * @param state_des desired state
