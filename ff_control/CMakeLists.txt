@@ -19,6 +19,7 @@ add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp src/keyboard_ctrl.cpp s
 target_include_directories(ctrl_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+target_compile_features(ctrl_lib PUBLIC cxx_std_17)
 ament_target_dependencies(ctrl_lib rclcpp ff_msgs ff_params Eigen3)
 
 ament_export_targets(ctrl_libTarget HAS_LIBRARY_TARGET)

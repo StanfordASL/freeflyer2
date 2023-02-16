@@ -11,13 +11,13 @@ KeyboardController::KeyboardController()
   : rclcpp::Node("keyboard_ctrl_node") {
   // setup non blocking termio
   struct termios new_settings;
-  tcgetattr(STDIN_FILENO, &old_settings_);
-  tcgetattr(STDIN_FILENO, &new_settings);
+  tcgetattr(fileno(stdin), &old_settings_);
+  tcgetattr(fileno(stdin), &new_settings);
   new_settings.c_lflag &= ~(ICANON | ECHO);
-  tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
+  tcsetattr(fileno(stdin), TCSANOW, &new_settings);
 
-  f_flags_ = fcntl(STDIN_FILENO, F_GETFL);
-  fcntl(STDIN_FILENO, F_SETFL, f_flags_ | O_NONBLOCK);
+  f_flags_ = fcntl(fileno(stdin), F_GETFL);
+  fcntl(fileno(stdin), F_SETFL, f_flags_ | O_NONBLOCK);
 
   last_key_time_ = this->get_clock()->now();
   key_timer_ = this->create_wall_timer(5ms, std::bind(&KeyboardController::KeyUpdate, this));
@@ -25,8 +25,8 @@ KeyboardController::KeyboardController()
 
 KeyboardController::~KeyboardController() {
   // restore termio settings
-  tcsetattr(STDIN_FILENO, TCSANOW, &old_settings_);
-  fcntl(STDIN_FILENO, F_SETFL, f_flags_);
+  tcsetattr(fileno(stdin), TCSANOW, &old_settings_);
+  fcntl(fileno(stdin), F_SETFL, f_flags_);
 }
 
 char KeyboardController::GetKey() {

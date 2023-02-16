@@ -21,6 +21,7 @@ add_library(robot_params src/robot_params.cpp)
 target_include_directories(robot_params PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+target_compile_features(robot_params PUBLIC cxx_std_17)
 ament_target_dependencies(robot_params rclcpp)
 
 ament_export_targets(robot_paramsTarget HAS_LIBRARY_TARGET)
