@@ -1,0 +1,27 @@
+name: foxy build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: cancle preivious run
+        uses: styfle/cancel-workflow-action@0.10.0
+        with:
+          access_token: ${{ github.token }}
+      - name: setup ROS2
+        uses: ros-tooling/setup-ros@v0.4
+        with:
+          required-ros-distributions: foxy
+      - name: ROS2 build and test
+        uses: ros-tooling/action-ros-ci@v0.2
+        with:
+          target-ros2-distro: foxy
+          skip-tests: true
