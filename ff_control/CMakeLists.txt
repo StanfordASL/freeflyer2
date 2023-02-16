@@ -7,6 +7,8 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3)
 find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
@@ -17,10 +19,10 @@ add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp src/keyboard_ctrl.cpp s
 target_include_directories(ctrl_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-ament_target_dependencies(ctrl_lib rclcpp ff_msgs ff_params)
+ament_target_dependencies(ctrl_lib rclcpp ff_msgs ff_params Eigen3)
 
 ament_export_targets(ctrl_libTarget HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp ff_msgs ff_params)
+ament_export_dependencies(rclcpp ff_msgs ff_params Eigen3 eigen3_cmake_module)
 
 install(
   DIRECTORY include/
