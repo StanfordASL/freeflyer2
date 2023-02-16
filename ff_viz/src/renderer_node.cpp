@@ -104,10 +104,11 @@ class Renderer : public rclcpp::Node {
     transform_msgs_[idx]->transform.translation.y = msg->state.pose.y;
     transform_msgs_[idx]->transform.translation.z = 0.15;
 
+    const double theta = std::remainder(msg->state.pose.theta, 2 * M_PI);
     transform_msgs_[idx]->transform.rotation.x = 0.;
     transform_msgs_[idx]->transform.rotation.y = 0.;
-    transform_msgs_[idx]->transform.rotation.z = std::sin(msg->state.pose.theta / 2);
-    transform_msgs_[idx]->transform.rotation.w = std::cos(msg->state.pose.theta / 2);
+    transform_msgs_[idx]->transform.rotation.z = std::sin(theta / 2);
+    transform_msgs_[idx]->transform.rotation.w = std::cos(theta / 2);
   }
 };
 

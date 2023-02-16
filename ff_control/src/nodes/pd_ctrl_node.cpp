@@ -65,7 +65,11 @@ class PDControlNode : public ff::LinearController {
   void GoalPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     state_des_.state.pose.x = msg->pose.position.x;
     state_des_.state.pose.y = msg->pose.position.y;
-    state_des_.state.pose.theta = 2 * std::atan2(msg->pose.orientation.z, msg->pose.orientation.w);
+
+    const double z = msg->pose.orientation.z;
+    const double w = msg->pose.orientation.w;
+    state_des_.state.pose.theta = std::atan2(2 * w * z, w * w - z * z);
+
     state_des_.state.twist.vx = 0;
     state_des_.state.twist.vy = 0;
     state_des_.state.twist.wz = 0;

@@ -40,7 +40,9 @@ void LinearController::SendControl(const StateVec& state_des, const FeedbackMat&
     return ;
   }
 
-  const ControlVec u = K * (state_des - state_cur);
+  StateVec state_delta = state_des - state_cur;
+  state_delta[2] = std::remainder(state_delta[2], 2 * M_PI); // wrap angle delta to [-pi, pi]
+  const ControlVec u = K * state_delta;
 
   Wrench2D wrench_world{};
   wrench_world.fx = u[0];
