@@ -8,12 +8,25 @@ using ff_msgs::msg::Wrench2D;
 namespace ff {
 
 static void State2Vec(const ff_msgs::msg::FreeFlyerState& state, LinearController::StateVec* vec) {
-  (*vec)[0] = state.pose.x;
-  (*vec)[1] = state.pose.y;
-  (*vec)[2] = state.pose.theta;
-  (*vec)[3] = state.twist.vx;
-  (*vec)[4] = state.twist.vy;
-  (*vec)[5] = state.twist.wz;
+  if (vec) {
+    (*vec)[0] = state.pose.x;
+    (*vec)[1] = state.pose.y;
+    (*vec)[2] = state.pose.theta;
+    (*vec)[3] = state.twist.vx;
+    (*vec)[4] = state.twist.vy;
+    (*vec)[5] = state.twist.wz;
+  }
+}
+
+static void Vec2State(const LinearController::StateVec& vec, ff_msgs::msg::FreeFlyerState* state) {
+  if (state) {
+    state->pose.x = vec[0];
+    state->pose.y = vec[1];
+    state->pose.theta = vec[2];
+    state->twist.vx = vec[3];
+    state->twist.vy = vec[4];
+    state->twist.wz = vec[5];
+  }
 }
 
 LinearController::LinearController()
@@ -23,11 +36,27 @@ LinearController::LinearController()
     "gt/state", 10, std::bind(&LinearController::StateCallback, this, _1));
 }
 
+bool LinearController::StateIsReady() const {
+  std::lock_guard<std::mutex> lock(state_mtx_);
+
+  return state_ready_;
+}
+
 bool LinearController::GetState(StateVec* state) const {
   std::lock_guard<std::mutex> lock(state_mtx_);
 
   if (state) {
     *state = state_;
+  }
+
+  return state_ready_;
+}
+
+bool LinearController::GetState(FreeFlyerState* state) const {
+  std::lock_guard<std::mutex> lock(state_mtx_);
+
+  if (state) {
+    Vec2State(state_, state);
   }
 
   return state_ready_;
@@ -57,12 +86,26 @@ void LinearController::SendControl(const FreeFlyerState& state_des, const Feedba
   SendControl(state_des_vec, K);
 }
 
+void LinearController::StateReadyCallback() {}
+
 void LinearController::StateCallback(const FreeFlyerStateStamped::SharedPtr msg) {
-  std::lock_guard<std::mutex> lock(state_mtx_);
+  bool run_callback = false;
 
-  State2Vec(msg->state, &state_);
+  // locked session for state_ and state_ready_ access
+  {
+    std::lock_guard<std::mutex> lock(state_mtx_);
 
-  state_ready_ = true;
+    State2Vec(msg->state, &state_);
+
+    if (!state_ready_) {
+      state_ready_ = true;
+      run_callback = true;
+    }
+  }
+
+  if (run_callback) {
+    StateReadyCallback();
+  }
 }
 
 } // namespace ff

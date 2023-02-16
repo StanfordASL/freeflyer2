@@ -58,7 +58,7 @@ class KeyboardTeleopNode : public ff::LinearController, public ff::KeyboardContr
   FeedbackMat K_;
 
   void TeleopLoop() {
-    if (!GetState(nullptr)) { return; }
+    if (!StateIsReady()) { return; }
 
     ff_msgs::msg::FreeFlyerState state_des{};
     switch (this->GetKey()) {

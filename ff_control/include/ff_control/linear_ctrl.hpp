@@ -20,6 +20,13 @@ class LinearController : public WrenchController {
 
  protected:
   /**
+   * @brief check whether the state is available
+   *
+   * @return true if the first state message has arrived.
+   */
+  bool StateIsReady() const;
+
+  /**
    * @brief get the current state of the robot
    *
    * @param state output StateVec pointer
@@ -27,6 +34,15 @@ class LinearController : public WrenchController {
    * @return true if state is ready
    */
   bool GetState(StateVec* state) const;
+
+  /**
+   * @brief get the current state of the robot
+   *
+   * @param state output FreeFlyerState pointer
+   *
+   * @return true if state is ready
+   */
+  bool GetState(ff_msgs::msg::FreeFlyerState* state) const;
 
   /**
    * @brief send linear feedback control command
@@ -43,6 +59,11 @@ class LinearController : public WrenchController {
    * @param K         feedback control matrix (i.e. u = Kx)
    */
   void SendControl(const ff_msgs::msg::FreeFlyerState& state_des, const FeedbackMat& K);
+
+  /**
+   * @brief called when the first state message is received
+   */
+  virtual void StateReadyCallback();
 
  private:
   StateVec state_;

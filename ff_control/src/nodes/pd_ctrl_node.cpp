@@ -51,9 +51,15 @@ class PDControlNode : public ff::LinearController {
 
   FeedbackMat K_;
 
+  void StateReadyCallback() override {
+    // copy current position as goal position
+    state_des_.header.stamp = this->get_clock()->now();
+    GetState(&state_des_.state);
+  }
+
   void ControlLoop() {
     // state not yet ready
-    if (!GetState(nullptr)) { return; }
+    if (!StateIsReady()) { return; }
 
     SendControl(state_des_.state, K_);
   }
