@@ -1,7 +1,7 @@
 # freeflyer2
-![foxy build](https://github.com/StanfordASL/freeflyer2/actions/workflows/foxy.yml/badge.svg)
-![humble build](https://github.com/StanfordASL/freeflyer2/actions/workflows/humble.yml/badge.svg)
-![rolling build](https://github.com/StanfordASL/freeflyer2/actions/workflows/rolling.yml/badge.svg)
+![foxy build](https://github.com/StanfordASL/freeflyer2/actions/workflows/foxy.yml/badge.svg?event=push)
+![humble build](https://github.com/StanfordASL/freeflyer2/actions/workflows/humble.yml/badge.svg?event=push)
+![rolling build](https://github.com/StanfordASL/freeflyer2/actions/workflows/rolling.yml/badge.svg?event=push)
 
 ASL FreeFlyer software stack with ROS2. See build status for support on ROS2 distrbutions.
 
