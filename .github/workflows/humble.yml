@@ -1,0 +1,26 @@
+name: humble build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_docker:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:jammy
+    steps:
+      - name: cancle preivious run
+        uses: styfle/cancel-workflow-action@0.11.0
+      - name: setup ROS2
+        uses: ros-tooling/setup-ros@v0.5
+        with:
+          required-ros-distributions: humble
+      - name: ROS2 build and test
+        uses: ros-tooling/action-ros-ci@v0.2
+        with:
+          import-token: ${{ secrets.GITHUB_TOKEN }}
+          target-ros2-distro: humble
+          skip-tests: true

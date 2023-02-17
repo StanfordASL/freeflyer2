@@ -1,9 +1,14 @@
 # freeflyer2
+![foxy build](https://github.com/StanfordASL/freeflyer2/actions/workflows/foxy.yml/badge.svg)
+![humble build](https://github.com/StanfordASL/freeflyer2/actions/workflows/humble.yml/badge.svg)
+![rolling build](https://github.com/StanfordASL/freeflyer2/actions/workflows/rolling.yml/badge.svg)
 
-ASL FreeFlyer software stack with ROS2
+ASL FreeFlyer software stack with ROS2. See build status for support on ROS2 distrbutions.
 
 ## Quick Start
-1. Install [ROS2 Humble](https://docs.ros.org/en/humble/Installation.html)
+1. Install ROS2 ([Foxy](https://docs.ros.org/en/foxy/Installation.html),
+[Humble](https://docs.ros.org/en/humble/Installation.html), or
+[Rolling](https://docs.ros.org/en/rolling/Installation.html))
 2. Clone the repo into a ROS2 workspace, e.g.
 ```sh
 mkdir -p ~/ff_ws/src
