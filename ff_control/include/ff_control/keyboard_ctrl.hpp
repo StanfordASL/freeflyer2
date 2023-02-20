@@ -1,7 +1,7 @@
 #pragma once
 
 #include <atomic>
-#include <termio.h>
+#include <termios.h>
 
 #include <rclcpp/rclcpp.hpp>
 
