@@ -12,7 +12,7 @@ ASL FreeFlyer software stack with ROS2. See build status for support on ROS2 dis
 2. Clone the repo into a ROS2 workspace, e.g.
 ```sh
 mkdir -p ~/ff_ws/src
-git clone git@github.com:StanfordASL/freeflyer2.git ~/ff_ws/src/freelyer2
+git clone git@github.com:StanfordASL/freeflyer2.git ~/ff_ws/src/freeflyer2
 ```
 3. Install dependencies
 ```sh
