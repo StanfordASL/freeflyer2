@@ -11,16 +11,16 @@ class SafetyFilter(Node):
         super().__init__('safety_filter')
         self.last_thrust_time = None
         self.last_wheel_time = None
-        self.thrust_pub = self.create_publisher(ThrusterCommand, 'commands/duty_cycle_final', 10)
-        self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity_final', 10)
+        self.thrust_pub = self.create_publisher(ThrusterCommand, 'commands/duty_cycle', 10)
+        self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
         self.thrust_sub = self.create_subscription(
             ThrusterCommand,
-            'commands/duty_cycle',
+            'ctrl/duty_cycle',
             self.thrust_callback,
             10)
         self.wheel_sub = self.create_subscription(
             WheelVelCommand,
-            'commands/velocity',
+            'ctrl/velocity',
             self.wheel_callback,
             10)
         timer_period = 0.5  # seconds
