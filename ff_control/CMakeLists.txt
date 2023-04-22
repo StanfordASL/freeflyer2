@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3)
 find_package(geometry_msgs REQUIRED)
@@ -39,6 +40,11 @@ install(
   INCLUDES DESTINATION include
 )
 
+install(PROGRAMS
+  scripts/ll_ctrl_test.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 add_executable(wrench_ctrl_node src/nodes/wrench_ctrl_node.cpp)
 target_link_libraries(wrench_ctrl_node ctrl_lib)
 
@@ -51,6 +57,8 @@ target_link_libraries(key_teleop_node ctrl_lib)
 
 install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node
   DESTINATION lib/${PROJECT_NAME})
+
+ament_python_install_package(${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
