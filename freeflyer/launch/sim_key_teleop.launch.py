@@ -27,7 +27,7 @@ def generate_launch_description():
         ),
         Node(
             package="ff_control",
-            executable="key_teleop_node",
+            executable="key_teleop_cpp_node",
             name="key_teleop_node",
             namespace=robot_name,
             prefix="gnome-terminal --",

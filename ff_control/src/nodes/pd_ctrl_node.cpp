@@ -69,6 +69,8 @@ class PDControlNode : public ff::LinearController {
   }
 
   void GoalPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    state_des_.header.stamp = msg->header.stamp;
+
     state_des_.state.pose.x = msg->pose.position.x;
     state_des_.state.pose.y = msg->pose.position.y;
 

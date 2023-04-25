@@ -41,21 +41,21 @@ install(
 )
 
 install(PROGRAMS
-  scripts/ll_ctrl_test.py
+  scripts/pd_ctrl_py_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
-add_executable(wrench_ctrl_node src/nodes/wrench_ctrl_node.cpp)
-target_link_libraries(wrench_ctrl_node ctrl_lib)
+add_executable(wrench_ctrl_cpp_node src/nodes/wrench_ctrl_node.cpp)
+target_link_libraries(wrench_ctrl_cpp_node ctrl_lib)
 
-add_executable(pd_ctrl_node src/nodes/pd_ctrl_node.cpp)
-target_link_libraries(pd_ctrl_node ctrl_lib)
-ament_target_dependencies(pd_ctrl_node geometry_msgs)
+add_executable(pd_ctrl_cpp_node src/nodes/pd_ctrl_node.cpp)
+target_link_libraries(pd_ctrl_cpp_node ctrl_lib)
+ament_target_dependencies(pd_ctrl_cpp_node geometry_msgs)
 
-add_executable(key_teleop_node src/nodes/key_teleop_node.cpp)
-target_link_libraries(key_teleop_node ctrl_lib)
+add_executable(key_teleop_cpp_node src/nodes/key_teleop_node.cpp)
+target_link_libraries(key_teleop_cpp_node ctrl_lib)
 
-install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node
+install(TARGETS wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
   DESTINATION lib/${PROJECT_NAME})
 
 ament_python_install_package(${PROJECT_NAME})

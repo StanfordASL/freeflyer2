@@ -32,7 +32,7 @@ class LowLevelController : virtual public rclcpp::Node {
    * @brief send command to set the inertial wheel velocity
    *        @TODO(alvin): support this or remove?
    *
-   * @param velocity velocity in [m/s]
+   * @param velocity angular velocity in [rad/s]
    */
   void SetWheelVelocity(const double& velocity);
 

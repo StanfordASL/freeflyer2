@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+
+import copy
+import rclpy
+
+import numpy as np
+
+from ff_control.linear_ctrl import LinearController
+from ff_msgs.msg import FreeFlyerStateStamped
+from geometry_msgs.msg import PoseStamped
+
+
+class PDControlNode(LinearController):
+
+    def __init__(self):
+        super().__init__("pd_control_node")
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            "ctrl/state", self.state_setpoint_callback, 10)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            "/goal_pose", self.rviz_setpoint_callback, 10)
+        self.timer = self.create_timer(0.1, self.control_loop)
+        self.state_desired = FreeFlyerStateStamped()
+
+        # build feedback gain matrix
+        gain_f = self.declare_parameter("gain_f", 2.0)
+        gain_df = self.declare_parameter("gain_df", 10.0)
+        gain_t = self.declare_parameter("gain_t", 0.2)
+        gain_dt = self.declare_parameter("gain_dt", 0.4)
+        self.K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+                           [0, gain_f, 0, 0, gain_df, 0],
+                           [0, 0, gain_t, 0, 0, gain_dt]])
+
+    def state_ready_callback(self) -> None:
+        # copy current position as goal position
+        self.state_desired.header.stamp = self.get_clock().now().to_msg()
+        self.state_desired.state = self.get_state()
+
+    def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self.state_desired = copy.deepcopy(msg)
+
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        self.state_desired.header.stamp = msg.header.stamp
+
+        self.state_desired.state.pose.x = msg->pose.position.x
+        self.state_desired.state.pose.y = msg->pose.position.y
+        z = msg->pose.orientation.z
+        w = msg->pose.orientation.w
+        self.state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+
+        self.state_desired.state.twist.vx = 0
+        self.state_desired.state.twist.vy = 0
+        self.state_desired.state.twist.wz = 0
+
+    def control_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            return
+
+        self.send_control(self.state_desired.state, self.K)
+
+def main(args=None):
+    rclpy.init(args=args)
+    pd_ctrl = PDControlNode()
+    rclpy.spin(pd_ctrl)
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
