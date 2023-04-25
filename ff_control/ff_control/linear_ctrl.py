@@ -139,7 +139,7 @@ class LinearController(WrenchController):
         return self._state_ready
 
     def _state_callback(self, msg: FreeFlyerStateStamped) -> None:
-        self._state_stamped = copy.deepcopy(msg.state)
+        self._state_stamped = copy.deepcopy(msg)
 
         if not self._state_ready:
             self._state_ready = True

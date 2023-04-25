@@ -74,12 +74,12 @@ void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world
 Wrench2D WrenchController::ClipWrench(const Wrench2D& wrench) const {
   Wrench2D wrench_clipped;
   const double force = std::sqrt(wrench.fx * wrench.fx + wrench.fy * wrench.fy);
-  const double force_scale = std::min(p_.actuators.F_body_max / force, 1.0);
-  const double torque_scale = std::min(p_.actuators.M_body_max / std::abs(wrench.tz), 1.0);
+  const double force_scale = std::max(force / p_.actuators.F_body_max, 1.0);
+  const double torque_scale = std::max(std::abs(wrench.tz) / p_.actuators.M_body_max, 1.0);
 
-  wrench_clipped.fx = wrench.fx * force_scale;
-  wrench_clipped.fy = wrench.fy * force_scale;
-  wrench_clipped.tz = wrench.tz * torque_scale;
+  wrench_clipped.fx = wrench.fx / force_scale;
+  wrench_clipped.fy = wrench.fy / force_scale;
+  wrench_clipped.tz = wrench.tz / torque_scale;
 
   return wrench_clipped;
 }

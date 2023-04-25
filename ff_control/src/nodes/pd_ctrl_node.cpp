@@ -20,26 +20,18 @@ class PDControlNode : public ff::LinearController {
   PDControlNode()
     : rclcpp::Node("pd_control_node"),
       ff::LinearController(),
-      state_des_{},
-      K_(FeedbackMat::Zero()) {
+      state_des_{} {
     state_setpoint_sub_ = this->create_subscription<ff_msgs::msg::FreeFlyerStateStamped>(
       "ctrl/state", 10, std::bind(&PDControlNode::SetpointCallback, this, _1));
     rviz_setpoint_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
       "/goal_pose", 10, std::bind(&PDControlNode::GoalPoseCallback, this, _1));
     timer_ = this->create_wall_timer(100ms, std::bind(&PDControlNode::ControlLoop, this));
 
-    const double gain_f = declare_parameter("gain_f", 2.0);
-    const double gain_df = declare_parameter("gain_df", 10.0);
-    const double gain_t = declare_parameter("gain_t", 0.2);
-    const double gain_dt = declare_parameter("gain_dt", 0.4);
-
-    // construct feedback control matrix
-    K_(0, 0) = gain_f;
-    K_(0, 3) = gain_df;
-    K_(1, 1) = gain_f;
-    K_(1, 4) = gain_df;
-    K_(2, 2) = gain_t;
-    K_(2, 5) = gain_dt;
+    // default params for feedback gain matrix
+    this->declare_parameter("gain_f", 2.0);
+    this->declare_parameter("gain_df", 10.0);
+    this->declare_parameter("gain_t", 0.2);
+    this->declare_parameter("gain_dt", 0.4);
   }
 
  private:
@@ -48,8 +40,6 @@ class PDControlNode : public ff::LinearController {
   rclcpp::TimerBase::SharedPtr timer_;
 
   ff_msgs::msg::FreeFlyerStateStamped state_des_;
-
-  FeedbackMat K_;
 
   void StateReadyCallback() override {
     // copy current position as goal position
@@ -61,7 +51,20 @@ class PDControlNode : public ff::LinearController {
     // state not yet ready
     if (!StateIsReady()) { return; }
 
-    SendControl(state_des_.state, K_);
+    // build feedback control matrix
+    const double gain_f = this->get_parameter("gain_f").as_double();
+    const double gain_df = this->get_parameter("gain_df").as_double();
+    const double gain_t = this->get_parameter("gain_t").as_double();
+    const double gain_dt = this->get_parameter("gain_dt").as_double();
+    FeedbackMat K = FeedbackMat::Zero();
+    K(0, 0) = gain_f;
+    K(0, 3) = gain_df;
+    K(1, 1) = gain_f;
+    K(1, 4) = gain_df;
+    K(2, 2) = gain_t;
+    K(2, 5) = gain_dt;
+
+    SendControl(state_des_.state, K);
   }
 
   void SetpointCallback(const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg) {

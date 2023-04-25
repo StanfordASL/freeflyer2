@@ -17,8 +17,8 @@ class LowLevelController(Node):
         self.p = RobotParams(self)
 
         # low level control publishers
-        self._thruster_pub = self.create_publisher(ThrusterCommand, "ctrl/duty_cycle", 10)
-        self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
+        self._thruster_pub = self.create_publisher(ThrusterCommand, "commands/duty_cycle", 10)
+        self._wheel_pub = self.create_publisher(WheelVelCommand, "commands/velocity", 10)
 
     def set_thrust_duty_cycle(self, duty_cycle: np.ndarray) -> None:
         """send command to set the thrusters duty cycles
