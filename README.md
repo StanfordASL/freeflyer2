@@ -18,10 +18,11 @@ git clone git@github.com:StanfordASL/freeflyer2.git ~/ff_ws/src/freeflyer2
 ```sh
 rosdep update && rosdep install --from-paths ~/ff_ws/src --ignore-src -y
 ```
-4. Build the code
+4. Build the code (skipping the driver package)
 ```sh
-cd ~/ff_ws && colcon build
+cd ~/ff_ws && colcon build --packages-skip ff_drivers
 ```
+
 5. Source workspace install
 ```sh
 source ~/ff_ws/install/local_setup.bash
