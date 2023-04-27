@@ -31,6 +31,7 @@ source ~/ff_ws/install/local_setup.bash
 
 * `freeflyer` -- top level pacakge (contains just launch files)
 * `ff_control` -- implement different controllers
+* `ff_drivers` -- driver code that interfaces with hardware
 * `ff_msgs` -- custom message types
 * `ff_params` -- shared parameters about dynamics and actuators
 * `ff_sim` -- a lightweight pure Python simulator
