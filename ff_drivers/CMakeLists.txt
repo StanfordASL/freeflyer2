@@ -27,7 +27,11 @@ target_link_libraries(test_single pwm)
 
 # install nodes
 install(TARGETS thruster_node test_single
-    DESTINATION lib/${PROJECT_NAME})
+        DESTINATION lib/${PROJECT_NAME})
+
+# install launch files
+install(DIRECTORY launch
+        DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
