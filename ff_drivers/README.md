@@ -10,7 +10,7 @@ Follow the steps below to bring all the hardware actuators into ROS2 network.
     **Important Note**: we need to use the `root` account as it has
     the right permission to access hardware interfaces.
 2. Set up the freeflyer workspace `~/ff_ws` following steps 1 - 3 on the
-    [main setup guide](../)
+    [main setup guide](../README.md)
 3. Build the driver code
 ```sh
 cd ~/ff_ws && colcon build --packages-up-to ff_drivers
