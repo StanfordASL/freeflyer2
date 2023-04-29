@@ -14,4 +14,10 @@ def generate_launch_description():
             name="thruster_node",
             namespace=robot_name,
         ),
+        Node(
+            package="ff_drivers",
+            executable="test_all_thrusters",
+            name="test_all_thrusters",
+            namespace=robot_name,
+        )
     ])

@@ -7,18 +7,19 @@
 using namespace std::chrono_literals;
 
 
-class TestHardSingleNode : public ff::PWMManager {
+class TestSingleNode : public ff::PWMManager {
  public:
-  TestHardSingleNode() : ff::PWMManager("test_single_node") {
+  TestSingleNode() : ff::PWMManager("test_single_node") {
     bool use_hard = this->declare_parameter("use_hard", true);
+    int pin = this->declare_parameter("pin", 473);
     this->declare_parameter("max_duty_cycle", .2);
 
     if (use_hard) {
       RCLCPP_INFO(this->get_logger(), "Using hardware PWM: PWM_C");
       this->AddHardPWM(ff::HardPWM::PWM_C);
     } else {
-      RCLCPP_INFO(this->get_logger(), "Using software PWM: pin 477");
-      this->AddSoftPWM(477);
+      RCLCPP_INFO(this->get_logger(), "Using software PWM: pin %d", pin);
+      this->AddSoftPWM(pin);
     }
 
     this->SetPeriodAll(100ms);
@@ -42,7 +43,7 @@ class TestHardSingleNode : public ff::PWMManager {
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<TestHardSingleNode>());
+  rclcpp::spin(std::make_shared<TestSingleNode>());
   rclcpp::shutdown();
   return 0;
 }

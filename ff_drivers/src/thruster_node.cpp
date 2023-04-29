@@ -14,8 +14,8 @@ static constexpr int THRUSTER_PINS[NUM_THRUSTERS] = {
   473,  // thruster pin 1 -> odroid pin 7
   479,  // thruster pin 2 -> odroid pin 11
   480,  // thruster pin 3 -> odroid pin 13
-  490,  // thruster pin 4 -> odroid pin 29
-  491,  // thruster pin 5 -> odroid pin 31
+  472,  // thruster pin 4 -> odroid pin 32
+  495,  // thruster pin 5 -> odroid pin 36
   476,  // thruster pin 6 -> odroid pin 16
   477,  // thruster pin 7 -> odroid pin 18
   478,  // thruster pin 8 -> odroid pin 22
