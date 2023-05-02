@@ -18,6 +18,9 @@ setup(
     license="TODO: License declaration",
     tests_require=["pytest"],
     entry_points={
-        "console_scripts": ["path_planning = ff_path_planning.path_planning:main"],
+        "console_scripts": [
+            "path_planning = ff_path_planning.path_planning:main",
+            "example = ff_path_planning.example:main",
+        ],
     },
 )
