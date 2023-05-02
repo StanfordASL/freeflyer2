@@ -1,0 +1,14 @@
+string dynamics
+string cost
+float64[] x0
+int32 t0_secs 
+int32 t0_nsecs
+int64 horizon 20
+int64 xdim -1
+int64 udim -1
+float64 slew_rate 0.0
+---
+float64[] times
+float64[] states
+float64[] controls
+float64[] feedback
