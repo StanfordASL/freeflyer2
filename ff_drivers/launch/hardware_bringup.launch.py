@@ -9,6 +9,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="robot"),
         Node(
+            package="ff_params",
+            executable="robot_params_node",
+            name="robot_params_node",
+            namespace=robot_name,
+        ),
+        Node(
             package="ff_drivers",
             executable="thruster_node",
             name="thruster_node",
