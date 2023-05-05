@@ -30,7 +30,7 @@ class Renderer : public rclcpp::Node {
     marker_msg_.scale.x = 0.001;
     marker_msg_.scale.y = 0.001;
     marker_msg_.scale.z = 0.001;
-    marker_msg_.header.frame_id = "map";
+    marker_msg_.header.frame_id = "world";
     marker_msg_.action = visualization_msgs::msg::Marker::ADD;
     marker_msg_.pose.position.x = 0;
     marker_msg_.pose.position.y = 2.7;
@@ -48,7 +48,7 @@ class Renderer : public rclcpp::Node {
     for (size_t i = 0; i < robot_names.size(); ++i) {
       // build pose messages
       transform_msgs_[i] = std::make_unique<geometry_msgs::msg::TransformStamped>();
-      transform_msgs_[i]->header.frame_id = "map";
+      transform_msgs_[i]->header.frame_id = "world";
       transform_msgs_[i]->child_frame_id = robot_names[i] + "/base";
       transform_msgs_[i]->transform.rotation.x = 0.0;
       transform_msgs_[i]->transform.rotation.y = 0.0;
@@ -60,7 +60,7 @@ class Renderer : public rclcpp::Node {
 
       // create pose subscription
       state_subs_[i] = this->create_subscription<ff_msgs::msg::FreeFlyerStateStamped>(
-        "/" + robot_names[i] + "/gt/state",
+        "/" + robot_names[i] + "/est/state",
         10,
         [this, i](const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg){
           this->StateCallback(i, msg);
