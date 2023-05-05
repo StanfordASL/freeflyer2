@@ -1,0 +1,57 @@
+cmake_minimum_required(VERSION 3.8)
+project(ff_estimate)
+
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
+
+find_package(ff_msgs REQUIRED)
+
+add_library(est_lib src/base_estimator.cpp src/pose2d_estimator.cpp)
+target_include_directories(est_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_compile_features(est_lib PUBLIC cxx_std_17)
+ament_target_dependencies(est_lib rclcpp ff_msgs geometry_msgs)
+
+ament_export_targets(est_libTarget HAS_LIBRARY_TARGET)
+ament_export_dependencies(rclcpp ff_msgs)
+
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
+
+install(
+  TARGETS est_lib
+  EXPORT est_libTarget
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
+add_executable(mocap_estimator_node src/mocap_estimator_node.cpp)
+target_link_libraries(mocap_estimator_node est_lib)
+
+install(TARGETS mocap_estimator_node
+        DESTINATION lib/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  # the following line skips the linter which checks for copyrights
+  # comment the line when a copyright and license is added to all source files
+  set(ament_cmake_copyright_FOUND TRUE)
+  # the following line skips cpplint (only works in a git repo)
+  # comment the line when this package is in a git repo and when
+  # a copyright and license is added to all source files
+  set(ament_cmake_cpplint_FOUND TRUE)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()
