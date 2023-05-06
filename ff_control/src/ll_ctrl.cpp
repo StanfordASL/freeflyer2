@@ -12,6 +12,13 @@ LowLevelController::LowLevelController()
   wheel_pub_ = this->create_publisher<WheelVelCommand>("commands/velocity", 10);
 }
 
+LowLevelController::~LowLevelController() {
+  std::array<double, 8> thrust;
+  thrust.fill(0.);
+  SetThrustDutyCycle(thrust);
+  SetWheelVelocity(0.);
+}
+
 void LowLevelController::SetThrustDutyCycle(const std::array<double, 8>& duty_cycle) {
   ThrusterCommand msg{};
   msg.header.stamp = this->get_clock()->now();
