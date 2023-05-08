@@ -9,11 +9,19 @@
 
 namespace ff {
 
+/**
+ * @brief estimator base class
+ */
 class BaseEstimator : public rclcpp::Node {
  public:
   BaseEstimator(const std::string& node_name);
 
  protected:
+  /**
+   * @brief send out the current state estimate
+   *
+   * @param state estimated freeflyer state
+   */
   void SendStateEstimate(const ff_msgs::msg::FreeFlyerState& state);
 
  private:
