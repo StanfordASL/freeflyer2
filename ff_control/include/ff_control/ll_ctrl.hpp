@@ -14,7 +14,6 @@ namespace ff {
 class LowLevelController : virtual public rclcpp::Node {
  public:
   LowLevelController();
-  ~LowLevelController();
 
  protected:
   /**

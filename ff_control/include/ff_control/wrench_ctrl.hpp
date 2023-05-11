@@ -10,7 +10,7 @@ namespace ff {
 
 class WrenchController : public LowLevelController  {
  public:
-   WrenchController();
+  WrenchController();
 
  protected:
   /**
