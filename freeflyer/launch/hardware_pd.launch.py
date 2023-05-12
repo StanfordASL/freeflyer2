@@ -9,14 +9,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("robot_name", default_value="robot"),
-        IncludeLaunchDescription(
-            PathJoinSubstitution([
-                FindPackageShare("ff_viz"),
-                "launch",
-                "ff_viz.launch.py",
-            ]),
-            launch_arguments={"robot_name": robot_name}.items(),
-        ),
+        #IncludeLaunchDescription(
+        #    PathJoinSubstitution([
+        #        FindPackageShare("ff_viz"),
+        #        "launch",
+        #        "ff_viz.launch.py",
+        #    ]),
+        #    launch_arguments={"robot_name": robot_name}.items(),
+        #),
         Node(
             package="ff_control",
             executable="pd_ctrl_node",
@@ -30,7 +30,7 @@ def generate_launch_description():
             namespace=robot_name,
             parameters=[{
                 "pose_channel": PathJoinSubstitution([
-                    "/mocap",
+                    "mocap",
                     robot_name,
                     "pose",
                 ]),

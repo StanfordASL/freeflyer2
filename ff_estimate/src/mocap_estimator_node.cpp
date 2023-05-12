@@ -13,7 +13,7 @@ using geometry_msgs::msg::PoseStamped;
 class MocapEstimatorNode : public ff::Pose2DEstimator {
  public:
   MocapEstimatorNode() : ff::Pose2DEstimator("mocap_estimator_node") {
-    const std::string pose_channel = this->declare_parameter("pose_channel", "sim/mocap/pose");
+    const std::string pose_channel = this->declare_parameter("pose_channel", "mocap/sim/pose");
     pose_sub_ = this->create_subscription<PoseStamped>(
       pose_channel, 10, [this](const PoseStamped::SharedPtr msg) {PoseCallback(msg);});
   }

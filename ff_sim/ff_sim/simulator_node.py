@@ -119,7 +119,7 @@ class FreeFlyerSimulator(Node):
         # simulated motion capture
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
-        self.pub_mocap = self.create_publisher(PoseStamped, "sim/mocap/pose", 10)
+        self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
