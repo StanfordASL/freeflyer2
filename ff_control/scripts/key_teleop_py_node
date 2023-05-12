@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+import rclpy
+
+import numpy as np
+
+from ff_msgs.msg import FreeFlyerState
+from ff_control.linear_ctrl import LinearController
+from ff_control.keyboard_ctrl import KeyboardController
+
+class KeyboardTeleopNode(LinearController, KeyboardController):
+
+    def __init__(self):
+        super().__init__("key_teleop_node")
+        self.timer = self.create_timer(0.01, self.teleop_loop)
+        self.state_desired = FreeFlyerState()
+        # feedback gain params
+        self.declare_parameter("gain_df", 10.0)
+        self.declare_parameter("gain_dt", 0.4)
+        # build feedback gain matrix
+        self.K = np.array([[0, 0, 0, gain_df, 0, 0],
+                            [0, 0, 0, 0, gain_df, 0],
+                            [0, 0, 0, 0, 0, gain_dt]])
+        self.help_msg = """
+        This keyboard teleop node controls the linear and angular velocity of the
+        freeflyer using a simple proportional controller. There will be large delay
+        in your control actions due to low control authority.
+
+        DRIVE WITH CAUTION and REACT EARLY!!!
+
+        Use the following keys to control the robot in global cooridnate frame
+        (lifting the key will eventually put the robot to a stop)
+
+        Q  W  E
+        A  S  D
+
+        W/S -- translate the robot in positive / negative x direction
+        A/D -- translate the robot in positive / negative y direction
+        Q/E -- rotate the robot (q counter clockwise, e clockwise)
+        """
+
+        self.error_msg = """
+        Communications Failed
+        """
+
+    def teleop_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            return
+
+        try:
+            print(self.help_msg)
+            key = getKey()
+            if key == 'w' :
+                self.state_desired.state.twist.vx = 0.3
+            elif key == 's' :
+                self.state_desired.state.twist.vx = -0.3
+            elif key == 'a' :
+                self.state_desired.state.twist.vy = 0.3
+            elif key == 'd' :
+                self.state_desired.state.twist.vy = -0.3
+            elif key == 'q' :
+                self.state_desired.state.twist.wz = 0.5
+            elif key == 'e' :
+                self.state_desired.state.twist.wz = -0.5
+        except Exception as e:
+            print(e)
+
+        self.send_control(self.state_desired, self.K)
+
+def main(args=None):
+    rclpy.init(args=args)
+    key_teleop = KeyboardTeleopNode()
+    try:
+        rclpy.spin(key_teleop)
+    except KeyboardInterrupt:
+        print("**** * 💀 Ctrl-C detected...")
+    finally:
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

@@ -62,6 +62,7 @@ ament_python_install_package(${PROJECT_NAME})
 # install Python nodes
 install(PROGRAMS
   scripts/pd_ctrl_py_node
+  scripts/key_teleop_py_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
