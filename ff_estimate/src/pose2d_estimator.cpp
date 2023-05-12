@@ -11,6 +11,7 @@ Pose2DEstimator::Pose2DEstimator(const std::string& node_name)
   // perform simple 1st order IIR lowpass filter on derivate estimates
   // coefficient in [0, 1) (higher coefficient filters better with larger delay)
   this->declare_parameter("lowpass_coeff", .95);
+  this->declare_parameter("min_dt", 0.005);
 }
 
 void Pose2DEstimator::EstimateWithPose2D(const Pose2DStamped& pose_stamped) {
@@ -21,6 +22,11 @@ void Pose2DEstimator::EstimateWithPose2D(const Pose2DStamped& pose_stamped) {
     const rclcpp::Time now = pose_stamped.header.stamp;
     const rclcpp::Time last = prev_.header.stamp;
     double dt = (now - last).seconds();
+
+    // ignore this frame if it is too close to the last frame
+    if (dt < this->get_parameter("min_dt").as_double()) {
+      return;
+    }
 
     // finite difference
     double vx = (pose_stamped.pose.x - prev_.state.pose.x) / dt;
