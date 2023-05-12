@@ -24,29 +24,29 @@ void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel
     const double u_Fx = wrench_body_clipped.fx / (2 * p_.actuators.F_max_per_thruster);
     const double u_Fy = wrench_body_clipped.fy / (2 * p_.actuators.F_max_per_thruster);
     if (u_Fx > 0) {
-      duty_cycle[2] = u_Fx;
-      duty_cycle[5] = u_Fx;
+      duty_cycle[1] = u_Fx;
+      duty_cycle[6] = u_Fx;
     } else {
-      duty_cycle[1] = -u_Fx;
-      duty_cycle[6] = -u_Fx;
+      duty_cycle[2] = -u_Fx;
+      duty_cycle[5] = -u_Fx;
     }
     if (u_Fy > 0) {
-      duty_cycle[4] = u_Fy;
-      duty_cycle[7] = u_Fy;
+      duty_cycle[0] = u_Fy;
+      duty_cycle[3] = u_Fy;
     } else {
-      duty_cycle[0] = -u_Fy;
-      duty_cycle[3] = -u_Fy;
+      duty_cycle[4] = -u_Fy;
+      duty_cycle[7] = -u_Fy;
     }
 
     // convert torque
     const double u_M = wrench_body_clipped.tz /
       (4 * p_.actuators.F_max_per_thruster * p_.actuators.thrusters_lever_arm);
     if (u_M > 0) {
-      for (const int& i : {1, 3, 5, 7}) {
+      for (const int& i : {0, 2, 4, 6}) {
         duty_cycle[i] += u_M;
       }
     } else {
-      for (const int& i : {0, 2, 4, 6}) {
+      for (const int& i : {1, 3, 5, 7}) {
         duty_cycle[i] += -u_M;
       }
     }

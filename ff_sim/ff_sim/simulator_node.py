@@ -234,11 +234,11 @@ class FreeFlyerSimulator(Node):
 
         u_dc = thrusters_dutycycles_vec
 
-        F_x = Fmax * ( (u_dc[2]+u_dc[5]) - (u_dc[1]+u_dc[6]) )
-        F_y = Fmax * ( (u_dc[4]+u_dc[7]) - (u_dc[0]+u_dc[3]) )
+        F_x = Fmax * ( (u_dc[1]+u_dc[6]) - (u_dc[2]+u_dc[5]) )
+        F_y = Fmax * ( (u_dc[0]+u_dc[3]) - (u_dc[4]+u_dc[7]) )
 
-        M   = (dist*Fmax) * ( (u_dc[1]+u_dc[3]+u_dc[5]+u_dc[7]) -
-                              (u_dc[0]+u_dc[2]+u_dc[4]+u_dc[6]) )
+        M   = (dist*Fmax) * ( (u_dc[0]+u_dc[2]+u_dc[4]+u_dc[6]) -
+                              (u_dc[1]+u_dc[3]+u_dc[5]+u_dc[7]) )
 
         return np.array([F_x, F_y]), M
 
