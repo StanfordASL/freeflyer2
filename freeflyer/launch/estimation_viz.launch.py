@@ -24,7 +24,7 @@ def generate_launch_description():
             namespace=robot_name,
             parameters=[{
                 "pose_channel": PathJoinSubstitution([
-                    "/mocap",
+                    "mocap",
                     robot_name,
                     "pose",
                 ]),
