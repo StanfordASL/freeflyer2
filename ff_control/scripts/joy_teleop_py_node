@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+
+import rclpy
+
+import numpy as np
+
+from ff_msgs.msg import FreeFlyerState
+from ff_control.linear_ctrl import LinearController
+from ff_control.joystick_ctrl import JoystickController
+
+from sensor_msgs.msg import Joy
+# # Reports the state of a joysticks axes and buttons.
+# Header header           # timestamp in the header is the time the data is received from the joystick
+# float32[] axes          # the axes measurements from a joystick
+# int32[] buttons         # the buttons measurements from a joystick 
+
+from enum import Enum
+class ps4_axes_e(Enum):
+    LEFT_LR     = 0
+    LEFT_UD     = 1
+    L2          = 2
+    RIGHT_LR    = 3
+    RIGHT_UD    = 4
+    R2          = 5
+
+class ps4_btn_e(Enum):
+    X           = 0
+    O           = 1
+    TRIANGLE    = 2
+    SQUARE      = 3
+    L1          = 4
+    R1          = 5
+
+class JoystickTeleopNode(LinearController, JoystickController):
+    
+    def __init__(self):
+        super().__init__("joy_teleop_node")
+        self.joy_sub = self.create_subscription(Joy,
+            "ctrl/joy", self.joy_callback, 10)
+        self.declare_parameter("mode", "velocity")
+        self.state_desired = FreeFlyerState()
+            
+        # feedback gain params
+        self.declare_parameter("gain_df", 10.0)
+        self.declare_parameter("gain_dt", 0.4)
+        # build feedback gain matrix
+        self.K = np.array([[0, 0, 0, gain_df, 0, 0],
+                            [0, 0, 0, 0, gain_df, 0],
+                            [0, 0, 0, 0, 0, gain_dt]])
+        
+
+    def joy_callback(self, msg: Joy) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            return
+        
+        self.state_desired.header.stamp = msg.header.stamp
+
+        mode = self.get_parameter("mode").get_parameter_value().string_value
+        if mode == "velocity":
+            # Right stick to control XY velocity, Left stick to control angular velocity
+            self.state_desired.state.twist.vx = 2 * msg.axes[ps4_axes_e.RIGHT_UD]
+            self.state_desired.state.twist.vy = 2 * msg.axes[ps4_axes_e.RIGHT_LR]
+            self.state_desired.state.twist.wz = 2 * msg.axes[ps4_axes_e.LEFT_LR]
+        else:
+            self.get_logger().error("mode not recognized: %r" % (mode))
+
+        self.send_control(self.state_desired, self.K)
+
+def main(args=None):
+    rclpy.init(args=args)
+    joy_teleop = JoystickTeleopNode()
+    try:
+        rclpy.spin(joy_teleop)
+    except KeyboardInterrupt:
+        print("**** * 💀 Ctrl-C detected...")
+    finally:
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

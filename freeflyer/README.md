@@ -16,3 +16,8 @@ ros2 launch freeflyer sim_key_teleop.launch.py          # launch CPP implementat
 ros2 launch freeflyer sim_key_teleop.launch.py impl:=py # launch Python implementation
 ```
 *Note*: this will launch a new terminal window where you can input keyboard commands
+
+**Joystick Teleop Velocity Control in Simulator**
+```sh
+ros2 launch freeflyer sim_joy_teleop.launch.py impl:=py # launch Python implementation (by default)
+```
