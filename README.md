@@ -30,6 +30,7 @@ source ~/ff_ws/install/local_setup.bash
 ## Package Layout
 
 * `freeflyer` -- top level pacakge (contains just launch files)
+* `ff_estimate` -- implement different state estimators
 * `ff_control` -- implement different controllers
 * `ff_msgs` -- custom message types
 * `ff_params` -- shared parameters about dynamics and actuators
