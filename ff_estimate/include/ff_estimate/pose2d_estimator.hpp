@@ -6,12 +6,20 @@
 
 namespace ff {
 
+/**
+ * @brief full-state estimator using only pose measurements
+ */
 class Pose2DEstimator: public BaseEstimator {
  public:
   Pose2DEstimator(const std::string& node_name);
 
  protected:
-  void EstimateWithPose2D(const ff_msgs::msg::Pose2DStamped& pose_stamped);
+  /**
+   * @brief estimate state with Pose2D
+   *
+   * @param pose_stamped timestamped pose2d
+   */
+  virtual void EstimateWithPose2D(const ff_msgs::msg::Pose2DStamped& pose_stamped);
 
  private:
   ff_msgs::msg::FreeFlyerStateStamped prev_;
