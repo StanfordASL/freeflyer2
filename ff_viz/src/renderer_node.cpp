@@ -1,3 +1,26 @@
+// MIT License
+//
+// Copyright (c) 2023 Stanford Autonomous Systems Lab
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -15,9 +38,12 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-class Renderer : public rclcpp::Node {
- public:
-  explicit Renderer(const std::string& name) : rclcpp::Node(name) {
+class Renderer : public rclcpp::Node
+{
+public:
+  explicit Renderer(const std::string & name)
+  : rclcpp::Node(name)
+  {
     auto robot_names = this->declare_parameter<std::vector<std::string>>("robot_name", {"robot"});
     state_subs_.resize(robot_names.size());
     transform_msgs_.resize(robot_names.size());
@@ -62,7 +88,7 @@ class Renderer : public rclcpp::Node {
       state_subs_[i] = this->create_subscription<ff_msgs::msg::FreeFlyerStateStamped>(
         "/" + robot_names[i] + "/gt/state",
         10,
-        [this, i](const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg){
+        [this, i](const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg) {
           this->StateCallback(i, msg);
         }
       );
@@ -78,7 +104,7 @@ class Renderer : public rclcpp::Node {
     timer_ = this->create_wall_timer(20ms, std::bind(&Renderer::VizUpdate, this));
   }
 
- private:
+private:
   rclcpp::TimerBase::SharedPtr timer_;
   std::vector<rclcpp::Subscription<ff_msgs::msg::FreeFlyerStateStamped>::SharedPtr> state_subs_;
 
@@ -88,7 +114,8 @@ class Renderer : public rclcpp::Node {
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::vector<geometry_msgs::msg::TransformStamped::UniquePtr> transform_msgs_;
 
-  void VizUpdate() {
+  void VizUpdate()
+  {
     // render table
     marker_msg_.header.stamp = this->get_clock()->now();
     marker_pub_->publish(marker_msg_);
@@ -99,7 +126,8 @@ class Renderer : public rclcpp::Node {
     }
   }
 
-  void StateCallback(const size_t idx, const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg) {
+  void StateCallback(const size_t idx, const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg)
+  {
     transform_msgs_[idx]->transform.translation.x = msg->state.pose.x;
     transform_msgs_[idx]->transform.translation.y = msg->state.pose.y;
     transform_msgs_[idx]->transform.translation.z = 0.15;
@@ -112,7 +140,8 @@ class Renderer : public rclcpp::Node {
   }
 };
 
-int main(int argc, char ** argv) {
+int main(int argc, char ** argv)
+{
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<Renderer>("renderer_node"));
   rclcpp::shutdown();
