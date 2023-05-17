@@ -86,4 +86,4 @@ void RobotParams::ParamReadyCallback(std::shared_future<std::vector<rclcpp::Para
   loaded_.store(true);
 }
 
-} // namespace ff
+}  // namespace ff

@@ -60,7 +60,7 @@ public:
   DynamicsParams dynamics;
   ActuatorParams actuators;
 
-  RobotParams(rclcpp::Node * node);
+  explicit RobotParams(rclcpp::Node * node);
 
   bool Loaded() const;
 
@@ -71,4 +71,4 @@ private:
   void ParamReadyCallback(std::shared_future<std::vector<rclcpp::Parameter>> future);
 };
 
-} // namespace ff
+}  // namespace ff
