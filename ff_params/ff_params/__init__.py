@@ -30,7 +30,7 @@ import rclpy
 
 class RobotParams:
     def __init__(self,
-                 node: rclpy.Node,
+                 node: rclpy.node.Node,
                  param_ready_cb: T.Optional[T.Callable[[], None]] = None):
         robot_name = node.get_namespace()
         cli = node.create_client(GetParameters, f'{robot_name}/robot_params_node/get_parameters')
