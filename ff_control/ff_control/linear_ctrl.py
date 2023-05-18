@@ -46,10 +46,11 @@ class LinearController(WrenchController):
     STATE_DIM = 6
     CONTROL_DIM = 3
 
-    def __init__(self, node_name='linear_ctrl_node'):
+    def __init__(self, node_name="linear_ctrl_node"):
         super().__init__(node_name)
-        self._state_sub = self.create_subscription(FreeFlyerStateStamped,
-                                                   'gt/state', self._state_callback, 10)
+        self._state_sub = self.create_subscription(
+            FreeFlyerStateStamped, "gt/state", self._state_callback, 10
+        )
         self._state_ready = False
         self._state_stamped = FreeFlyerStateStamped()
 
@@ -61,7 +62,7 @@ class LinearController(WrenchController):
     def get_state(self) -> T.Optional[FreeFlyerState]:
         """Get the current latest state."""
         if not self._state_ready:
-            self.get_logger().error('get_state failed: state not yet ready')
+            self.get_logger().error("get_state failed: state not yet ready")
             return None
 
         return self._state_stamped.state
@@ -74,11 +75,11 @@ class LinearController(WrenchController):
         :param K: feedback control matrix (i.e. u = Kx)
         """
         if not self._state_ready:
-            self.get_logger().warn('send_control ignored, state not yet ready')
+            self.get_logger().warn("send_control ignored, state not yet ready")
             return
 
         if K.shape != self.feedback_gain_shape:
-            self.get_logger().error('send_control failed: incompatible gain matrix shape')
+            self.get_logger().error("send_control failed: incompatible gain matrix shape")
             return
 
         # convert desired state to vector form
@@ -114,14 +115,16 @@ class LinearController(WrenchController):
         :param state: state message
         :return: state vector
         """
-        return np.array([
-            state.pose.x,
-            state.pose.y,
-            state.pose.theta,
-            state.twist.vx,
-            state.twist.vy,
-            state.twist.wz,
-        ])
+        return np.array(
+            [
+                state.pose.x,
+                state.pose.y,
+                state.pose.theta,
+                state.twist.vx,
+                state.twist.vy,
+                state.twist.wz,
+            ]
+        )
 
     @staticmethod
     def vec2state(vec: np.ndarray) -> FreeFlyerState:

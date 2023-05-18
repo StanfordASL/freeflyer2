@@ -30,16 +30,15 @@ from rclpy.node import Node
 
 
 class LowLevelController(Node):
-
-    def __init__(self, node_name: str = 'll_ctrl_node') -> None:
+    def __init__(self, node_name: str = "ll_ctrl_node") -> None:
         super().__init__(node_name)
 
         # robot parameters that can be accessed by sub-classes
         self.p = RobotParams(self)
 
         # low level control publishers
-        self._thruster_pub = self.create_publisher(ThrusterCommand, 'commands/duty_cycle', 10)
-        self._wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
+        self._thruster_pub = self.create_publisher(ThrusterCommand, "commands/duty_cycle", 10)
+        self._wheel_pub = self.create_publisher(WheelVelCommand, "commands/velocity", 10)
 
     def set_thrust_duty_cycle(self, duty_cycle: np.ndarray) -> None:
         """
@@ -48,7 +47,7 @@ class LowLevelController(Node):
         :param duty_cycle: duty cycle for each thrust (in [0, 1])
         """
         if len(duty_cycle) != len(ThrusterCommand().duty_cycle):
-            self.get_logger().error('Incompatible thruster length sent.')
+            self.get_logger().error("Incompatible thruster length sent.")
             return
         msg = ThrusterCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
