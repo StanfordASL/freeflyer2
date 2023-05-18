@@ -20,7 +20,10 @@ if(BUILD_TESTING)
   find_package(launch_testing_ament_cmake REQUIRED)
 
   ament_lint_auto_find_test_dependencies()
-  add_launch_test(test/pd_ctrl_launch_test.py)
+
+  # test both implementations of PD controller
+  add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_cpp_test ARGS "impl:=cpp")
+  add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_py_test ARGS "impl:=py")
 endif()
 
 ament_package()

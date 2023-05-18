@@ -26,11 +26,12 @@ import typing as T
 import numpy as np
 from rcl_interfaces.srv import GetParameters
 import rclpy
+from rclpy.node import Node
 
 
 class RobotParams:
     def __init__(self,
-                 node: rclpy.node.Node,
+                 node: Node,
                  param_ready_cb: T.Optional[T.Callable[[], None]] = None):
         robot_name = node.get_namespace()
         cli = node.create_client(GetParameters, f'{robot_name}/robot_params_node/get_parameters')

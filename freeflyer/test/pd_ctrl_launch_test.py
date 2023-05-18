@@ -27,8 +27,8 @@ import unittest
 from ff_msgs.msg import FreeFlyerStateStamped
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
-from launch.substitutions import PathJoinSubstitution
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
@@ -40,6 +40,8 @@ ROBOT_NAME = 'freeflyer'
 
 
 def generate_test_description():
+    impl = LaunchConfiguration('impl')
+
     sim_launch = IncludeLaunchDescription(
         PathJoinSubstitution([
             FindPackageShare('ff_sim'),
@@ -50,16 +52,17 @@ def generate_test_description():
     )
     pd_ctrl_node = Node(
         package='ff_control',
-        executable='pd_ctrl_cpp_node',
+        executable=['pd_ctrl_', impl, '_node'],
         name='pd_ctrl_node',
         namespace=ROBOT_NAME,
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument('impl', default_value='cpp', choices=['cpp', 'py']),
         sim_launch,
         pd_ctrl_node,
         ReadyToTest(),
-    ]), {'sim_launch': sim_launch, 'pd_ctrl_node': pd_ctrl_node}
+    ])
 
 
 class TestPDControlNode(unittest.TestCase):
@@ -78,7 +81,7 @@ class TestPDControlNode(unittest.TestCase):
     def tearDown(self):
         self.node.destroy_node()
 
-    def test_set_target_state(self, launch_service):
+    def test_set_target_state(self):
         current_state = FreeFlyerStateStamped()
 
         def state_callback(msg):
