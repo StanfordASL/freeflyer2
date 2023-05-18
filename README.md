@@ -32,6 +32,11 @@ The CI will build and run all registered tests. PR can be merged only when all s
 pass. [ROS2 code styles](https://docs.ros.org/en/humble/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html)
 are enforced for both C++ and Python. Here are some tips for fixing code style issues for a PR.
 
+To manually run all tests run
+```sh
+$ colcon build && colcon test && colcon test-result --verbose
+```
+
 #### Copyright
 Every source file (e.g. `.cpp`, `.hpp`, `.py`) including launch files should have a copy of
 the license at the very top. See any source files for an example.
@@ -43,7 +48,7 @@ the license at the very top. See any source files for an example.
 #### Python Code Style
 For the first time, you will need to run the following command to install some dev packages
 ```sh
-sudo apt install -y \
+$ sudo apt install -y \
    python3-flake8-docstrings \
    python3-flake8-blind-except \
    python3-flake8-builtins \
@@ -57,6 +62,21 @@ sudo apt install -y \
 ```
 1. Run `ament_flake8` to check for code style violations and fix them manually.
 2. Run `ament_pep257` to check for docstring style violations and fix them manually.
+
+**We are now enforcing Python source code formatting with the `black`
+formatter.** Please install `black` with `pip install black`.
+
+Importantly
+- to format all Python code with black automatically run
+```sh
+$ cd freeflyer2
+$ black .
+```
+- to check formatting without changing the files run
+```sh
+$ cd freeflyer2
+$ black --check .
+```
 
 #### Disable Code Style Test
 If you hate the ROS2 conventions so bad, you can disable specific code style test by adding
