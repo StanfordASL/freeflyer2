@@ -50,7 +50,7 @@ def generate_test_description():
     )
     pd_ctrl_node = Node(
         package='ff_control',
-        executable='pd_ctrl_node',
+        executable='pd_ctrl_cpp_node',
         name='pd_ctrl_node',
         namespace=ROBOT_NAME,
     )
