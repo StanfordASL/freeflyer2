@@ -54,12 +54,19 @@ def generate_test_description():
         name='pd_ctrl_node',
         namespace=ROBOT_NAME,
     )
+    mocap_estimator = Node(
+        package='ff_estimate',
+        executable='mocap_estimator_node',
+        name='mocap_estimator_node',
+        namespace=ROBOT_NAME,
+    )
 
     return LaunchDescription([
         sim_launch,
         pd_ctrl_node,
+        mocap_estimator,
         ReadyToTest(),
-    ]), {'sim_launch': sim_launch, 'pd_ctrl_node': pd_ctrl_node}
+    ])
 
 
 class TestPDControlNode(unittest.TestCase):
@@ -87,7 +94,7 @@ class TestPDControlNode(unittest.TestCase):
 
         sub = self.node.create_subscription(
             FreeFlyerStateStamped,
-            f'/{ROBOT_NAME}/gt/state',
+            f'/{ROBOT_NAME}/sim/state',
             state_callback,
             10,
         )
