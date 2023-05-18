@@ -18,6 +18,8 @@ jobs:
         uses: ros-tooling/setup-ros@v0.5
         with:
           required-ros-distributions: rolling
+      - name: Install dependencies
+        run: pip install black
       - name: ROS2 build and test
         uses: ros-tooling/action-ros-ci@v0.2
         with:

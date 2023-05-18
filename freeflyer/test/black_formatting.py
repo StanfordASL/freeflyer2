@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # MIT License
 #
 # Copyright (c) 2023 Stanford Autonomous Systems Lab
@@ -21,29 +23,23 @@
 # SOFTWARE.
 
 
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+import unittest
+
+import os
+import sys
+from subprocess import check_call, CalledProcessError
+from pathlib import Path
+import contextlib
 
 
-def generate_launch_description():
-    robot_name = LaunchConfiguration("robot_name")
-
-    return LaunchDescription(
-        [
-            DeclareLaunchArgument("robot_name", default_value="robot"),
-            Node(
-                package="ff_params",
-                executable="robot_params_node",
-                name="robot_params_node",
-                namespace=robot_name,
-            ),
-            Node(
-                package="ff_sim",
-                executable="simulator_node",
-                name="simulator_node",
-                namespace=robot_name,
-            ),
-        ]
-    )
+class TestPythonFormatting(unittest.TestCase):
+    def test_check_python_formatting(self):
+        root_path = Path(__file__).absolute().parents[2]
+        try:
+            check_call(["black", "--check", str(root_path)])
+            failed = False
+        except CalledProcessError:
+            failed = True
+        if failed:
+            msg = "Python code is not formatted. Run `black .` in `freeflyer2` root to format."
+            self.fail(msg)

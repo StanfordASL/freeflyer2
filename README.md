@@ -30,7 +30,14 @@ source ~/ff_ws/install/local_setup.bash
 ## Development Guide
 The CI will build and run all registered tests. PR can be merged only when all status checks
 pass. [ROS2 code styles](https://docs.ros.org/en/humble/The-ROS2-Project/Contributing/Code-Style-Language-Versions.html)
-are enforced for both C++ and Python. Here are some tips for fixing code style issues for a PR.
+are enforced for C++. Python code style is enforced through `black`.
+Here are some tips for fixing code style issues for a PR.
+
+Run the following command to manually run all tests and see detailed test results including
+format violation
+```sh
+$ colcon build && colcon test && colcon test-result --verbose
+```
 
 #### Copyright
 Every source file (e.g. `.cpp`, `.hpp`, `.py`) including launch files should have a copy of
@@ -41,22 +48,19 @@ the license at the very top. See any source files for an example.
 2. Run `ament_cpplint` to check for style violations and fix them manually.
 
 #### Python Code Style
-For the first time, you will need to run the following command to install some dev packages
+Please install `black` with `pip install black` for the first time.
+
+Importantly
+- to format all Python code with black automatically run
 ```sh
-sudo apt install -y \
-   python3-flake8-docstrings \
-   python3-flake8-blind-except \
-   python3-flake8-builtins \
-   python3-flake8-class-newline \
-   python3-flake8-comprehensions \
-   python3-flake8-deprecated \
-   python3-flake8-import-order \
-   python3-flake8-quotes \
-   python3-pytest-repeat \
-   python3-pytest-rerunfailures
+$ cd freeflyer2
+$ black .
 ```
-1. Run `ament_flake8` to check for code style violations and fix them manually.
-2. Run `ament_pep257` to check for docstring style violations and fix them manually.
+- to check formatting without changing the files run
+```sh
+$ cd freeflyer2
+$ black --check .
+```
 
 #### Disable Code Style Test
 If you hate the ROS2 conventions so bad, you can disable specific code style test by adding
