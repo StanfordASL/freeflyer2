@@ -17,7 +17,10 @@ install(DIRECTORY launch
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  find_package(launch_testing_ament_cmake REQUIRED)
+
   ament_lint_auto_find_test_dependencies()
+  add_launch_test(test/pd_ctrl_launch_test.py)
 endif()
 
 ament_package()
