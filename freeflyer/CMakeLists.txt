@@ -19,7 +19,10 @@ if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   find_package(launch_testing_ament_cmake REQUIRED)
 
+  # disable Python style checkers
+  set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
+
   add_launch_test(test/pd_ctrl_launch_test.py)
 endif()
 

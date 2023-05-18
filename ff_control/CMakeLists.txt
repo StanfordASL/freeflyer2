@@ -54,6 +54,8 @@ install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
+  # disable Python style checkers
+  set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
 endif()
 
