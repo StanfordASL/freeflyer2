@@ -1,46 +1,80 @@
+// MIT License
+//
+// Copyright (c) 2023 Stanford Autonomous Systems Lab
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+
 #include "ff_drivers/pwm.hpp"
 
-namespace ff {
+namespace ff
+{
 
-void PWM::Enable() {
+void PWM::Enable()
+{
   enabled_ = true;
 }
 
-void PWM::Disable() {
+void PWM::Disable()
+{
   enabled_ = false;
 }
 
-void PWM::SetPolarityNormal() {
+void PWM::SetPolarityNormal()
+{
   polarity_inversed_ = false;
 }
 
-void PWM::SetPolarityInverse() {
+void PWM::SetPolarityInverse()
+{
   polarity_inversed_ = true;
 }
 
-void PWM::SetPeriod(const std::chrono::duration<double>& period) {
+void PWM::SetPeriod(const std::chrono::duration<double> & period)
+{
   period_ = period;
 }
 
-void PWM::SetDutyCycle(const std::chrono::duration<double>& duty_cycle) {
+void PWM::SetDutyCycle(const std::chrono::duration<double> & duty_cycle)
+{
   duty_cycle_ = duty_cycle;
 }
 
-void PWM::SetDutyCyclePercent(double percent) {
+void PWM::SetDutyCyclePercent(double percent)
+{
   SetDutyCycle(percent * period_);
 }
 
-void PWM::Initialize() {
+void PWM::Initialize()
+{
   Disable();
   SetPolarityNormal();
   SetPeriod(period_);
   SetDutyCycle(duty_cycle_);
 }
 
-constexpr int pwmchip[] = { 4, 4, 8, 8 };
-constexpr int pwmpin[] = { 0, 1, 0, 1 };
+constexpr int pwmchip[] = {4, 4, 8, 8};
+constexpr int pwmpin[] = {0, 1, 0, 1};
 
-HardPWM::HardPWM(const HardPWM::PinDef& pwm) : pwm_(pwm) {
+HardPWM::HardPWM(const HardPWM::PinDef & pwm)
+: pwm_(pwm)
+{
   // request device
   {
     std::ofstream f_export(ChipBasePath() + "export");
@@ -55,7 +89,8 @@ HardPWM::HardPWM(const HardPWM::PinDef& pwm) : pwm_(pwm) {
   Initialize();
 }
 
-HardPWM::~HardPWM() {
+HardPWM::~HardPWM()
+{
   Disable();
 
   // close files
@@ -69,51 +104,61 @@ HardPWM::~HardPWM() {
   f_unexport << pwmpin[pwm_];
 }
 
-void HardPWM::Enable() {
+void HardPWM::Enable()
+{
   f_enable_ << 1;
   f_enable_.flush();
   PWM::Enable();
 }
 
-void HardPWM::Disable() {
+void HardPWM::Disable()
+{
   f_enable_ << 0;
   f_enable_.flush();
   PWM::Disable();
 }
 
-void HardPWM::SetPolarityNormal() {
+void HardPWM::SetPolarityNormal()
+{
   f_polarity_ << "normal";
   f_polarity_.flush();
   PWM::SetPolarityNormal();
 }
 
-void HardPWM::SetPolarityInverse() {
+void HardPWM::SetPolarityInverse()
+{
   f_polarity_ << "inversed";
   f_polarity_.flush();
   PWM::SetPolarityInverse();
 }
 
-void HardPWM::SetPeriod(const std::chrono::duration<double>& period) {
+void HardPWM::SetPeriod(const std::chrono::duration<double> & period)
+{
   f_period_ << std::chrono::duration_cast<std::chrono::nanoseconds>(period).count();
   f_period_.flush();
   PWM::SetPeriod(period);
 }
 
-void HardPWM::SetDutyCycle(const std::chrono::duration<double>& duty_cycle) {
+void HardPWM::SetDutyCycle(const std::chrono::duration<double> & duty_cycle)
+{
   f_duty_cycle_ << std::chrono::duration_cast<std::chrono::nanoseconds>(duty_cycle).count();
   f_duty_cycle_.flush();
   PWM::SetDutyCycle(duty_cycle);
 }
 
-std::string HardPWM::ChipBasePath() const {
+std::string HardPWM::ChipBasePath() const
+{
   return "/sys/class/pwm/pwmchip" + std::to_string(pwmchip[pwm_]) + "/";
 }
 
-std::string HardPWM::PWMBasePath() const {
+std::string HardPWM::PWMBasePath() const
+{
   return ChipBasePath() + "pwm" + std::to_string(pwmpin[pwm_]) + "/";
 }
 
-SoftPWM::SoftPWM(int pin) : pin_(pin) {
+SoftPWM::SoftPWM(int pin)
+: pin_(pin)
+{
   // request gpio device
   {
     std::ofstream f_export("/sys/class/gpio/export");
@@ -132,7 +177,8 @@ SoftPWM::SoftPWM(int pin) : pin_(pin) {
   Initialize();
 }
 
-SoftPWM::~SoftPWM() {
+SoftPWM::~SoftPWM()
+{
   Disable();
   Low();
 
@@ -145,59 +191,70 @@ SoftPWM::~SoftPWM() {
   f_unexport << pin_;
 }
 
-void SoftPWM::High() {
+void SoftPWM::High()
+{
   f_value_ << 1;
   f_value_.flush();
 }
 
-void SoftPWM::Low() {
+void SoftPWM::Low()
+{
   f_value_ << 0;
   f_value_.flush();
 }
 
-void SoftPWM::SetPolarityNormal() {
+void SoftPWM::SetPolarityNormal()
+{
   f_active_low_ << 0;
   f_active_low_.flush();
   PWM::SetPolarityNormal();
 }
 
-void SoftPWM::SetPolarityInverse() {
+void SoftPWM::SetPolarityInverse()
+{
   f_active_low_ << 1;
   f_active_low_.flush();
   PWM::SetPolarityInverse();
 }
 
 
-std::string SoftPWM::GPIOBasePath() const {
+std::string SoftPWM::GPIOBasePath() const
+{
   return "/sys/class/gpio/gpio" + std::to_string(pin_) + "/";
 }
 
-PWMManager::PWMManager(const std::string& node_name) : rclcpp::Node(node_name) {}
+PWMManager::PWMManager(const std::string & node_name)
+: rclcpp::Node(node_name) {}
 
-void PWMManager::AddSoftPWM(int pin) {
+void PWMManager::AddSoftPWM(int pin)
+{
   pwms_.push_back(std::make_shared<SoftPWM>(pin));
   switch_timers_.push_back(nullptr);
 }
 
-void PWMManager::AddHardPWM(const HardPWM::PinDef& pin) {
+void PWMManager::AddHardPWM(const HardPWM::PinDef & pin)
+{
   pwms_.push_back(std::make_shared<HardPWM>(pin));
   switch_timers_.push_back(nullptr);
 }
 
-void PWMManager::EnableAll() {
-  for (auto& pwm : pwms_) {
+void PWMManager::EnableAll()
+{
+  for (auto & pwm : pwms_) {
     pwm->Enable();
   }
 }
 
-void PWMManager::DisableAll() {
-  for (auto& pwm: pwms_) {
+void PWMManager::DisableAll()
+{
+  for (auto & pwm : pwms_) {
     pwm->Disable();
   }
 }
 
-void PWMManager::SetPeriodAll(const std::chrono::duration<double>& period) {
-  for (auto& pwm: pwms_) {
+void PWMManager::SetPeriodAll(const std::chrono::duration<double> & period)
+{
+  for (auto & pwm : pwms_) {
     pwm->SetPeriod(period);
   }
 
@@ -205,7 +262,8 @@ void PWMManager::SetPeriodAll(const std::chrono::duration<double>& period) {
   period_timer_ = this->create_wall_timer(period, std::bind(&PWMManager::PeriodCallback, this));
 }
 
-void PWMManager::SetDutyCycle(size_t idx, double duty_cycle_percent) {
+void PWMManager::SetDutyCycle(size_t idx, double duty_cycle_percent)
+{
   if (idx >= pwms_.size()) {
     RCLCPP_ERROR(this->get_logger(), "PWM idx out of range");
     return;
@@ -219,7 +277,8 @@ void PWMManager::SetDutyCycle(size_t idx, double duty_cycle_percent) {
   pwms_[idx]->SetDutyCyclePercent(duty_cycle_percent);
 }
 
-void PWMManager::PeriodCallback() {
+void PWMManager::PeriodCallback()
+{
   for (size_t i = 0; i < pwms_.size(); ++i) {
     if (!pwms_[i]) {
       RCLCPP_ERROR(this->get_logger(), "encountered unitialized PWM pointer");
@@ -228,19 +287,21 @@ void PWMManager::PeriodCallback() {
 
     if (pwms_[i]->IsSoft() && pwms_[i]->enabled_) {
       pwms_[i]->High();
-      switch_timers_[i] = this->create_wall_timer(pwms_[i]->duty_cycle_,
-                                                  [this, i]() { SwitchCallback(i); });
+      switch_timers_[i] = this->create_wall_timer(
+        pwms_[i]->duty_cycle_,
+        [this, i]() {SwitchCallback(i);});
     }
   }
 }
 
-void PWMManager::SwitchCallback(size_t idx) {
+void PWMManager::SwitchCallback(size_t idx)
+{
   if (idx >= pwms_.size()) {
     RCLCPP_ERROR(this->get_logger(), "PWM idx out of range");
     return;
   }
 
-  if (!pwms_[idx] || ! switch_timers_[idx]) {
+  if (!pwms_[idx] || !switch_timers_[idx]) {
     RCLCPP_ERROR(this->get_logger(), "encountered unitialized pointer");
     return;
   }
