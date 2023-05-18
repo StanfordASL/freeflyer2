@@ -1,19 +1,40 @@
-import rclpy
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 
 import copy
-import numpy as np
 import typing as T
 
 from ff_control.wrench_ctrl import WrenchController
-from ff_msgs.msg import Wrench2D
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
-from ff_params import RobotParams
+from ff_msgs.msg import Wrench2D
+
+import numpy as np
 
 
 class LinearController(WrenchController):
     """
-    base class for any linear controller
+    Base class for any linear controller.
 
     state definition:   [x, y, theta, vx, vy, wz]
     control definition: [fx, fy, tz]
@@ -25,47 +46,39 @@ class LinearController(WrenchController):
     STATE_DIM = 6
     CONTROL_DIM = 3
 
-    def __init__(self, node_name="linear_ctrl_node"):
+    def __init__(self, node_name='linear_ctrl_node'):
         super().__init__(node_name)
         self._state_sub = self.create_subscription(FreeFlyerStateStamped,
-            "gt/state", self._state_callback, 10)
+                                                   'gt/state', self._state_callback, 10)
         self._state_ready = False
         self._state_stamped = FreeFlyerStateStamped()
 
     @property
     def feedback_gain_shape(self) -> T.Tuple[int, int]:
-        """get shape of the feedback control gain matrix
-
-        Returns:
-            T.Tuple[int, int]: (CONTROL_DIM, STATE_DIM)
-        """
+        """Get shape of the feedback control gain matrix."""
         return (self.CONTROL_DIM, self.STATE_DIM)
 
     def get_state(self) -> T.Optional[FreeFlyerState]:
-        """get the current latest state
-
-        Returns:
-            T.Optional[FreeFlyerState]: the current state, None if not available
-        """
+        """Get the current latest state."""
         if not self._state_ready:
-            self.get_logger().error("get_state failed: state not yet ready")
+            self.get_logger().error('get_state failed: state not yet ready')
             return None
 
         return self._state_stamped.state
 
     def send_control(self, state_des: T.Union[FreeFlyerState, np.ndarray], K: np.ndarray) -> None:
-        """send desirable target state for linear control
+        """
+        Send desirable target state for linear control.
 
-        Args:
-            state_des (T.Union[FreeFlyerState, np.ndarray]): desired state
-            K (np.ndarray): feedback control matrix (i.e. u = Kx)
+        :param state_des: desired state
+        :param K: feedback control matrix (i.e. u = Kx)
         """
         if not self._state_ready:
-            self.get_logger().warn("send_control ignored, state not yet ready")
+            self.get_logger().warn('send_control ignored, state not yet ready')
             return
 
         if K.shape != self.feedback_gain_shape:
-            self.get_logger().error("send_control failed: incompatible gain matrix shape")
+            self.get_logger().error('send_control failed: incompatible gain matrix shape')
             return
 
         # convert desired state to vector form
@@ -86,20 +99,20 @@ class LinearController(WrenchController):
         self.set_world_wrench(wrench_world, state_vector[2])
 
     def state_ready_callback(self) -> None:
-        """callback invoked when the first state measurement comes in
+        """
+        Get called when the first state measurement comes in.
+
         Sub-classes should override this function
         """
         pass
 
     @staticmethod
     def state2vec(state: FreeFlyerState) -> np.ndarray:
-        """convert state message to state vector
+        """
+        Convert state message to state vector.
 
-        Args:
-            state (FreeFlyerState): state message
-
-        Returns:
-            np.ndarray: state vector
+        :param state: state message
+        :return: state vector
         """
         return np.array([
             state.pose.x,
@@ -112,13 +125,11 @@ class LinearController(WrenchController):
 
     @staticmethod
     def vec2state(vec: np.ndarray) -> FreeFlyerState:
-        """convert state vector to state message
+        """
+        Convert state vector to state message.
 
-        Args:
-            vec (np.ndarray): state vector
-
-        Returns:
-            FreeFlyerState: state message
+        :param vec: state vector
+        :return: state message
         """
         state = FreeFlyerState()
         state.pose.x = vec[0]
@@ -131,10 +142,10 @@ class LinearController(WrenchController):
         return state
 
     def state_is_ready(self) -> bool:
-        """check if state is ready
+        """
+        Check if state is ready.
 
-        Returns:
-            bool: True if state is ready, False otherwise
+        :return: True if state is ready, False otherwise
         """
         return self._state_ready
 
@@ -144,4 +155,3 @@ class LinearController(WrenchController):
         if not self._state_ready:
             self._state_ready = True
             self.state_ready_callback()
-
