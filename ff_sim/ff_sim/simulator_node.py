@@ -40,10 +40,9 @@ from ff_msgs.msg import FreeFlyerStateStamped, Wrench2DStamped, ThrusterCommand,
 
 from ff_params import RobotParams
 
+
 def simulate_contact(
-    state: np.ndarray,
-    robot_radius: float,
-    obstacles: T.Dict[str, T.Any]
+    state: np.ndarray, robot_radius: float, obstacles: T.Dict[str, T.Any]
 ) -> T.Tuple[np.ndarray, np.ndarray, bool]:
     """
     Simulate contact with obstacles.
@@ -63,38 +62,43 @@ def simulate_contact(
     """
     B_contact = False
 
-    F_MAG_NOM = 6. # in [N]
+    F_MAG_NOM = 6.0  # in [N]
 
-    radius                           = robot_radius
+    radius = robot_radius
     p_x, p_y, theta, v_x, v_y, omega = state
 
     # check for contacts with cylinders
-    n_obs_cyl = len(obstacles['cyl_pos_x'])
+    n_obs_cyl = len(obstacles["cyl_pos_x"])
     for o_i in range(n_obs_cyl):
-        o_x, o_y, o_r = obstacles['cyl_pos_x'][o_i], obstacles['cyl_pos_y'][o_i], obstacles['cyl_rads'][o_i]
-        if (p_x-o_x)**2 + (p_y-o_y)**2 < (radius+o_r)**2:
-            print("Contact with obstacle " + str(o_i) + " !" )
+        o_x, o_y, o_r = (
+            obstacles["cyl_pos_x"][o_i],
+            obstacles["cyl_pos_y"][o_i],
+            obstacles["cyl_rads"][o_i],
+        )
+        if (p_x - o_x) ** 2 + (p_y - o_y) ** 2 < (radius + o_r) ** 2:
+            print("Contact with obstacle " + str(o_i) + " !")
             B_contact = True
 
             # normal direction (pointing outside obstacle)
-            F_dir = np.array([p_x-o_x, p_y-o_y])
+            F_dir = np.array([p_x - o_x, p_y - o_y])
             F_dir = F_dir / np.linalg.norm(F_dir)
 
             # make position lie on boundary of obstacle
-            state[0:2] =  np.array([o_x, o_y])
-            state[0:2] += F_dir*(radius+o_r+1e-3)
-            state[ 2 ] = state[2]
+            state[0:2] = np.array([o_x, o_y])
+            state[0:2] += F_dir * (radius + o_r + 1e-3)
+            state[2] = state[2]
 
             # bounce with vel. in opposite direction (eq. (13) of https://arxiv.org/pdf/1909.00079.pdf)
-            state[3:5] += -2. * np.dot(state[3:5],F_dir)*F_dir
-            state[ 5 ] = -state[5]
+            state[3:5] += -2.0 * np.dot(state[3:5], F_dir) * F_dir
+            state[5] = -state[5]
 
             # External contact wrench (N,N,N*m)
-            W_contact = np.array([F_MAG_NOM*F_dir[0], F_MAG_NOM*F_dir[1], 0.])
+            W_contact = np.array([F_MAG_NOM * F_dir[0], F_MAG_NOM * F_dir[1], 0.0])
             return state, W_contact, B_contact
 
     W_contact = np.zeros(3)
     return state, W_contact, B_contact
+
 
 class FreeFlyerSimulator(Node):
     """Free-Flyer simulator class."""
@@ -106,12 +110,15 @@ class FreeFlyerSimulator(Node):
         self.p = RobotParams(self)
 
         # obstacles
-        p_obstacles = self.declare_parameters("obstacles",[
-            ("cyl_pos_x", []),
-            ("cyl_pos_y", []),
-            ("cyl_rads", []),
-            ("cyl_heights", []),
-        ])
+        p_obstacles = self.declare_parameters(
+            "obstacles",
+            [
+                ("cyl_pos_x", []),
+                ("cyl_pos_y", []),
+                ("cyl_rads", []),
+                ("cyl_heights", []),
+            ],
+        )
         self.obstacles = {
             "cyl_pos_x": p_obstacles[0].get_parameter_value().double_array_value,
             "cyl_pos_y": p_obstacles[1].get_parameter_value().double_array_value,
@@ -122,34 +129,40 @@ class FreeFlyerSimulator(Node):
         self.B_ideal = self.declare_parameter("B_ideal", False).get_parameter_value().bool_value
 
         # simulation params
-        p_sim = self.declare_parameters("", [
-            ("sim_dt", 0.01),                   # update period in [s]
-            ("discretization", "Euler"),        # discretization scheme from {"Euler", "RungeKutta"}
-            ("x_0", [0.6, 2., 0., 0., 0., 0.]), # initial state
-            ("B_sim_contacts", True),           # if True, simulates contacts
-        ])
+        p_sim = self.declare_parameters(
+            "",
+            [
+                ("sim_dt", 0.01),  # update period in [s]
+                ("discretization", "Euler"),  # discretization scheme from {"Euler", "RungeKutta"}
+                ("x_0", [0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
+                ("B_sim_contacts", True),  # if True, simulates contacts
+            ],
+        )
         self.SIM_DT = p_sim[0].get_parameter_value().double_value
         self.DISCRETIZATION = p_sim[1].get_parameter_value().string_value
         self.x_0 = np.array(p_sim[2].get_parameter_value().double_array_value)
         self.B_sim_contacts = p_sim[3].get_parameter_value().bool_value
 
         # commands, in world frame
-        self.F_cmd_body    = np.zeros(2) # (x,y)
-        self.theta_dot_cmd = 0.
+        self.F_cmd_body = np.zeros(2)  # (x,y)
+        self.theta_dot_cmd = 0.0
         # commands
         self.thrusters_dutycycle_cmd = np.zeros(8)
-        self.wheel_vel_cmd           = 0.
+        self.wheel_vel_cmd = 0.0
         # current states of the freeflyer, in world frame
-        self.x_cur = self.x_0.copy() # (x, y, theta, v_x, v_y, theta_dot)
-        assert self.x_cur.shape[0]==self.x_dim, "Wrong size of initial state."
+        self.x_cur = self.x_0.copy()  # (x, y, theta, v_x, v_y, theta_dot)
+        assert self.x_cur.shape[0] == self.x_dim, "Wrong size of initial state."
 
         # subscribers
-        self.sub_wheel_cmd_vel = self.create_subscription(WheelVelCommand,
-            "commands/velocity", self.update_wheel_cmd_vel_cb, 10)
-        self.sub_thrusters_cmd_dutycycle = self.create_subscription(ThrusterCommand,
-            "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10)
-        self.sub_state_init = self.create_subscription(FreeFlyerStateStamped,
-            "state_init", self.update_state_init_cb, 10)
+        self.sub_wheel_cmd_vel = self.create_subscription(
+            WheelVelCommand, "commands/velocity", self.update_wheel_cmd_vel_cb, 10
+        )
+        self.sub_thrusters_cmd_dutycycle = self.create_subscription(
+            ThrusterCommand, "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10
+        )
+        self.sub_state_init = self.create_subscription(
+            FreeFlyerStateStamped, "state_init", self.update_state_init_cb, 10
+        )
 
         # ground truth publishers
         self.pub_state = self.create_publisher(FreeFlyerStateStamped, f"gt/state", 10)
@@ -172,7 +185,7 @@ class FreeFlyerSimulator(Node):
         self.F_cmd_body = F_bodyFrame
 
         # Publish true exerted force on freeflyer, as a mapping of the thrusters command duty cycle
-        R            = self.get_rotmatrix_body_to_world(self.x_cur[2])
+        R = self.get_rotmatrix_body_to_world(self.x_cur[2])
         F_worldFrame = np.matmul(R, F_bodyFrame)
         wrench_msg = Wrench2DStamped()
         wrench_msg.header.stamp = now
@@ -186,8 +199,9 @@ class FreeFlyerSimulator(Node):
         u_cur = np.array([self.F_cmd_body[0], self.F_cmd_body[1], M])
 
         # ToDo add more precise simulation (smaller dt)
-        x_next = self.compute_dynamics_dt(self.x_cur, u_cur, self.SIM_DT,
-                                          discretization=self.DISCRETIZATION)
+        x_next = self.compute_dynamics_dt(
+            self.x_cur, u_cur, self.SIM_DT, discretization=self.DISCRETIZATION
+        )
 
         # simulate contacts
         if self.B_sim_contacts:
@@ -223,17 +237,19 @@ class FreeFlyerSimulator(Node):
 
     def update_thrusters_dutycycle_cmd_cb(self, msg: ThrusterCommand) -> None:
         # Saturate controls so within [0,1] (in %)
-        self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0., 1.)
+        self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0.0, 1.0)
 
     def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
-        self.x_cur = np.array([
-            msg.state.pose.x,
-            msg.state.pose.y,
-            msg.state.pose.theta,
-            msg.state.twist.vx,
-            msg.state.twist.vy,
-            msg.state.twist.wz,
-        ])
+        self.x_cur = np.array(
+            [
+                msg.state.pose.x,
+                msg.state.pose.y,
+                msg.state.pose.theta,
+                msg.state.twist.vx,
+                msg.state.twist.vy,
+                msg.state.twist.wz,
+            ]
+        )
 
     def thrusters_dutycycle_to_body_wrench(self, thrusters_dutycycles_vec):
         # Thrusters Configuration
@@ -254,11 +270,12 @@ class FreeFlyerSimulator(Node):
 
         u_dc = thrusters_dutycycles_vec
 
-        F_x = Fmax * ( (u_dc[2]+u_dc[5]) - (u_dc[1]+u_dc[6]) )
-        F_y = Fmax * ( (u_dc[4]+u_dc[7]) - (u_dc[0]+u_dc[3]) )
+        F_x = Fmax * ((u_dc[2] + u_dc[5]) - (u_dc[1] + u_dc[6]))
+        F_y = Fmax * ((u_dc[4] + u_dc[7]) - (u_dc[0] + u_dc[3]))
 
-        M   = (dist*Fmax) * ( (u_dc[1]+u_dc[3]+u_dc[5]+u_dc[7]) -
-                              (u_dc[0]+u_dc[2]+u_dc[4]+u_dc[6]) )
+        M = (dist * Fmax) * (
+            (u_dc[1] + u_dc[3] + u_dc[5] + u_dc[7]) - (u_dc[0] + u_dc[2] + u_dc[4] + u_dc[6])
+        )
 
         return np.array([F_x, F_y]), M
 
@@ -271,9 +288,11 @@ class FreeFlyerSimulator(Node):
         gamma_max = self.p.actuators["gamma_max"]
 
         # returns the true wrench u from a commanded wrench u
-        u_max = np.array([F_max, F_max, M_max])*np.ones_like(u_cmd)
+        u_max = np.array([F_max, F_max, M_max]) * np.ones_like(u_cmd)
         u_min = min_inp_percent * u_max
-        d_max = max_inp_percent * u_max # inflexion point where input saturation occurs (due to PWMs overlapping)
+        d_max = (
+            max_inp_percent * u_max
+        )  # inflexion point where input saturation occurs (due to PWMs overlapping)
 
         # ideal
         u = u_cmd
@@ -284,21 +303,24 @@ class FreeFlyerSimulator(Node):
             # smooth approximation to np.heaviside (step function)
             # alternatively, sharper variant of sigmoid.
             # k=1 corresponds to sigmoid, and k=\infty is step function.
-            return 1./(1. + np.exp(-k*x))
+            return 1.0 / (1.0 + np.exp(-k * x))
 
-        u = np_sigmoid_sharp(u-u_min, gamma_min)*u + np_sigmoid_sharp(-u-u_min, gamma_min)*u
+        u = np_sigmoid_sharp(u - u_min, gamma_min) * u + np_sigmoid_sharp(-u - u_min, gamma_min) * u
 
         # increase close to 100%
-        u = u + np_sigmoid_sharp(u-d_max, gamma_max)*u + np_sigmoid_sharp(-u-d_max, gamma_max)*u
+        u = (
+            u
+            + np_sigmoid_sharp(u - d_max, gamma_max) * u
+            + np_sigmoid_sharp(-u - d_max, gamma_max) * u
+        )
 
         # saturate
-        u = np.maximum(-u_max,
-                       np.minimum(u_max, u))
+        u = np.maximum(-u_max, np.minimum(u_max, u))
 
         return u
 
     def get_rotmatrix_body_to_world(self, theta):
-        R = np.array([[np.cos(theta),-np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
         return R
 
     def f_dynamics_continuous_time(self, x, u):
@@ -315,25 +337,24 @@ class FreeFlyerSimulator(Node):
         if not self.B_ideal:
             u = self.actuators_mapping(u)
 
-
         # Extract state and control
         r, theta, v, thetadot = x[0:2], x[2], x[3:5], x[5]
-        F, M                  = u[0:2], u[2]
+        F, M = u[0:2], u[2]
 
         # Rotation matrix
         R = self.get_rotmatrix_body_to_world(theta)
 
         f = np.zeros(6)
         f[0:2] = v
-        f[2]   = thetadot
-        thetaddot = (M - F[1]*p0[0] + F[0]*p0[1]) / J
-        f[3:5] = np.matmul(R, (F/m -
-                               (thetaddot*np.array([-p0[1],p0[0]]) - thetadot**2*p0) ) )
-        f[5]   = thetaddot
+        f[2] = thetadot
+        thetaddot = (M - F[1] * p0[0] + F[0] * p0[1]) / J
+        f[3:5] = np.matmul(
+            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0))
+        )
+        f[5] = thetaddot
 
         # add constant force due to table tilt
-        f[3:5] = f[3:5] + F_tilt/m
-
+        f[3:5] = f[3:5] + F_tilt / m
 
         return f
 
@@ -345,14 +366,14 @@ class FreeFlyerSimulator(Node):
 
         elif discretization == "RungeKutta":
             k1 = self.f_dynamics_continuous_time(x_k, u_k)
-            x2 = x_k + 0.5*dt*k1
-            k2 = self.f_dynamics_continuous_time(x2,  u_k)
-            x3 = x_k + 0.5*dt*k2
-            k3 = self.f_dynamics_continuous_time(x3,  u_k)
-            x4 = x_k + dt*k3
-            k4 = self.f_dynamics_continuous_time(x4,  u_k)
+            x2 = x_k + 0.5 * dt * k1
+            k2 = self.f_dynamics_continuous_time(x2, u_k)
+            x3 = x_k + 0.5 * dt * k2
+            k3 = self.f_dynamics_continuous_time(x3, u_k)
+            x4 = x_k + dt * k3
+            k4 = self.f_dynamics_continuous_time(x4, u_k)
 
-            x_next = x_k + (1./6.)*dt*(k1 + 2.*k2 + 2.*k3 + k4)
+            x_next = x_k + (1.0 / 6.0) * dt * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
 
         else:
             print("[FreeFlyerSimulator::compute_dynamics_dt]: Unknown Discretization Scheme.")
@@ -367,5 +388,5 @@ def main():
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
