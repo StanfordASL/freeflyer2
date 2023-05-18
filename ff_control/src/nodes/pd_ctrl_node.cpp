@@ -1,3 +1,26 @@
+// MIT License
+//
+// Copyright (c) 2023 Stanford Autonomous Systems Lab
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -15,13 +38,15 @@
 using namespace std::chrono_literals;
 using namespace std::placeholders;
 
-class PDControlNode : public ff::LinearController {
- public:
+class PDControlNode : public ff::LinearController
+{
+public:
   PDControlNode()
-    : rclcpp::Node("pd_control_node"),
-      ff::LinearController(),
-      state_des_{},
-      K_(FeedbackMat::Zero()) {
+  : rclcpp::Node("pd_control_node"),
+    ff::LinearController(),
+    state_des_{},
+    K_(FeedbackMat::Zero())
+  {
     state_setpoint_sub_ = this->create_subscription<ff_msgs::msg::FreeFlyerStateStamped>(
       "ctrl/state", 10, std::bind(&PDControlNode::SetpointCallback, this, _1));
     rviz_setpoint_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -42,7 +67,7 @@ class PDControlNode : public ff::LinearController {
     K_(2, 5) = gain_dt;
   }
 
- private:
+private:
   rclcpp::Subscription<ff_msgs::msg::FreeFlyerStateStamped>::SharedPtr state_setpoint_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr rviz_setpoint_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
@@ -51,24 +76,28 @@ class PDControlNode : public ff::LinearController {
 
   FeedbackMat K_;
 
-  void StateReadyCallback() override {
+  void StateReadyCallback() override
+  {
     // copy current position as goal position
     state_des_.header.stamp = this->get_clock()->now();
     GetState(&state_des_.state);
   }
 
-  void ControlLoop() {
+  void ControlLoop()
+  {
     // state not yet ready
-    if (!StateIsReady()) { return; }
+    if (!StateIsReady()) {return;}
 
     SendControl(state_des_.state, K_);
   }
 
-  void SetpointCallback(const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg) {
+  void SetpointCallback(const ff_msgs::msg::FreeFlyerStateStamped::SharedPtr msg)
+  {
     state_des_ = *msg;
   }
 
-  void GoalPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+  void GoalPoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
+  {
     state_des_.state.pose.x = msg->pose.position.x;
     state_des_.state.pose.y = msg->pose.position.y;
 
@@ -82,7 +111,8 @@ class PDControlNode : public ff::LinearController {
   }
 };
 
-int main(int argc, char** argv) {
+int main(int argc, char ** argv)
+{
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PDControlNode>());
   rclcpp::shutdown();
