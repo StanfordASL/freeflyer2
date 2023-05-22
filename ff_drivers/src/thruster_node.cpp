@@ -34,14 +34,14 @@
 // thruster pin connection
 // @see: https://wiki.odroid.com/odroid-n2l/application_note/gpio/pwm#tab__odroid-n2
 static constexpr int THRUSTER_PINS[NUM_THRUSTERS] = {
-  473,  // thruster pin 1 -> odroid pin 7
-  479,  // thruster pin 2 -> odroid pin 11
-  480,  // thruster pin 3 -> odroid pin 13
-  472,  // thruster pin 4 -> odroid pin 32
-  495,  // thruster pin 5 -> odroid pin 36
-  476,  // thruster pin 6 -> odroid pin 16
-  477,  // thruster pin 7 -> odroid pin 18
-  478,  // thruster pin 8 -> odroid pin 22
+  476,  // thruster pin 1 -> odroid pin 16
+  477,  // thruster pin 2 -> odroid pin 18
+  484,  // thruster pin 3 -> odroid pin 19
+  485,  // thruster pin 4 -> odroid pin 21
+  478,  // thruster pin 5 -> odroid pin 22
+  487,  // thruster pin 6 -> odroid pin 23
+  486,  // thruster pin 7 -> odroid pin 24
+  464,  // thruster pin 8 -> odroid pin 26
 };
 
 
