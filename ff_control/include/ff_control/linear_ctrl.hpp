@@ -36,9 +36,11 @@ namespace ff
 class LinearController : public WrenchController
 {
 public:
-  using StateVec = Eigen::Matrix<double, 6, 1>;     // [x, y, theta, vx, vy, wz]
-  using ControlVec = Eigen::Matrix<double, 3, 1>;   // [fx, fy, tz]
-  using FeedbackMat = Eigen::Matrix<double, 3, 6>;
+  static constexpr int STATE_DIM = 6;
+  static constexpr int CONTROL_DIM = 3;
+  using StateVec = Eigen::Matrix<double, STATE_DIM, 1>;       // [x, y, theta, vx, vy, wz]
+  using ControlVec = Eigen::Matrix<double, CONTROL_DIM, 1>;   // [fx, fy, tz]
+  using FeedbackMat = Eigen::Matrix<double, CONTROL_DIM, STATE_DIM>;
 
   LinearController();
 

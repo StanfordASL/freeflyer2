@@ -8,11 +8,13 @@
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
   <buildtool_depend>eigen3_cmake_module</buildtool_depend>
 
   <build_depend>eigen</build_depend>
 
   <depend>rclcpp</depend>
+  <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
 
   <depend>ff_estimate</depend>

@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3)
 find_package(geometry_msgs REQUIRED)
@@ -25,11 +26,13 @@ ament_target_dependencies(ctrl_lib rclcpp ff_msgs ff_params Eigen3)
 ament_export_targets(ctrl_libTarget HAS_LIBRARY_TARGET)
 ament_export_dependencies(rclcpp ff_msgs ff_params Eigen3 eigen3_cmake_module)
 
+# install headers
 install(
   DIRECTORY include/
   DESTINATION include
 )
 
+# install CPP libraries
 install(
   TARGETS ctrl_lib
   EXPORT ctrl_libTarget
@@ -39,18 +42,28 @@ install(
   INCLUDES DESTINATION include
 )
 
-add_executable(wrench_ctrl_node src/nodes/wrench_ctrl_node.cpp)
-target_link_libraries(wrench_ctrl_node ctrl_lib)
+add_executable(wrench_ctrl_cpp_node src/nodes/wrench_ctrl_node.cpp)
+target_link_libraries(wrench_ctrl_cpp_node ctrl_lib)
 
-add_executable(pd_ctrl_node src/nodes/pd_ctrl_node.cpp)
-target_link_libraries(pd_ctrl_node ctrl_lib)
-ament_target_dependencies(pd_ctrl_node geometry_msgs)
+add_executable(pd_ctrl_cpp_node src/nodes/pd_ctrl_node.cpp)
+target_link_libraries(pd_ctrl_cpp_node ctrl_lib)
+ament_target_dependencies(pd_ctrl_cpp_node geometry_msgs)
 
-add_executable(key_teleop_node src/nodes/key_teleop_node.cpp)
-target_link_libraries(key_teleop_node ctrl_lib)
+add_executable(key_teleop_cpp_node src/nodes/key_teleop_node.cpp)
+target_link_libraries(key_teleop_cpp_node ctrl_lib)
 
-install(TARGETS wrench_ctrl_node pd_ctrl_node key_teleop_node
+# install CPP nodes
+install(TARGETS wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
   DESTINATION lib/${PROJECT_NAME})
+
+# install Python libraries
+ament_python_install_package(${PROJECT_NAME})
+
+# install Python nodes
+install(PROGRAMS
+  scripts/pd_ctrl_py_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

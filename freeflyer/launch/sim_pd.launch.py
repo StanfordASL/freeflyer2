@@ -30,10 +30,12 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     robot_name = LaunchConfiguration("robot_name")
+    impl = LaunchConfiguration("impl")
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_name", default_value="robot"),
+            DeclareLaunchArgument("impl", default_value="cpp", choices=["cpp", "py"]),
             IncludeLaunchDescription(
                 PathJoinSubstitution(
                     [
@@ -56,7 +58,7 @@ def generate_launch_description():
             ),
             Node(
                 package="ff_control",
-                executable="pd_ctrl_node",
+                executable=["pd_ctrl_", impl, "_node"],
                 name="pd_ctrl_node",
                 namespace=robot_name,
             ),
