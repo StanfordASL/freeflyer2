@@ -6,7 +6,8 @@ Top level package that launches multiple modules together.
 
 **PD Waypoint Control in Simulator**
 ```sh
-ros2 launch freeflyer sim_pd.launch.py
+ros2 launch freeflyer sim_pd.launch.py          # launch CPP implementation by default
+ros2 launch freeflyer sim_pd.launch.py impl:=py # launch Python implementation
 ```
 
 **Keyboard Teleop Velocity Control in Simulator**
