@@ -16,16 +16,20 @@ install(DIRECTORY launch
         DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_pytest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
   find_package(launch_testing_ament_cmake REQUIRED)
-  find_package(ament_cmake_pytest REQUIRED)
 
-  # disable Python style checkers
+  # disable ROS2 Python style checkers
   set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
   ament_lint_auto_find_test_dependencies()
 
+  # check Python style with black
   ament_add_pytest_test(black_formatting test/black_formatting.py)
-  add_launch_test(test/pd_ctrl_launch_test.py)
+
+  # test both implementations of PD controller
+  add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_cpp_test ARGS "impl:=cpp")
+  add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_py_test ARGS "impl:=py")
 endif()
 
 ament_package()
