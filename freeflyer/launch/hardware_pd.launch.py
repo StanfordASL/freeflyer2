@@ -38,7 +38,7 @@ def generate_launch_description():
             DeclareLaunchArgument("robot_name", default_value="robot"),
             DeclareLaunchArgument("rviz", default_value="false",
                                   description="set to true to launch rviz",
-                                  choices=["true", "false"])
+                                  choices=["true", "false"]),
             IncludeLaunchDescription(
                PathJoinSubstitution([
                    FindPackageShare("ff_viz"),
