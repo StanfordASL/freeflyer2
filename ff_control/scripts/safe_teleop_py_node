@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+import copy
+import rclpy
+
+import numpy as np
+
+from enum import Enum
+
+from ff_msgs.msg import FreeFlyerStateStamped
+from sensor_msgs.msg import Joy
+from rclpy.node import Node
+from rclpy.time import Time
+
+class PS4Axes(Enum):
+    LEFT_LR     = 0
+    LEFT_UD     = 1
+    L2          = 2
+    RIGHT_LR    = 3
+    RIGHT_UD    = 4
+    R2          = 5
+
+class PS4Buttons(Enum):
+    X           = 0
+    O           = 1
+    TRIANGLE    = 2
+    SQUARE      = 3
+    L1          = 4
+    R1          = 5
+
+
+class SafeTeleopNode(Node):
+
+    def __init__(self):
+        super().__init__('safe_teleop_node')
+        self.state_pub = self.create_publisher(FreeFlyerStateStamped, "ctrl/state", 10)
+        self.joy_sub = self.create_subscription(Joy, "joy", self.joy_callback, 10)
+        self.state = FreeFlyerStateStamped()
+
+        # initial setpoint
+        self.state.header.stamp = self.get_clock().now().to_msg()
+        self.state.state.pose.x = 0.4
+        self.state.state.pose.y = 0.4
+
+    def joy_callback(self, msg: Joy) -> None:
+        state_new = copy.deepcopy(self.state)
+
+        dt_dur = Time.from_msg(msg.header.stamp) - Time.from_msg(self.state.header.stamp)
+        dt = dt_dur.nanoseconds / 1e9
+
+        # move target
+        state_new.header.stamp = msg.header.stamp
+        state_new.state.pose.x += msg.axes[PS4Axes.RIGHT_UD.value] * dt * .1
+        state_new.state.pose.y += msg.axes[PS4Axes.RIGHT_LR.value] * dt * .1
+        state_new.state.pose.theta += msg.axes[PS4Axes.LEFT_LR.value] * dt * .3
+
+        # project to safe position: TODO(alvin)
+        state_new.state.pose.x = np.clip(state_new.state.pose.x, 0.4, 2.8)
+        state_new.state.pose.y = np.clip(state_new.state.pose.y, 0.4, 1.8)
+
+        # compute velocity
+        state_new.state.twist.vx = (state_new.state.pose.x - self.state.state.pose.x) / dt
+        state_new.state.twist.vy = (state_new.state.pose.y - self.state.state.pose.y) / dt
+        state_new.state.twist.wz = (state_new.state.pose.theta - self.state.state.pose.theta) / dt
+
+        # update state target and publish
+        self.state = state_new
+        self.state_pub.publish(self.state)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = SafeTeleopNode()
+    rclpy.spin(node)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
