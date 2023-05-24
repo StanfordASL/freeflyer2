@@ -31,6 +31,7 @@ import numpy as np
 from enum import Enum
 
 from ff_msgs.msg import FreeFlyerStateStamped
+from geometry_msgs.msg import Pose, PoseStamped
 from sensor_msgs.msg import Joy
 from rclpy.node import Node
 from rclpy.time import Time
@@ -58,12 +59,15 @@ class SafeTeleopNode(Node):
         super().__init__('safe_teleop_node')
         self.state_pub = self.create_publisher(FreeFlyerStateStamped, "ctrl/state", 10)
         self.joy_sub = self.create_subscription(Joy, "joy", self.joy_callback, 10)
+        self.obs_sub = self.create_subscription(PoseStamped, "mocap/obj0/pose", self.obs_callback, 10)
         self.state = FreeFlyerStateStamped()
 
         # initial setpoint
         self.state.header.stamp = self.get_clock().now().to_msg()
         self.state.state.pose.x = 0.4
         self.state.state.pose.y = 0.4
+
+        self.obs = Pose()
 
     def joy_callback(self, msg: Joy) -> None:
         state_new = copy.deepcopy(self.state)
@@ -77,7 +81,19 @@ class SafeTeleopNode(Node):
         state_new.state.pose.y += msg.axes[PS4Axes.RIGHT_LR.value] * dt * .1
         state_new.state.pose.theta += msg.axes[PS4Axes.LEFT_LR.value] * dt * .3
 
-        # project to safe position: TODO(alvin)
+        # project to be away from obstacle
+        dir_vec = np.array([
+            state_new.state.pose.x - self.obs.position.x,
+            state_new.state.pose.y - self.obs.position.y,
+        ])
+        dist = np.linalg.norm(dir_vec)
+        if dist < 0.5:
+            dir_vec /= dist
+            dir_vec *= 0.5
+            state_new.state.pose.x = self.obs.position.x + dir_vec[0]
+            state_new.state.pose.y = self.obs.position.y + dir_vec[1]
+
+        # project into table boundary
         state_new.state.pose.x = np.clip(state_new.state.pose.x, 0.4, 2.8)
         state_new.state.pose.y = np.clip(state_new.state.pose.y, 0.4, 1.8)
 
@@ -89,6 +105,9 @@ class SafeTeleopNode(Node):
         # update state target and publish
         self.state = state_new
         self.state_pub.publish(self.state)
+
+    def obs_callback(self, msg: PoseStamped):
+        self.obs = msg.pose
 
 
 def main(args=None):
