@@ -76,6 +76,7 @@ set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
 ## Package Layout
 
 * `freeflyer` -- top level pacakge (contains just launch files)
+* `ff_estimate` -- implement different state estimators
 * `ff_control` -- implement different controllers
 * `ff_msgs` -- custom message types
 * `ff_params` -- shared parameters about dynamics and actuators

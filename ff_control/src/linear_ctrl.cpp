@@ -60,7 +60,7 @@ LinearController::LinearController()
   WrenchController()
 {
   state_sub_ = this->create_subscription<FreeFlyerStateStamped>(
-    "gt/state", 10, std::bind(&LinearController::StateCallback, this, _1));
+    "est/state", 10, std::bind(&LinearController::StateCallback, this, _1));
 }
 
 bool LinearController::StateIsReady() const

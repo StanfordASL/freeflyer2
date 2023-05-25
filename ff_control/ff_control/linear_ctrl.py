@@ -49,7 +49,7 @@ class LinearController(WrenchController):
     def __init__(self, node_name="linear_ctrl_node"):
         super().__init__(node_name)
         self._state_sub = self.create_subscription(
-            FreeFlyerStateStamped, "gt/state", self._state_callback, 10
+            FreeFlyerStateStamped, "est/state", self._state_callback, 10
         )
         self._state_ready = False
         self._state_stamped = FreeFlyerStateStamped()

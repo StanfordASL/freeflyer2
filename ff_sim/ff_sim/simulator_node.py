@@ -29,12 +29,14 @@ to a state evolution over time
 -----------------------------------------------
 """
 
+import math
 import sys
 import numpy as np
 import typing as T
 
 import rclpy
 from rclpy.node import Node
+from geometry_msgs.msg import PoseStamped
 
 from ff_msgs.msg import FreeFlyerStateStamped, Wrench2DStamped, ThrusterCommand, WheelVelCommand
 
@@ -165,9 +167,14 @@ class FreeFlyerSimulator(Node):
         )
 
         # ground truth publishers
-        self.pub_state = self.create_publisher(FreeFlyerStateStamped, f"gt/state", 10)
-        self.pub_wrench = self.create_publisher(Wrench2DStamped, f"gt/wrench", 10)
-        self.pub_ext_force = self.create_publisher(Wrench2DStamped, f"gt/ext_force", 10)
+        self.pub_state = self.create_publisher(FreeFlyerStateStamped, f"sim/state", 10)
+        self.pub_wrench = self.create_publisher(Wrench2DStamped, f"sim/wrench", 10)
+        self.pub_ext_force = self.create_publisher(Wrench2DStamped, f"sim/ext_force", 10)
+
+        # simulated motion capture
+        self.declare_parameter("mocap_noise_xy", 0.001)
+        self.declare_parameter("mocap_noise_theta", math.radians(0.1))
+        self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
@@ -189,7 +196,7 @@ class FreeFlyerSimulator(Node):
         F_worldFrame = np.matmul(R, F_bodyFrame)
         wrench_msg = Wrench2DStamped()
         wrench_msg.header.stamp = now
-        wrench_msg.header.frame_id = "map"
+        wrench_msg.header.frame_id = "world"
         wrench_msg.wrench.fx = F_worldFrame[0]
         wrench_msg.wrench.fy = F_worldFrame[1]
         wrench_msg.wrench.tz = M
@@ -210,7 +217,7 @@ class FreeFlyerSimulator(Node):
 
             wrench_ext_msg = Wrench2DStamped()
             wrench_ext_msg.header.stamp = now
-            wrench_ext_msg.header.frame_id = "map"
+            wrench_ext_msg.header.frame_id = "world"
             wrench_ext_msg.wrench.fx = W_contact[0]
             wrench_ext_msg.wrench.fy = W_contact[1]
             wrench_ext_msg.wrench.tz = W_contact[2]
@@ -221,7 +228,7 @@ class FreeFlyerSimulator(Node):
         # Save as a message
         state = FreeFlyerStateStamped()
         state.header.stamp = now
-        state.header.frame_id = "map"
+        state.header.frame_id = "world"
         state.state.pose.x = self.x_cur[0]
         state.state.pose.y = self.x_cur[1]
         state.state.pose.theta = self.x_cur[2]
@@ -229,8 +236,23 @@ class FreeFlyerSimulator(Node):
         state.state.twist.vy = self.x_cur[4]
         state.state.twist.wz = self.x_cur[5]
 
+        # simulated motion capture with noise
+        noise_xy = self.get_parameter("mocap_noise_xy").get_parameter_value().double_value
+        noise_theta = self.get_parameter("mocap_noise_theta").get_parameter_value().double_value
+        mocap = PoseStamped()
+        mocap.header.stamp = now
+        mocap.header.frame_id = "world"
+        mocap.pose.position.x = self.x_cur[0] + np.random.normal(loc=0.0, scale=noise_xy)
+        mocap.pose.position.y = self.x_cur[1] + np.random.normal(loc=0.0, scale=noise_xy)
+        theta = self.x_cur[2] + np.random.normal(loc=0.0, scale=noise_theta)
+        mocap.pose.orientation.w = np.cos(theta / 2)
+        mocap.pose.orientation.x = 0.0
+        mocap.pose.orientation.y = 0.0
+        mocap.pose.orientation.z = np.sin(theta / 2)
+
         # Publish
         self.pub_state.publish(state)
+        self.pub_mocap.publish(mocap)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
