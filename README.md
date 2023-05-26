@@ -1,13 +1,12 @@
 # freeflyer2
-![foxy build](https://github.com/StanfordASL/freeflyer2/actions/workflows/foxy.yml/badge.svg?event=push)
 ![humble build](https://github.com/StanfordASL/freeflyer2/actions/workflows/humble.yml/badge.svg?event=push)
 ![rolling build](https://github.com/StanfordASL/freeflyer2/actions/workflows/rolling.yml/badge.svg?event=push)
 
 ASL FreeFlyer software stack with ROS2. See build status for support on ROS2 distrbutions.
 
 ## Quick Start
-1. Install ROS2 ([Foxy](https://docs.ros.org/en/foxy/Installation.html),
-[Humble](https://docs.ros.org/en/humble/Installation.html), or
+1. Install ROS2 (
+[Humble](https://docs.ros.org/en/humble/Installation.html) or
 [Rolling](https://docs.ros.org/en/rolling/Installation.html))
 2. Clone the repo into a ROS2 workspace, e.g.
 ```sh
@@ -18,10 +17,11 @@ git clone git@github.com:StanfordASL/freeflyer2.git ~/ff_ws/src/freeflyer2
 ```sh
 rosdep update && rosdep install --from-paths ~/ff_ws/src --ignore-src -y
 ```
-4. Build the code
+4. Build the code (skipping the driver package)
 ```sh
-cd ~/ff_ws && colcon build
+cd ~/ff_ws && colcon build --packages-skip ff_drivers
 ```
+
 5. Source workspace install
 ```sh
 source ~/ff_ws/install/local_setup.bash
@@ -78,6 +78,7 @@ set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
 * `freeflyer` -- top level pacakge (contains just launch files)
 * `ff_estimate` -- implement different state estimators
 * `ff_control` -- implement different controllers
+* `ff_drivers` -- driver code that interfaces with hardware
 * `ff_msgs` -- custom message types
 * `ff_params` -- shared parameters about dynamics and actuators
 * `ff_sim` -- a lightweight pure Python simulator
