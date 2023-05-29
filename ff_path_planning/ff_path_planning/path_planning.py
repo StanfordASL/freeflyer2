@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import time
+import traceback
+import json
 import math
 
 import rclpy
@@ -24,17 +27,23 @@ def example_request_for_jit():
     """Send an example request to the path planning service to trigger JIT compilation."""
     rclpy.init()
     node = Node("path_planning_client")
+    node.get_logger().info("Starting an example request node")
     cli = node.create_client(PathPlan, "path_planning")
     while not cli.wait_for_service(timeout_sec=0.1):
         pass
+    node.get_logger().info("Path Planning Service is up")
     request = PathPlan.Request()
     request.dynamics = "single_integrator"
     secs, nsecs = rclpy.clock.Clock().now().seconds_nanoseconds()
     request.t0 = secs + nsecs / 1e9
     request.x0 = to_ros_array(np.array([5.0]))
+
+    t = time.time()
+    node.get_logger().info("Sending compilation request")
     future = cli.call_async(request)
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
+    node.get_logger().info(f"Precompilation took {time.time() - t:.4} seconds")
 
     N = request.horizon
     ts = np.array(result.times)
@@ -101,16 +110,39 @@ class PathPlanningService(Node):
             return self._empty_plan(request, response)
         # validate the request ###################
 
+        # parse extra problem parameters #########
+        params = None
+        try:
+            if len(request.params_json) > 0:
+                params = json.loads(request.params_json)
+        except ValueError:
+            self.get_logger().error("Error deserializing params_json")
+            self.get_logger().error(traceback.format_exc())
+            return self._empty_plan(request, response)
+        # parse extra problem parameters #########
+
         # construct the problem ##################
-        cost = COSTS_MODULES[request.cost].cost(**dims)
-        f_fx_fu_fn = DYNAMICS_MODULES[request.dynamics].f_fx_fu_fn
-        x0 = np.array(request.x0)
-        p = Problem(x0=x0, f_fx_fu_fn=f_fx_fu_fn, **dims, **cost)
-        p.max_it = request.max_it
+        try:
+            if params is None:
+                cost = COSTS_MODULES[request.cost].cost(**dims)
+            else:
+                cost = COSTS_MODULES[request.cost].cost(**dims, params=params)
+            f_fx_fu_fn = DYNAMICS_MODULES[request.dynamics].f_fx_fu_fn
+            x0 = np.array(request.x0)
+            p = Problem(x0=x0, f_fx_fu_fn=f_fx_fu_fn, **dims, **cost)
+            p.max_it = request.max_it
+            p.verbose = True
+        except:
+            self.get_logger().error(traceback.format_exc())
+            return self._empty_plan(request, response)
         # construct the problem ##################
 
         # solve ##################################
-        X, U, _ = solve(**p)
+        try:
+            X, U, _ = solve(**p)
+        except:
+            self.get_logger().error(traceback.format_exc())
+            return self._empty_plan(request, response)
         # solve ##################################
 
         # fill the response ######################
@@ -121,7 +153,7 @@ class PathPlanningService(Node):
             math.nan * np.ones((dims["N"], dims["xdim"], dims["udim"]))
         )
         # fill the response ######################
-
+        self.get_logger().info("Path planning service finished")
         return response
 
 

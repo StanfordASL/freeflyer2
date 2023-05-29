@@ -21,6 +21,8 @@ setup(
         "console_scripts": [
             "path_planning = ff_path_planning.path_planning:main",
             "example = ff_path_planning.example:main",
+            "simple_goal = ff_path_planning.simple_goal:main",
+            "simple_plan_planning = ff_path_planning.simple_plan_planning:main",
         ],
     },
 )

@@ -7,6 +7,7 @@ int64 horizon 20
 int64 xdim -1
 int64 udim -1
 int64 max_it 20
+string params_json
 ---
 float64[] times
 float64[] states
