@@ -14,7 +14,7 @@ import numpy as np
 
 from pmpc import solve, Problem
 
-from .import_costs_and_dynamics import DYNAMICS_MODULES, COSTS_MODULES
+from .import_costs_and_dynamics import DYNAMICS_MODULES, COSTS_MODULES, load_all_modules
 
 ####################################################################################################
 
@@ -96,6 +96,8 @@ class PathPlanningService(Node):
 
     def compute_plan(self, request, response):
         """Main service callback for computing the optimal plan."""
+        load_all_modules() # reload modules that the user might have added
+
         # validate the request ###################
         if request.dynamics not in DYNAMICS_MODULES or request.cost not in COSTS_MODULES:
             msg = f"Dynamics `{request.dynamics}` or cost `{request.cost}` not found"
