@@ -61,7 +61,7 @@ class PathPlanningService(Node):
     def __init__(self):
         """A path planning service node based on the `pmpc` library."""
         super().__init__("path_planning")
-        print("Starting the path planning service")
+        self.get_logger().info("Starting the path planning service")
         self.srv = self.create_service(PathPlan, "path_planning", self.compute_plan)
         self.get_logger().info("Available dynamics: [" + ", ".join(DYNAMICS_MODULES.keys()) + "]")
         self.get_logger().info("Available costs:    [" + ", ".join(COSTS_MODULES.keys()) + "]")

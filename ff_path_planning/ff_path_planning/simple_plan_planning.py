@@ -147,6 +147,7 @@ class NavigationNode(Node):
         current_time = self.get_current_time()
         if current_time < self.plan["t"][0] or current_time > self.plan["t"][-1]:
             self.get_logger().info("Current time outside of the plan time horizon.")
+        current_time = np.clip(current_time, self.plan["t"][0], self.plan["t"][-1])
         x_goal = interp1d(self.plan["t"], self.plan["X"], axis=0)(current_time)
         goal_pose = self.make_goal_pose(x_goal[0], x_goal[1])
         self.ctrl_state_pub.publish(goal_pose)
