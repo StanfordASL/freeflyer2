@@ -53,7 +53,7 @@ class LinearController(WrenchController):
             FreeFlyerStateStamped,
             self.get_parameter("state_channel").get_parameter_value().string_value,
             self._state_callback,
-            10
+            10,
         )
         self._state_ready = False
         self._state_stamped = FreeFlyerStateStamped()
