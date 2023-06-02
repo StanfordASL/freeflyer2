@@ -35,7 +35,12 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_name", default_value="robot"),
-            DeclareLaunchArgument("impl", default_value="cpp", choices=["cpp", "py"]),
+            DeclareLaunchArgument(
+                "impl",
+                default_value="cpp",
+                description="PD controller implementation",
+                choices=["cpp", "py"],
+            ),
             IncludeLaunchDescription(
                 PathJoinSubstitution(
                     [
