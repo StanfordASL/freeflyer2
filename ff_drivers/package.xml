@@ -13,6 +13,7 @@
   <depend>ff_msgs</depend>
 
   <exec_depend>ff_params</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>vrpn_mocap</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
