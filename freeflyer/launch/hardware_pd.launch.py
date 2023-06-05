@@ -32,6 +32,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     robot_name = LaunchConfiguration("robot_name")
     rviz = LaunchConfiguration("rviz")
+    impl = LaunchConfiguration("impl")
 
     return LaunchDescription(
         [
@@ -41,6 +42,12 @@ def generate_launch_description():
                 default_value="false",
                 description="set to true to launch rviz",
                 choices=["true", "false"],
+            ),
+            DeclareLaunchArgument(
+                "impl",
+                default_value="cpp",
+                description="PD controller implementation",
+                choices=["cpp", "py"],
             ),
             IncludeLaunchDescription(
                 PathJoinSubstitution(
@@ -55,7 +62,7 @@ def generate_launch_description():
             ),
             Node(
                 package="ff_control",
-                executable="pd_ctrl_node",
+                executable=["pd_ctrl_", impl, "_node"],
                 name="pd_ctrl_node",
                 namespace=robot_name,
             ),
