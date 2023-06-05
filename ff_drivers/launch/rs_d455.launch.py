@@ -23,7 +23,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -37,14 +37,15 @@ def generate_launch_description():
                 package="realsense2_camera",
                 executable="realsense2_camera_node",
                 name="realsense2_camera_node",
-                namespace=robot_name,
+                namespace=PathJoinSubstitution([robot_name, "camera"]),
                 parameters=[
                     {
                         "color_qos": "SENSOR_DATA",
                         "depth_qos": "SENSOR_DATA",
                         "depth_module.profile": "640x360x30",
                         "rgb_camera.profile": "640x360x30",
-                        "align_depth.enable": True,
+                        "enable_infra1": False,
+                        "enable_infra2": False,
                     }
                 ],
             ),

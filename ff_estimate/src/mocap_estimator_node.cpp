@@ -41,7 +41,7 @@ public:
   {
     const std::string pose_channel = this->declare_parameter("pose_channel", "mocap/sim/pose");
     pose_sub_ = this->create_subscription<PoseStamped>(
-      pose_channel, 10, [this](const PoseStamped::SharedPtr msg) {PoseCallback(msg);});
+      pose_channel, rclcpp::SensorDataQoS(), [this](const PoseStamped::SharedPtr msg) {PoseCallback(msg);});
   }
 
 private:
