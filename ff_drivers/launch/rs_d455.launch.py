@@ -40,8 +40,6 @@ def generate_launch_description():
                 namespace=PathJoinSubstitution([robot_name, "camera"]),
                 parameters=[
                     {
-                        "color_qos": "SENSOR_DATA",
-                        "depth_qos": "SENSOR_DATA",
                         "depth_module.profile": "640x360x30",
                         "rgb_camera.profile": "640x360x30",
                         "enable_infra1": False,
