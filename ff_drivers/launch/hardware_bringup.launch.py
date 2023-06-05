@@ -58,5 +58,11 @@ def generate_launch_description():
                     }
                 ],
             ),
+            Node(
+                package="ff_control",
+                executable="safety_filter",
+                name="safety_filter",
+                namespace=robot_name,
+            ),
         ]
     )

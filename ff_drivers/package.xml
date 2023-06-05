@@ -12,6 +12,7 @@
   <depend>rclcpp</depend>
   <depend>ff_msgs</depend>
 
+  <exec_depend>ff_control</exec_depend>
   <exec_depend>ff_params</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>vrpn_mocap</exec_depend>

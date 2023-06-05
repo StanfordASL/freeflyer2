@@ -33,8 +33,8 @@ LowLevelController::LowLevelController()
 : rclcpp::Node("ll_ctrl_node"),
   p_(this)
 {
-  thruster_pub_ = this->create_publisher<ThrusterCommand>("commands/duty_cycle", 10);
-  wheel_pub_ = this->create_publisher<WheelVelCommand>("commands/velocity", 10);
+  thruster_pub_ = this->create_publisher<ThrusterCommand>("ctrl/duty_cycle", 10);
+  wheel_pub_ = this->create_publisher<WheelVelCommand>("ctrl/velocity", 10);
 }
 
 void LowLevelController::SetThrustDutyCycle(const std::array<double, 8> & duty_cycle)

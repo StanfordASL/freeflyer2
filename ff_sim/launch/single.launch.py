@@ -45,5 +45,11 @@ def generate_launch_description():
                 name="simulator_node",
                 namespace=robot_name,
             ),
+            Node(
+                package="ff_control",
+                executable="safety_filter",
+                name="safety_filter",
+                namespace=robot_name,
+            ),
         ]
     )
