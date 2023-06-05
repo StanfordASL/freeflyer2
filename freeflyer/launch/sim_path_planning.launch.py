@@ -40,10 +40,11 @@ def generate_launch_description():
             # path planning ############################################################################
             Node(
                 package="ff_path_planning",
-                executable="simple_plan_planning",
+                executable="examples:path_planning",
                 name="simple_goal_broadcaster",
                 namespace=robot_name,
             ),
+            # we want to launch this node separately, for better output
             #Node(
             #    package="ff_path_planning",
             #    executable="path_planning",

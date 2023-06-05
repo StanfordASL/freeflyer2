@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Broadcast a simple static goal to the controller."""
+
 import math
 
 import rclpy

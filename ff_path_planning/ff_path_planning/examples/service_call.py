@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import time
+import json
+
 import numpy as np
 
 from ff_srvs.srv import PathPlan
@@ -9,8 +11,10 @@ from rclpy.node import Node
 
 ####################################################################################################
 
+
 def to_ros_array(x):
     return x.reshape(-1).tolist()
+
 
 def _send_request(node, cli):
     request = PathPlan.Request()
@@ -18,6 +22,11 @@ def _send_request(node, cli):
     secs, nsecs = rclpy.clock.Clock().now().seconds_nanoseconds()
     request.t0 = secs + nsecs / 1e9
     request.x0 = to_ros_array(np.array([5.0]))
+    # example json params, numpy arrays can be sent as (nested list)
+    # use: `arr.tolist()``
+    request.params_json = json.dumps(
+        dict(dt=0.1, data=(1, dict(a=1, b=2, x=np.array([1.0]).tolist())))
+    )
     future = cli.call_async(request)
     rclpy.spin_until_future_complete(node, future)
     result = future.result()
@@ -36,13 +45,14 @@ class ExamplePathPlanningClient(Node):
         self.cli = self.create_client(PathPlan, "path_planning")
         while not self.cli.wait_for_service(timeout_sec=0.1):
             self.get_logger().info("service not available, waiting again...")
-    
+
     def send_request(self):
         print("Sending a request to the path planning service")
         t = time.time()
         ret = _send_request(self, self.cli)
         self.get_logger().info(f"Calling the path planning took {time.time() - t:.4e} seconds")
         return ret
+
 
 ####################################################################################################
 

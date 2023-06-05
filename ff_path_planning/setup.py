@@ -4,7 +4,7 @@ package_name = "ff_path_planning"
 
 setup(
     name=package_name,
-    version="0.0.0",
+    version="0.1.0",
     packages=find_packages(),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
@@ -20,9 +20,9 @@ setup(
     entry_points={
         "console_scripts": [
             "path_planning = ff_path_planning.path_planning:main",
-            "example = ff_path_planning.example:main",
-            "simple_goal = ff_path_planning.simple_goal:main",
-            "simple_plan_planning = ff_path_planning.simple_plan_planning:main",
+            "examples:service_call = ff_path_planning.examples.service_call:main",
+            "examples:setting_goal = ff_path_planning.examples.setting_goal:main",
+            "examples:path_planning = ff_path_planning.examples.path_planning:main",
         ],
     },
 )

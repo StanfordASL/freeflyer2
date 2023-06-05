@@ -111,7 +111,6 @@ class NavigationNode(Node):
             # check if the service call is not None
             result = last_future.result()
             if result is None:
-                self.get_logger().info("No plan found")
                 continue
 
             # parse the plan from the service call

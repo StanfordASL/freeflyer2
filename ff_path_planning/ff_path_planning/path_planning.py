@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""Path plan and broadcast an interpolated plan as a goal to the controller."""
+
 import time
 import traceback
 import json
@@ -96,7 +98,7 @@ class PathPlanningService(Node):
 
     def compute_plan(self, request, response):
         """Main service callback for computing the optimal plan."""
-        load_all_modules() # reload modules that the user might have added
+        load_all_modules()  # reload modules that the user might have added
 
         # validate the request ###################
         if request.dynamics not in DYNAMICS_MODULES or request.cost not in COSTS_MODULES:
@@ -104,11 +106,13 @@ class PathPlanningService(Node):
             msg += "\nDynamics available: " + ", ".join(DYNAMICS_MODULES.keys())
             msg += "\nCosts available: " + ", ".join(COSTS_MODULES.keys())
             self.get_logger().error(msg)
+            self.get_logger().info("Path planning node is still healthy.")
             return self._empty_plan(request, response)
         try:
             dims = self._resolve_dimensions(request)
         except AssertionError:
             self.get_logger().error("Invalid dimensions: xdim, udim")
+            self.get_logger().info("Path planning node is still healthy.")
             return self._empty_plan(request, response)
         # validate the request ###################
 
@@ -120,6 +124,7 @@ class PathPlanningService(Node):
         except ValueError:
             self.get_logger().error("Error deserializing params_json")
             self.get_logger().error(traceback.format_exc())
+            self.get_logger().info("Path planning node is still healthy.")
             return self._empty_plan(request, response)
         # parse extra problem parameters #########
 
@@ -127,15 +132,19 @@ class PathPlanningService(Node):
         try:
             if params is None:
                 cost = COSTS_MODULES[request.cost].cost(**dims)
+                f_fx_fu_fn = DYNAMICS_MODULES[request.dynamics].f_fx_fu_fn
             else:
                 cost = COSTS_MODULES[request.cost].cost(**dims, params=params)
-            f_fx_fu_fn = DYNAMICS_MODULES[request.dynamics].f_fx_fu_fn
+                f_fx_fu_fn = lambda X, U: DYNAMICS_MODULES[request.dynamics].f_fx_fu_fn(
+                    X, U, params=params
+                )
             x0 = np.array(request.x0)
             p = Problem(x0=x0, f_fx_fu_fn=f_fx_fu_fn, **dims, **cost)
             p.max_it = request.max_it
             p.verbose = True
         except:
             self.get_logger().error(traceback.format_exc())
+            self.get_logger().info("Path planning node is still healthy.")
             return self._empty_plan(request, response)
         # construct the problem ##################
 
@@ -144,6 +153,7 @@ class PathPlanningService(Node):
             X, U, _ = solve(**p)
         except:
             self.get_logger().error(traceback.format_exc())
+            self.get_logger().info("Path planning node is still healthy.")
             return self._empty_plan(request, response)
         # solve ##################################
 
