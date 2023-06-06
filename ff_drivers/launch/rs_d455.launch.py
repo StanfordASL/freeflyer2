@@ -42,6 +42,7 @@ def generate_launch_description():
                     {
                         "depth_module.profile": "640x360x30",
                         "rgb_camera.profile": "640x360x30",
+                        "rgb_camera.enable_auto_exposure": False,
                         "enable_infra1": False,
                         "enable_infra2": False,
                     }
