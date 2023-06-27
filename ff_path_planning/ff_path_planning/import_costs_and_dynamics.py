@@ -29,6 +29,7 @@ def find_pkg_source_dir(root_path: Optional[Union[Path, str]] = None):
     root_path = Path(root_path) if root_path is not None else Path(__file__).absolute().parent
     ros_ws_path = root_path.parents[5]
     msg = f"We're attempting to guess the ROS workspace path is {ros_ws_path}. Is this correct?"
+
     assert (ros_ws_path / "install").exists() and (ros_ws_path / "src").exists(), msg
     this_pkg_name = root_path.parts[-1]
     pkg_paths = sum(
@@ -55,23 +56,26 @@ def append_to_path(root_path: Optional[Union[Path, str]] = None):
             sys.path.append(str(path))
 
     # insert the local development path first #########################
-    pkg_path = find_pkg_source_dir(root_path)
-    this_pkg_name = root_path.parts[-1]
-    msg = f"We're attempting to guess the package path is {pkg_path}. Is this correct?"
-    dynamics_path = pkg_path / this_pkg_name / "dynamics"
-    costs_path = pkg_path / this_pkg_name / "costs"
-    assert dynamics_path.exists() and costs_path.exists(), msg
-    for path in [dynamics_path, costs_path]:
-        if str(path) not in sys.path:
-            sys.path.insert(0, str(path))
+    #pkg_path = find_pkg_source_dir(root_path)
+    #this_pkg_name = root_path.parts[-1]
+    #msg = f"We're attempting to guess the package path is {pkg_path}. Is this correct?"
+    #dynamics_path = pkg_path / this_pkg_name / "dynamics"
+    #costs_path = pkg_path / this_pkg_name / "costs"
+    #assert dynamics_path.exists() and costs_path.exists(), msg
+    #for path in [dynamics_path, costs_path]:
+    #    if str(path) not in sys.path:
+    #        sys.path.insert(0, str(path))
 
 
 def load_all_modules(root_path: Optional[Union[Path, str]] = None):
     all_dynamics, all_costs = find_all_dynamics_and_costs(root_path)
-    pkg_source = find_pkg_source_dir(root_path)
-    all_dynamics_dev, all_costs_dev = find_all_dynamics_and_costs(pkg_source / pkg_source.parts[-1])
-    all_dynamics += all_dynamics_dev
-    all_costs += all_costs_dev
+
+    #pkg_source = find_pkg_source_dir(root_path)
+    #all_dynamics_dev, all_costs_dev = find_all_dynamics_and_costs(pkg_source / pkg_source.parts[-1])
+    #all_dynamics += all_dynamics_dev
+    #all_costs += all_costs_dev
+    import pdb
+    pdb.set_trace()
 
     for dynamics in all_dynamics:
         mod_name = str(Path(dynamics).stem)
