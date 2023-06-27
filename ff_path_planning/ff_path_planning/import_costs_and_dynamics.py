@@ -74,8 +74,6 @@ def load_all_modules(root_path: Optional[Union[Path, str]] = None):
     #all_dynamics_dev, all_costs_dev = find_all_dynamics_and_costs(pkg_source / pkg_source.parts[-1])
     #all_dynamics += all_dynamics_dev
     #all_costs += all_costs_dev
-    import pdb
-    pdb.set_trace()
 
     for dynamics in all_dynamics:
         mod_name = str(Path(dynamics).stem)
