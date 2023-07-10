@@ -12,14 +12,14 @@ from rclpy.node import Node
 ####################################################################################################
 
 
-def to_ros_array(x):
+def to_ros_array(x: np.ndarray):
     return x.reshape(-1).tolist()
 
 
 def _send_request(node, cli):
     request = PathPlan.Request()
     request.dynamics = "single_integrator"
-    secs, nsecs = rclpy.clock.Clock().now().seconds_nanoseconds()
+    secs, nsecs = node.get_clock().now().seconds_nanoseconds()
     request.t0 = secs + nsecs / 1e9
     request.x0 = to_ros_array(np.array([5.0]))
     # example json params, numpy arrays can be sent as (nested list)
@@ -42,7 +42,7 @@ def _send_request(node, cli):
 class ExamplePathPlanningClient(Node):
     def __init__(self):
         super().__init__("path_planning_client")
-        self.cli = self.create_client(PathPlan, "path_planning")
+        self.cli = self.create_client(PathPlan, "/path_planning")
         while not self.cli.wait_for_service(timeout_sec=0.1):
             self.get_logger().info("service not available, waiting again...")
 

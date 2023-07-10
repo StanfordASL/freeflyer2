@@ -2,31 +2,11 @@
 
 """Broadcast a simple static goal to the controller."""
 
-import math
-
 import rclpy
 from rclpy.node import Node
-from ff_srvs.srv import PathPlan
-from ff_msgs.msg import (
-    FreeFlyerStateStamped,
-    FreeFlyerState,
-    Twist2D,
-    Pose2D as FF_Pose2D,
-)
-from geometry_msgs.msg import PoseStamped, Pose, Pose2D, Point, Quaternion
-from std_msgs.msg import Header
-
-import numpy as np
+from ff_msgs.msg import FreeFlyerStateStamped, FreeFlyerState, Twist2D, Pose2D as FF_Pose2D
 
 ####################################################################################################
-
-
-def pose2D_to_pose(pose2D):
-    pose = Pose(position=Point(x=pose2D.x, y=pose2D.y, z=0.0))
-    # Convert the theta value (2D orientation) to a quaternion (3D orientation)
-    half_theta = pose2D.theta / 2
-    pose.orientation = Quaternion(x=0.0, y=0.0, z=math.sin(half_theta), w=math.cos(half_theta))
-    return pose
 
 
 class SimpleGoalNode(Node):
@@ -54,13 +34,12 @@ class SimpleGoalNode(Node):
             self.goal_pose = FreeFlyerStateStamped()
             self.goal_pose.header.stamp = self.get_clock().now().to_msg()
             self.goal_pose.state = FreeFlyerState(
-                pose=FF_Pose2D(x=x, y=y + 5, theta=th), twist=Twist2D()
+                pose=FF_Pose2D(x=x + 1, y=y + 2, theta=th), twist=Twist2D()
             )
         self.state = state
 
-
     def publish_goal(self):
-        #if self.already_published:
+        # if self.already_published:
         #    return
         if self.goal_pose is None:
             return

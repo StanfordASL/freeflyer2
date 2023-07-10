@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 
-from copy import copy
 import json
-import math
 
 import rclpy
+from rclpy.time import Time, Duration
 from rclpy.node import Node
 from ff_srvs.srv import PathPlan
 from ff_msgs.msg import FreeFlyerStateStamped, FreeFlyerState, Twist2D, Pose2D as FF_Pose2D
-from geometry_msgs.msg import PoseStamped, Pose, Pose2D, Point, Quaternion
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 
 import numpy as np
@@ -17,25 +16,8 @@ from scipy.interpolate import interp1d
 ####################################################################################################
 
 
-def pose2D_to_pose(pose2D):
-    pose = Pose(position=Point(x=pose2D.x, y=pose2D.y, z=0.0))
-    # Convert the theta value (2D orientation) to a quaternion (3D orientation)
-    half_theta = pose2D.theta / 2
-    pose.orientation = Quaternion(x=0.0, y=0.0, z=math.sin(half_theta), w=math.cos(half_theta))
-    return pose
-
-
-def to_ros_array(x):
+def to_ros_array(x: np.ndarray):
     return x.reshape(-1).tolist()
-
-
-def add_time(sec: int, nsec: int, duration: float):
-    """Add a duration to a time."""
-    sec += int(duration)
-    nsec += int((duration - int(duration)) * 1e9)
-    if nsec >= 1e9:
-        sec, nsec = sec + 1, int(nsec - 1e9)
-    return sec, nsec
 
 
 ####################################################################################################
@@ -69,6 +51,7 @@ class NavigationNode(Node):
         msg.state = FreeFlyerState(twist=Twist2D(), pose=FF_Pose2D())
         self.get_logger().info("Publishing initial state")
         pub.publish(msg)
+        self.create_timer(1e-2, self.loop)
 
     def show_path(self) -> None:
         """Publish the path as a path marker."""
@@ -85,42 +68,39 @@ class NavigationNode(Node):
             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = X[i, 0], X[i, 1], 0.5
             pose.header.frame_id = marker.header.frame_id
 
-            time_stamp = copy(marker.header.stamp)
-            sec, nsec = add_time(time_stamp.sec, time_stamp.nanosec, self.plan["t"][i] - t0)
-            time_stamp.sec, time_stamp.nanosec = sec, nsec
-            pose.header.stamp = time_stamp
+            time_now = Time.from_msg(marker.header.stamp)
+            dt = Duration(seconds=self.plan["t"][i] - t0)
+            pose.header.stamp = (time_now + dt).to_msg()
 
             marker.poses.append(pose)
         self.marker_pub.publish(marker)
 
     def loop(self) -> None:
-        """Loop until shutdown, pulling plans if they are available."""
-        while rclpy.ok():
-            rclpy.spin_once(self)
+        """Pull plans if they are available."""
 
-            # attempt to parse returned planning service calls
-            last_future, incomplete_futures = None, []
-            for i in range(len(self.plan_futures)):
-                last_future = self.plan_futures[i]
-                if not last_future.done():
-                    incomplete_futures.append(last_future)
-            self.plan_futures = incomplete_futures
-            if last_future is None:
-                continue
+        # attempt to parse returned planning service calls
+        last_future, incomplete_futures = None, []
+        for i in range(len(self.plan_futures)):
+            last_future = self.plan_futures[i]
+            if not last_future.done():
+                incomplete_futures.append(last_future)
+        self.plan_futures = incomplete_futures
+        if last_future is None:
+            return
 
-            # check if the service call is not None
-            result = last_future.result()
-            if result is None:
-                continue
+        # check if the service call is not None
+        result = last_future.result()
+        if result is None:
+            return
 
-            # parse the plan from the service call
-            ts = np.array(result.times)
-            N = len(ts) - 1
-            X = np.array(result.states).reshape((N + 1, -1))
-            U = np.array(result.controls).reshape((N, -1))
-            L = np.array(result.feedback).reshape((N, X.shape[-1], U.shape[-1]))
-            self.plan = dict(t=ts, X=X, U=U, L=L)
-            self.show_path()
+        # parse the plan from the service call
+        ts = np.array(result.times)
+        N = len(ts) - 1
+        X = np.array(result.states).reshape((N + 1, -1))
+        U = np.array(result.controls).reshape((N, -1))
+        L = np.array(result.feedback).reshape((N, X.shape[-1], U.shape[-1]))
+        self.plan = dict(t=ts, X=X, U=U, L=L)
+        self.show_path()
 
     def make_goal_pose(self, x: float, y: float) -> FreeFlyerStateStamped:
         """Create a goal pose from the current state, with the given x and y coordinates."""
@@ -135,7 +115,7 @@ class NavigationNode(Node):
         self.state = state
 
     def get_current_time(self) -> float:
-        secs, nsecs = rclpy.clock.Clock().now().seconds_nanoseconds()
+        secs, nsecs = self.get_clock().now().seconds_nanoseconds()
         return secs + nsecs / 1e9
 
     def publish_goal_cb(self) -> None:
@@ -162,7 +142,7 @@ class NavigationNode(Node):
 
         # we'll provide extra arguments to the cost function, which accepts params encoded as a JSON
         request.cost = "my_cost"
-        X_ref = np.tile(np.array([5, 5]), (request.horizon, 1)).tolist()
+        X_ref = np.tile(np.array([2.5, 2]), (request.horizon, 1)).tolist()
         R = np.tile(np.eye(2) * 1e2, (request.horizon, 1, 1)).tolist()
         request.params_json = json.dumps(dict(X_ref=X_ref, R=R))
 
@@ -177,7 +157,7 @@ def main():
     # spin the node up
     rclpy.init()
     navigation_node = NavigationNode()
-    navigation_node.loop()
+    rclpy.spin(navigation_node)
     rclpy.shutdown()
 
 
