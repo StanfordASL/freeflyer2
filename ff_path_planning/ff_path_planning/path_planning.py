@@ -24,10 +24,12 @@
 
 """Path plan and broadcast an interpolated plan as a goal to the controller."""
 
+
 import time
 import traceback
 import json
 import math
+from warnings import warn
 
 import rclpy
 from rclpy.node import Node
@@ -36,7 +38,21 @@ from multiprocessing import Process, set_start_method
 
 import numpy as np
 
-from pmpc import solve, Problem
+try:
+    from pmpc import solve, Problem
+except ImportError:
+    warn(
+        "#" * 80
+        + "\n"
+        + "#" * 80
+        + "\n"
+        + "It looks like you don't have the `pmpc` library installed. "
+        + "Please install it from https://github.com/StanfordASL/pmpc\n"
+        + "#" * 80
+        + "\n"
+        + "#" * 80
+    )
+
 
 from .import_costs_and_dynamics import DYNAMICS_MODULES, COSTS_MODULES, load_all_modules
 
