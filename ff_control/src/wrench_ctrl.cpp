@@ -1,16 +1,41 @@
+// MIT License
+//
+// Copyright (c) 2023 Stanford Autonomous Systems Lab
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+
 #include <cmath>
 
 #include "ff_control/wrench_ctrl.hpp"
 
 using ff_msgs::msg::Wrench2D;
 
-namespace ff {
+namespace ff
+{
 
 WrenchController::WrenchController()
-  : rclcpp::Node("wrench_ctrl_node"),
-    LowLevelController() {}
+: rclcpp::Node("wrench_ctrl_node"),
+  LowLevelController() {}
 
-void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel) {
+void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_wheel)
+{
   if (use_wheel) {
     // TODO(alvin): support wheel velocity control in the future or remove?
     RCLCPP_ERROR(this->get_logger(), "SetWrench failed: use_wheel not implemented");
@@ -42,11 +67,11 @@ void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel
     const double u_M = wrench_body_clipped.tz /
       (4 * p_.actuators.F_max_per_thruster * p_.actuators.thrusters_lever_arm);
     if (u_M > 0) {
-      for (const int& i : {1, 3, 5, 7}) {
+      for (const int & i : {1, 3, 5, 7}) {
         duty_cycle[i] += u_M;
       }
     } else {
-      for (const int& i : {0, 2, 4, 6}) {
+      for (const int & i : {0, 2, 4, 6}) {
         duty_cycle[i] += -u_M;
       }
     }
@@ -60,7 +85,8 @@ void WrenchController::SetBodyWrench(const Wrench2D& wrench_body, bool use_wheel
   }
 }
 
-void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world, double theta) {
+void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D & wrench_world, double theta)
+{
   const double cos_theta = std::cos(theta);
   const double sin_theta = std::sin(theta);
 
@@ -71,17 +97,18 @@ void WrenchController::SetWorldWrench(const ff_msgs::msg::Wrench2D& wrench_world
   SetBodyWrench(wrench_body);
 }
 
-Wrench2D WrenchController::ClipWrench(const Wrench2D& wrench) const {
+Wrench2D WrenchController::ClipWrench(const Wrench2D & wrench) const
+{
   Wrench2D wrench_clipped;
   const double force = std::sqrt(wrench.fx * wrench.fx + wrench.fy * wrench.fy);
-  const double force_scale = std::min(p_.actuators.F_body_max / force, 1.0);
-  const double torque_scale = std::min(p_.actuators.M_body_max / std::abs(wrench.tz), 1.0);
+  const double force_scale = std::max(force / p_.actuators.F_body_max, 1.0);
+  const double torque_scale = std::max(std::abs(wrench.tz) / p_.actuators.M_body_max, 1.0);
 
-  wrench_clipped.fx = wrench.fx * force_scale;
-  wrench_clipped.fy = wrench.fy * force_scale;
-  wrench_clipped.tz = wrench.tz * torque_scale;
+  wrench_clipped.fx = wrench.fx / force_scale;
+  wrench_clipped.fy = wrench.fy / force_scale;
+  wrench_clipped.tz = wrench.tz / torque_scale;
 
   return wrench_clipped;
 }
 
-} // namespace ff
+}  // namespace ff

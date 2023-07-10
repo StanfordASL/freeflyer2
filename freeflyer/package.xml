@@ -9,14 +9,18 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>ff_control</depend>
-  <depend>ff_msgs</depend>
-  <depend>ff_params</depend>
-  <depend>ff_sim</depend>
-  <depend>ff_viz</depend>
+  <exec_depend>ff_estimate</exec_depend>
+  <exec_depend>ff_control</exec_depend>
+  <exec_depend>ff_msgs</exec_depend>
+  <exec_depend>ff_params</exec_depend>
+  <exec_depend>ff_sim</exec_depend>
+  <exec_depend>ff_viz</exec_depend>
 
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ff_msgs</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
