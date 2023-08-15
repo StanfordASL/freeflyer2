@@ -12,8 +12,11 @@
   <depend>rclcpp</depend>
   <depend>ff_msgs</depend>
 
+  <exec_depend>ff_control</exec_depend>
   <exec_depend>ff_params</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>vrpn_mocap</exec_depend>
+  <exec_depend>image_transport_plugins</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

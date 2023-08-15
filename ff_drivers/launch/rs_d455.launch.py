@@ -23,7 +23,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -34,22 +34,19 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("robot_name", default_value="robot"),
             Node(
-                package="ff_params",
-                executable="robot_params_node",
-                name="robot_params_node",
-                namespace=robot_name,
-            ),
-            Node(
-                package="ff_sim",
-                executable="simulator_node",
-                name="simulator_node",
-                namespace=robot_name,
-            ),
-            Node(
-                package="ff_control",
-                executable="safety_filter",
-                name="safety_filter",
-                namespace=robot_name,
+                package="realsense2_camera",
+                executable="realsense2_camera_node",
+                name="realsense2_camera_node",
+                namespace=PathJoinSubstitution([robot_name, "camera"]),
+                parameters=[
+                    {
+                        "depth_module.profile": "640x360x30",
+                        "rgb_camera.profile": "640x360x30",
+                        "rgb_camera.enable_auto_exposure": False,
+                        "enable_infra1": False,
+                        "enable_infra2": False,
+                    }
+                ],
             ),
         ]
     )

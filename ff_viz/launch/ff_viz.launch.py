@@ -21,23 +21,24 @@
 # SOFTWARE.
 
 
-import os
-
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import Command, LaunchConfiguration
+from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    urdf = os.path.join(get_package_share_directory("ff_viz"), "model", "ff.urdf.xacro")
+    urdf = PathJoinSubstitution([FindPackageShare("ff_viz"), "model", "ff.urdf.xacro"])
+    default_rviz_config = PathJoinSubstitution([FindPackageShare("ff_viz"), "rviz", "default.rviz"])
     robot_name = LaunchConfiguration("robot_name")
+    rviz_config = LaunchConfiguration("rviz_config")
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_name", default_value="robot"),
+            DeclareLaunchArgument("rviz_config", default_value=default_rviz_config),
             Node(
                 package="robot_state_publisher",
                 executable="robot_state_publisher",
@@ -64,7 +65,7 @@ def generate_launch_description():
                 namespace=robot_name,
                 arguments=[
                     "-d",
-                    os.path.join(get_package_share_directory("ff_viz"), "rviz", "default.rviz"),
+                    rviz_config,
                 ],
             ),
         ]

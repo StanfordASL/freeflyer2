@@ -59,8 +59,11 @@ LinearController::LinearController()
 : rclcpp::Node("linear_ctrl_node"),
   WrenchController()
 {
+  this->declare_parameter("state_channel", "est/state");
   state_sub_ = this->create_subscription<FreeFlyerStateStamped>(
-    "est/state", 10, std::bind(&LinearController::StateCallback, this, _1));
+    this->get_parameter("state_channel").as_string(),
+    10,
+    std::bind(&LinearController::StateCallback, this, _1));
 }
 
 bool LinearController::StateIsReady() const
