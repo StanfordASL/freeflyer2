@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install black
       - name: ROS2 build and test
-        uses: ros-tooling/action-ros-ci@v0.3.3
+        uses: ros-tooling/action-ros-ci@v0.3
         with:
           import-token: ${{ secrets.GITHUB_TOKEN }}
           target-ros2-distro: rolling
