@@ -84,3 +84,5 @@ set(AMENT_LINT_AUTO_EXCLUDE ament_cmake_flake8 ament_cmake_pep257)
 * `ff_params` -- shared parameters about dynamics and actuators
 * `ff_sim` -- a lightweight pure Python simulator
 * `ff_viz` -- RVIZ visualization
+
+Some random stuff
