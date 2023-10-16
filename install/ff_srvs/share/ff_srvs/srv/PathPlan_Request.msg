@@ -1,0 +1,10 @@
+string dynamics
+string cost "default_cost"
+float64[] x0
+float64 t0
+float64 dt 0.25
+int64 horizon 20
+int64 xdim -1
+int64 udim -1
+int64 max_it 20
+string params_json

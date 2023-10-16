@@ -362,7 +362,7 @@ class FreeFlyerSimulator(Node):
         # Extract state and control
         r, theta, v, thetadot = x[0:2], x[2], x[3:5], x[5]
         F, M = u[0:2], u[2]
-
+        print("WHJAT", r)
         # Rotation matrix
         R = self.get_rotmatrix_body_to_world(theta)
 

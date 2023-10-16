@@ -1,0 +1,45 @@
+// generated from rosidl_adapter/resource/srv.idl.em
+// with input from ff_srvs/srv/PathPlan.srv
+// generated code does not contain a copyright notice
+
+
+module ff_srvs {
+  module srv {
+    struct PathPlan_Request {
+      string dynamics;
+
+      @default (value="default_cost")
+      string cost;
+
+      sequence<double> x0;
+
+      double t0;
+
+      @default (value=0.25)
+      double dt;
+
+      @default (value=20)
+      int64 horizon;
+
+      @default (value=-1)
+      int64 xdim;
+
+      @default (value=-1)
+      int64 udim;
+
+      @default (value=20)
+      int64 max_it;
+
+      string params_json;
+    };
+    struct PathPlan_Response {
+      sequence<double> times;
+
+      sequence<double> states;
+
+      sequence<double> controls;
+
+      sequence<double> feedback;
+    };
+  };
+};

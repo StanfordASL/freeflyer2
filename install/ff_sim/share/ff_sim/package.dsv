@@ -1,0 +1,6 @@
+source;share/ff_sim/hook/pythonpath.ps1
+source;share/ff_sim/hook/pythonpath.dsv
+source;share/ff_sim/hook/pythonpath.sh
+source;share/ff_sim/hook/ament_prefix_path.ps1
+source;share/ff_sim/hook/ament_prefix_path.dsv
+source;share/ff_sim/hook/ament_prefix_path.sh

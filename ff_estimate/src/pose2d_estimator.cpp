@@ -44,6 +44,7 @@ void Pose2DEstimator::EstimateWithPose2D(const Pose2DStamped & pose_stamped)
   FreeFlyerState state{};
 
   state.pose = pose_stamped.pose;
+  
   if (prev_state_ready_) {
     const rclcpp::Time now = pose_stamped.header.stamp;
     const rclcpp::Time last = prev_.header.stamp;
@@ -72,7 +73,7 @@ void Pose2DEstimator::EstimateWithPose2D(const Pose2DStamped & pose_stamped)
   } else {
     prev_state_ready_ = true;
   }
-
+  // initialize with new states
   prev_.state = state;
   prev_.header = pose_stamped.header;
 

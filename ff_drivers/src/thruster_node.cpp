@@ -60,7 +60,7 @@ public:
     }
 
     // set period (default to 10Hz)
-    double period = this->declare_parameter("period", .1);
+    double period = this->declare_parameter("period", 0.1);
     this->SetPeriodAll(period * 1s);
     // update period on the fly
     sub_params_ = std::make_shared<rclcpp::ParameterEventHandler>(this);

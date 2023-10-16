@@ -75,7 +75,7 @@ void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_whee
         duty_cycle[i] += -u_M;
       }
     }
-
+ 
     // clip to [0, 1]
     for (int i = 0; i < 8; ++i) {
       duty_cycle[i] = std::max(std::min(1., duty_cycle[i]), 0.);

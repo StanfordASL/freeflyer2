@@ -38,7 +38,7 @@ public:
   {
     bool use_hard = this->declare_parameter("use_hard", true);
     int pin = this->declare_parameter("pin", 473);
-    this->declare_parameter("max_duty_cycle", .2);
+    this->declare_parameter("max_duty_cycle", .1);
 
     if (use_hard) {
       RCLCPP_INFO(this->get_logger(), "Using hardware PWM: PWM_C");
@@ -48,7 +48,7 @@ public:
       this->AddSoftPWM(pin);
     }
 
-    this->SetPeriodAll(100ms);
+    this->SetPeriodAll(10000ms);
     this->EnableAll();
 
     timer_ = this->create_wall_timer(5s, [this]() {TimerCallback();});

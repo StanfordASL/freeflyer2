@@ -1,0 +1,3 @@
+source;share/ff_estimate/environment/ament_prefix_path.sh
+source;share/ff_estimate/environment/library_path.sh
+source;share/ff_estimate/environment/path.sh

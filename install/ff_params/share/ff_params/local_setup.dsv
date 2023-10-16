@@ -1,0 +1,4 @@
+source;share/ff_params/environment/ament_prefix_path.sh
+source;share/ff_params/environment/library_path.sh
+source;share/ff_params/environment/path.sh
+source;share/ff_params/environment/pythonpath.sh
