@@ -1,4 +1,4 @@
-name: rolling build
+name: iron build
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build_rolling:
+  build_iron:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:jammy
@@ -17,11 +17,11 @@ jobs:
       - name: setup ROS2
         uses: ros-tooling/setup-ros@v0.7
         with:
-          required-ros-distributions: rolling
+          required-ros-distributions: iron
       - name: Install dependencies
         run: pip install black
       - name: ROS2 build and test
         uses: ros-tooling/action-ros-ci@v0.3
         with:
           import-token: ${{ secrets.GITHUB_TOKEN }}
-          target-ros2-distro: rolling
+          target-ros2-distro: iron
