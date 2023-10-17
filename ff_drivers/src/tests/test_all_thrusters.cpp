@@ -54,7 +54,7 @@ private:
     // populate thrust msg
     ThrusterCommand msg{};
     for (int i = 0; i < 8; ++i) {
-      msg.duty_cycle[i] = 0.;
+      msg.duty_cycle[i] = 0.2;
       if (i == th_idx_) {
         msg.duty_cycle[i] = duty_cycle;
       }
