@@ -27,11 +27,14 @@ ament_target_dependencies(thruster_node ff_msgs)
 add_executable(test_single src/tests/test_single.cpp)
 target_link_libraries(test_single pwm)
 
+add_executable(test_multi src/tests/test_multi.cpp)
+target_link_libraries(test_multi pwm)
+
 add_executable(test_all_thrusters src/tests/test_all_thrusters.cpp)
 ament_target_dependencies(test_all_thrusters rclcpp ff_msgs)
 
 # install nodes
-install(TARGETS thruster_node test_single test_all_thrusters
+install(TARGETS thruster_node test_single test_multi test_all_thrusters
         DESTINATION lib/${PROJECT_NAME})
 
 # install launch files

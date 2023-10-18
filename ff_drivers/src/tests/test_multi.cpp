@@ -30,24 +30,23 @@
 using namespace std::chrono_literals;
 
 
-class TestSingleNode : public ff::PWMManager
+class TestMultiNode : public ff::PWMManager
 {
 public:
-  TestSingleNode()
-  : ff::PWMManager("test_single_node")
+  TestMultiNode()
+  : ff::PWMManager("test_multi_node")
   {
-    bool use_hard = this->declare_parameter("use_hard", false);
-    int pin = this->declare_parameter("pin", 476);
     //this->declare_parameter("max_duty_cycle", .2);
     this->declare_parameter("curr_duty_cycle",0.1);
 
-    if (use_hard) {
-      RCLCPP_INFO(this->get_logger(), "Using hardware PWM: PWM_C");
-      this->AddHardPWM(ff::HardPWM::PWM_C);
-    } else {
-      RCLCPP_INFO(this->get_logger(), "Using software PWM: pin %d", pin);
-      this->AddSoftPWM(pin);
-    }
+    this->AddSoftPWM(476);
+    this->AddSoftPWM(477);
+    this->AddSoftPWM(484);
+    this->AddSoftPWM(485);
+    this->AddSoftPWM(478);
+    this->AddSoftPWM(487);
+    this->AddSoftPWM(486);
+    this->AddSoftPWM(464);
 
     this->SetPeriodAll(10s);
     this->EnableAll();
@@ -61,20 +60,20 @@ private:
     //double max_duty_cycle = this->get_parameter("max_duty_cycle").as_double();
     double new_duty_cycle = this->get_parameter("curr_duty_cycle").as_double();
     //this->SetDutyCycle(0, cnt_ * max_duty_cycle * .1);
-    this->SetDutyCycle(0, new_duty_cycle);
+    for (int i = 0; i < 8; ++i) {
+      this->SetDutyCycle(i, new_duty_cycle);
+    }
     //RCLCPP_INFO(this->get_logger(), "Dutycycle set to %f", cnt_ * max_duty_cycle * .1);
     RCLCPP_INFO(this->get_logger(), "Dutycycle set to %f", new_duty_cycle);
-    //cnt_ = (cnt_ + 1) % 11;
   }
 
-  int cnt_ = 0;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<TestSingleNode>());
+  rclcpp::spin(std::make_shared<TestMultiNode>());
   rclcpp::shutdown();
   return 0;
 }
