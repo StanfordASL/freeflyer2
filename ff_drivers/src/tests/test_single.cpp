@@ -38,7 +38,8 @@ public:
   {
     bool use_hard = this->declare_parameter("use_hard", true);
     int pin = this->declare_parameter("pin", 473);
-    this->declare_parameter("max_duty_cycle", .2);
+    //this->declare_parameter("max_duty_cycle", .2);
+    this->declare_parameter("curr_duty_cycle",0.2);
 
     if (use_hard) {
       RCLCPP_INFO(this->get_logger(), "Using hardware PWM: PWM_C");
@@ -48,20 +49,22 @@ public:
       this->AddSoftPWM(pin);
     }
 
-    this->SetPeriodAll(100ms);
+    this->SetPeriodAll(10s);
     this->EnableAll();
 
-    timer_ = this->create_wall_timer(5s, [this]() {TimerCallback();});
+    timer_ = this->create_wall_timer(1s, [this]() {TimerCallback();});
   }
 
 private:
   void TimerCallback()
   {
-    double max_duty_cycle = this->get_parameter("max_duty_cycle").as_double();
-
-    this->SetDutyCycle(0, cnt_ * max_duty_cycle * .1);
-    RCLCPP_INFO(this->get_logger(), "Dutycycle set to %f", cnt_ * max_duty_cycle * .1);
-    cnt_ = (cnt_ + 1) % 11;
+    //double max_duty_cycle = this->get_parameter("max_duty_cycle").as_double();
+    double new_duty_cycle = this->get_parameter("curr_duty_cycle").as_double();
+    //this->SetDutyCycle(0, cnt_ * max_duty_cycle * .1);
+    this->SetDutyCycle(0, new_duty_cycle);
+    //RCLCPP_INFO(this->get_logger(), "Dutycycle set to %f", cnt_ * max_duty_cycle * .1);
+    RCLCPP_INFO(this->get_logger(), "Dutycycle set to %f", new_duty_cycle);
+    //cnt_ = (cnt_ + 1) % 11;
   }
 
   int cnt_ = 0;
