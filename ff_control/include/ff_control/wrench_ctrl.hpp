@@ -26,13 +26,15 @@
 #include <string>
 
 #include "ff_control/ll_ctrl.hpp"
+#include "ff_control/Lowll_ctrl.hpp"
 
 #include "ff_msgs/msg/wrench2_d.hpp"
 
 namespace ff
 {
 
-class WrenchController : public LowLevelController
+// class WrenchController : public LowLevelController
+class WrenchController : public LowLowController
 {
 public:
   WrenchController();

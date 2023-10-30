@@ -32,7 +32,8 @@ namespace ff
 
 WrenchController::WrenchController()
 : rclcpp::Node("wrench_ctrl_node"),
-  LowLevelController() {}
+  // LowLevelController() {}
+  LowLowLevelController() {}
 
 void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_wheel)
 {
@@ -41,6 +42,7 @@ void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_whee
     RCLCPP_ERROR(this->get_logger(), "SetWrench failed: use_wheel not implemented");
   } else {
     std::array<double, 8> duty_cycle;
+    std::array<bool,8> binary_cycle;
     duty_cycle.fill(0);
 
     const Wrench2D wrench_body_clipped = ClipWrench(wrench_body);
@@ -78,10 +80,15 @@ void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_whee
  
     // clip to [0, 1]
     for (int i = 0; i < 8; ++i) {
+      if (duty_cycle[i] < 0.5) {
+        binary_cycle[i] == bool(0);
+      } else{
+        binary_cycle[i] == bool(1);
+      }
       duty_cycle[i] = std::max(std::min(1., duty_cycle[i]), 0.);
     }
-
-    this->SetThrustDutyCycle(duty_cycle);
+    // this->SetThrustDutyCycle(duty_cycle);
+    this->SetBinaryDutyCycle(binary_cycle);
   }
 }
 

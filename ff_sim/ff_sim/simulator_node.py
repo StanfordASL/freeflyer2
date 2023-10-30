@@ -259,7 +259,8 @@ class FreeFlyerSimulator(Node):
 
     def update_thrusters_dutycycle_cmd_cb(self, msg: ThrusterCommand) -> None:
         # Saturate controls so within [0,1] (in %)
-        self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0.0, 1.0)
+        self.thrusters_dutycycle_cmd = msg.binary_command
+        # self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycle, 0.0, 1.0)
 
     def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
         self.x_cur = np.array(
