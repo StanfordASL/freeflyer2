@@ -33,7 +33,7 @@
 namespace ff
 {
 
-// class WrenchController : public LowLevelController
+class WrenchController : public LowLevelController
 class WrenchController : public LowLowController
 {
 public:
