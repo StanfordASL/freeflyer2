@@ -31,6 +31,7 @@ import numpy as np
 from ff_control.ll_binary_ctrl import LowLevelBinaryController
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
+from simulator_node.py import FreeFlyerSimulator
 
 
 class MPCController(LowLevelBinaryController):

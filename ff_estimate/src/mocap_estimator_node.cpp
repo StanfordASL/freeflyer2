@@ -29,9 +29,14 @@
 
 #include "ff_estimate/pose2d_estimator.hpp"
 #include "ff_msgs/msg/pose2_d_stamped.hpp"
+#include "ff_params/include/ff_params/robot_params.hpp"
 
 using ff_msgs::msg::Pose2DStamped;
 using geometry_msgs::msg::PoseStamped;
+using ff_msgs::msg::BinaryCommand;
+using ff_msgs::msg::ThrusterCommand;
+
+
 
 class MocapEstimatorNode : public ff::Pose2DEstimator
 {
@@ -53,6 +58,7 @@ private:
   {
     // convert to pose2d
     Pose2DStamped pose2d{};
+    ThrusterCommand command{}
 
     pose2d.header = pose->header;
     pose2d.pose.x = pose->pose.position.x;
@@ -62,6 +68,7 @@ private:
     pose2d.pose.theta = std::atan2(2 * w * z, w * w - z * z);
 
     this->EstimateWithPose2D(pose2d);
+    // this->EstimateWithPose2D_Filtered(pose2d, command)
   }
 };
 
