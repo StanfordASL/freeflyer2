@@ -46,8 +46,8 @@ def generate_launch_description():
             ),
             Node(
                 package="ff_estimate",
-                executable="mocap_estimator_node",
-                name="mocap_estimator_node",
+                executable="moving_avg_estimator_node",
+                name="moving_avg_estimator_node",
                 namespace=robot_name,
                 parameters=[
                     {

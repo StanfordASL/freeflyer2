@@ -25,32 +25,49 @@
 
 #include <string>
 
-#include "ff_estimate/base_estimator.hpp"
+#include <rclcpp/rclcpp.hpp>
+
+#include "ff_msgs/msg/free_flyer_state.hpp"
 #include "ff_msgs/msg/free_flyer_state_stamped.hpp"
 #include "ff_msgs/msg/pose2_d_stamped.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 namespace ff
 {
 
 /**
- * @brief full-state estimator using only pose measurements
+ * @brief estimator base class
  */
-class Pose2DEstimator : public BaseEstimator
+class BaseMocapEstimator : public rclcpp::Node
 {
 public:
-  explicit Pose2DEstimator(const std::string & node_name);
+  /**
+   * @brief constructor
+   *
+   * @param node_name ROS2 node name, default to mocap_estimator
+   */
+  explicit BaseMocapEstimator(const std::string & node_name = "mocap_estimator");
 
 protected:
   /**
-   * @brief estimate state with Pose2D
+   * @brief send out the current state estimate
    *
-   * @param pose_stamped timestamped pose2d
+   * @param state estimated freeflyer state
    */
-  virtual void EstimateWithPose2D(const ff_msgs::msg::Pose2DStamped & pose_stamped);
+  void SendStateEstimate(const ff_msgs::msg::FreeFlyerState & state);
+
+  /**
+   * @brief abstract estimator function
+   *
+   * @param pose_stamped time-stamped 2D pose measurement
+   */
+  virtual void EstimateWithPose2D(const ff_msgs::msg::Pose2DStamped & pose_stamped) = 0;
 
 private:
-  ff_msgs::msg::FreeFlyerStateStamped prev_;
-  bool prev_state_ready_ = false;
+  rclcpp::Publisher<ff_msgs::msg::FreeFlyerStateStamped>::SharedPtr state_pub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_sub_;
+
+  void PoseCallback(const geometry_msgs::msg::PoseStamped::SharedPtr pose);
 };
 
 }  // namespace ff

@@ -13,7 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(ff_msgs REQUIRED)
 
 # Estimation library
-add_library(est_lib src/base_estimator.cpp src/pose2d_estimator.cpp)
+add_library(est_lib src/base_mocap_estimator.cpp)
 target_include_directories(est_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -38,10 +38,10 @@ install(
 )
 
 # motion capture estimator node
-add_executable(mocap_estimator_node src/mocap_estimator_node.cpp)
-target_link_libraries(mocap_estimator_node est_lib)
+add_executable(moving_avg_estimator_node src/moving_avg_estimator_node.cpp)
+target_link_libraries(moving_avg_estimator_node est_lib)
 
-install(TARGETS mocap_estimator_node
+install(TARGETS moving_avg_estimator_node
         DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
