@@ -58,10 +58,10 @@ def generate_test_description():
         name="pd_ctrl_node",
         namespace=ROBOT_NAME,
     )
-    mocap_estimator = Node(
+    estimator = Node(
         package="ff_estimate",
-        executable="mocap_estimator_node",
-        name="mocap_estimator_node",
+        executable="moving_avg_estimator_node",
+        name="moving_avg_estimator_node",
         namespace=ROBOT_NAME,
     )
 
@@ -70,7 +70,7 @@ def generate_test_description():
             DeclareLaunchArgument("impl", default_value="cpp", choices=["cpp", "py"]),
             sim_launch,
             pd_ctrl_node,
-            mocap_estimator,
+            estimator,
             ReadyToTest(),
         ]
     )
