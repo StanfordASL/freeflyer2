@@ -1,0 +1,5 @@
+source;share/ff_estimate/local_setup.bash
+source;share/ff_estimate/local_setup.dsv
+source;share/ff_estimate/local_setup.ps1
+source;share/ff_estimate/local_setup.sh
+source;share/ff_estimate/local_setup.zsh

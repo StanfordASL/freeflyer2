@@ -38,10 +38,24 @@ install(
 )
 
 # motion capture estimator node
-add_executable(moving_avg_estimator_node src/moving_avg_estimator_node.cpp)
-target_link_libraries(moving_avg_estimator_node est_lib)
+# add_executable(moving_avg_estimator_node src/moving_avg_estimator_node.cpp)
+# target_link_libraries(moving_avg_estimator_node est_lib)
 
-install(TARGETS moving_avg_estimator_node
+# install(TARGETS moving_avg_estimator_node
+#         DESTINATION lib/${PROJECT_NAME})
+
+# if(BUILD_TESTING)
+#   find_package(ament_lint_auto REQUIRED)
+#   ament_lint_auto_find_test_dependencies()
+# endif()
+
+# ament_package()
+
+# kalman filter estimator node
+add_executable(kalman_filter_node src/kalman_filter_node.cpp)
+target_link_libraries(kalman_filter_node est_lib)
+
+install(TARGETS kalman_filter_node
         DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

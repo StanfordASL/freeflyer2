@@ -63,8 +63,8 @@ def generate_launch_description():
             ),
             Node(
                 package="ff_estimate",
-                executable="moving_avg_estimator_node",
-                name="moving_avg_estimator_node",
+                executable="moving_avg_estimator",
+                name="moving_avg_estimator",
                 namespace=robot_name,
             ),
         ]

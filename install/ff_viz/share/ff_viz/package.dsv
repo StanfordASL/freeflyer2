@@ -1,0 +1,8 @@
+source;share/ff_viz/hook/cmake_prefix_path.ps1
+source;share/ff_viz/hook/cmake_prefix_path.dsv
+source;share/ff_viz/hook/cmake_prefix_path.sh
+source;share/ff_viz/local_setup.bash
+source;share/ff_viz/local_setup.dsv
+source;share/ff_viz/local_setup.ps1
+source;share/ff_viz/local_setup.sh
+source;share/ff_viz/local_setup.zsh
