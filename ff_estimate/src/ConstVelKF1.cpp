@@ -127,7 +127,7 @@ class ConstVelKF {
     std::array<std::array<float, 6>, 6> A;
     std::array<float, 2> dtmatrix = {dt, dt};
     A = diagonal_matrix_offset<6,6>(diagonalone, 0);
-    A = diagonal_matrix_offset<6,6>(dtmatrix, 2);
+    A = diagonal_matrix_offset<6,6>(dtmatrix, 4);
 
     this->x = matrix_multiply(A, this->x);
     this->P = add_matrix(matrix_multiply(matrix_multiply(A, this->P), transpose(A)), matrix_const_mult(Q, dt));
