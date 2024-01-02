@@ -7,6 +7,8 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3)
 find_package(geometry_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 
@@ -18,10 +20,10 @@ target_include_directories(est_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(est_lib PUBLIC cxx_std_17)
-ament_target_dependencies(est_lib rclcpp ff_msgs geometry_msgs)
+ament_target_dependencies(est_lib rclcpp ff_msgs geometry_msgs Eigen3)
 
 ament_export_targets(est_libTarget HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp ff_msgs)
+ament_export_dependencies(rclcpp ff_msgs Eigen3 eigen3_cmake_module)
 
 install(
   DIRECTORY include/
