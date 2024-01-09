@@ -31,6 +31,7 @@ import time
 
 from ff_msgs.msg import ThrusterCommand
 from ff_msgs.msg import WheelVelCommand
+from ff_msgs.msg import BinaryCommand
 from std_msgs.msg import Bool
 
 class SafetyFilter(Node):
@@ -46,6 +47,7 @@ class SafetyFilter(Node):
         # Create publishers for thruster and wheel commands
         self.thrust_pub = self.create_publisher(ThrusterCommand, 'commands/duty_cycle', 10)
         self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
+        self.bool_thrust_pub = self.create_publisher(BinaryCommand, 'commands/binary', 10)
 
         # Create subscribers for thruster and wheel commands
         self.thrust_sub = self.create_subscription(
@@ -57,6 +59,11 @@ class SafetyFilter(Node):
             WheelVelCommand,
             'ctrl/velocity',
             self.wheel_callback,
+            10)
+        self.bool_thrust_sub = self.create_subscription(
+            BinaryCommand,
+            'ctrl/binary',
+            self.bool_thrust_callback,
             10)
 
         # Create timer to check if we've received any messages in the last 'wait_period' seconds
@@ -95,6 +102,15 @@ class SafetyFilter(Node):
         # Store time last message was published
         self.last_thrust_time = self.get_clock().now()
 
+    def bool_thrust_callback(self, msg):
+        if self.kill_state:
+            self.get_logger().info("Kill state is active. Ignoring thrust command.")
+            return
+        # Publish the message to thrust pub
+        self.bool_thrust_pub.publish(msg)
+        # Store time last message was published
+        self.last_thrust_time = self.get_clock().now()
+
     def wheel_callback(self, msg):
         if self.kill_state:
             self.get_logger().info("Kill state is active. Ignoring wheel command.")
@@ -108,7 +124,14 @@ class SafetyFilter(Node):
         zero_thrust_msg = ThrusterCommand()
         zero_thrust_msg.header.stamp = self.get_clock().now().to_msg()
         zero_thrust_msg.duty_cycle = np.zeros(8)
-        self.thrust_pub.publish(ThrusterCommand())
+
+        zero_thrust_binary_msg = BinaryCommand()
+        zero_thrust_binary_msg.header.stamp = self.get_clock().now().to_msg()
+        zero_thrust_binary_msg.binary_command = [False] * 8
+        
+        self.thrust_pub.publish(zero_thrust_msg)
+        self.bool_thrust_pub.publish(zero_thrust_binary_msg)
+        
 
     def send_zero_wheel(self):
         zero_wheel_msg = WheelVelCommand()

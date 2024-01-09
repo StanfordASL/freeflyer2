@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+import copy
+import rclpy
+
+import numpy as np
+
+from ff_control.ll_binary_ctrl import LowLevelBinaryController
+from ff_msgs.msg import FreeFlyerStateStamped
+from geometry_msgs.msg import PoseStamped
+from simulator_node.py import FreeFlyerSimulator
+
+
+class MPCController(LowLevelBinaryController):
+
+    def __init__(self):
+        super().__init__('mpc_control_node')
+        self._state_sub = self.create_subscription(
+            FreeFlyerStateStamped,
+            self.get_parameter("state_channel").get_parameter_value().string_value,
+            self._state_callback,
+            10,
+        )
+
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            'ctrl/state', self.state_setpoint_callback, 10)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            '/goal_pose', self.rviz_setpoint_callback, 10)
+        self.timer = self.create_timer(0.1, self.control_loop)
+        self.state_desired = FreeFlyerStateStamped()
+
+    def state_ready_callback(self) -> None:
+        # copy current position as goal position
+        self.state_desired.header.stamp = self.get_clock().now().to_msg()
+        self.state_desired.state = self.get_state()
+
+    def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self.state_desired = copy.deepcopy(msg)
+
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        self.state_desired.header.stamp = msg.header.stamp
+
+        self.state_desired.state.pose.x = msg.pose.position.x
+        self.state_desired.state.pose.y = msg.pose.position.y
+        z = msg.pose.orientation.z
+        w = msg.pose.orientation.w
+        self.state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+
+        self.state_desired.state.twist.vx = 0.
+        self.state_desired.state.twist.vy = 0.
+        self.state_desired.state.twist.wz = 0.
+
+    def control_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            return
+
+        # build feedback gain matrix
+        gain_f = self.get_parameter('gain_f').get_parameter_value().double_value
+        gain_df = self.get_parameter('gain_df').get_parameter_value().double_value
+        gain_t = self.get_parameter('gain_t').get_parameter_value().double_value
+        gain_dt = self.get_parameter('gain_dt').get_parameter_value().double_value
+        K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+                       [0, gain_f, 0, 0, gain_df, 0],
+                       [0, 0, gain_t, 0, 0, gain_dt]])
+
+        self.send_control(self.state_desired.state, K)
+        self.set_thrust_binary()
+
+def main(args=None):
+    rclpy.init(args=args)
+    pd_ctrl = PDControlNode()
+    rclpy.spin(pd_ctrl)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
