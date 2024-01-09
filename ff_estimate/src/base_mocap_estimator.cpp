@@ -21,27 +21,49 @@
 // SOFTWARE.
 
 
-#include "ff_estimate/base_estimator.hpp"
+#include "ff_estimate/base_mocap_estimator.hpp"
 
 using ff_msgs::msg::FreeFlyerState;
 using ff_msgs::msg::FreeFlyerStateStamped;
+using ff_msgs::msg::Pose2DStamped;
+using geometry_msgs::msg::PoseStamped;
 
 namespace ff
 {
 
-BaseEstimator::BaseEstimator(const std::string & node_name)
+BaseMocapEstimator::BaseMocapEstimator(const std::string & node_name)
 : rclcpp::Node(node_name)
 {
+  const std::string pose_channel = this->declare_parameter("pose_channel", "mocap/sim/pose");
+  pose_sub_ = this->create_subscription<PoseStamped>(
+    pose_channel, rclcpp::SensorDataQoS(), [this](const PoseStamped::SharedPtr msg) {
+      PoseCallback(msg);
+    });
   state_pub_ = this->create_publisher<FreeFlyerStateStamped>("est/state", 10);
 }
 
-void BaseEstimator::SendStateEstimate(const FreeFlyerState & state)
+void BaseMocapEstimator::SendStateEstimate(const FreeFlyerState & state)
 {
   ff_msgs::msg::FreeFlyerStateStamped msg{};
   msg.state = state;
   msg.header.stamp = this->get_clock()->now();
 
   state_pub_->publish(msg);
+}
+
+void BaseMocapEstimator::PoseCallback(const PoseStamped::SharedPtr pose)
+{
+  // convert to 3D pose to 2D pose
+  Pose2DStamped pose2d{};
+
+  pose2d.header = pose->header;
+  pose2d.pose.x = pose->pose.position.x;
+  pose2d.pose.y = pose->pose.position.y;
+  double w = pose->pose.orientation.w;
+  double z = pose->pose.orientation.z;
+  pose2d.pose.theta = std::atan2(2 * w * z, w * w - z * z);
+
+  EstimateWithPose2D(pose2d);
 }
 
 }  // namespace ff
