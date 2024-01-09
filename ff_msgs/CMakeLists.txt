@@ -19,9 +19,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Wrench2DStamped.msg"
   "msg/FreeFlyerState.msg"
   "msg/FreeFlyerStateStamped.msg"
-  "msg/ThrusterCommand.msg"
+  "msg/ThrusterPWMCommand.msg"
   "msg/WheelVelCommand.msg"
-  "msg/BinaryCommand.msg"
+  "msg/ThrusterBinaryCommand.msg"
   DEPENDENCIES std_msgs
 )
 

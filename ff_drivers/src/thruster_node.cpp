@@ -27,7 +27,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "ff_drivers/pwm.hpp"
-#include "ff_msgs/msg/thruster_command.hpp"
+#include "ff_msgs/msg/thruster_pwm_command.hpp"
 
 #define NUM_THRUSTERS 8
 
@@ -46,7 +46,7 @@ static constexpr int THRUSTER_PINS[NUM_THRUSTERS] = {
 
 
 using namespace std::chrono_literals;
-using ff_msgs::msg::ThrusterCommand;
+using ff_msgs::msg::ThrusterPWMCommand;
 
 class ThrusterNode : public ff::PWMManager
 {
@@ -72,20 +72,20 @@ public:
     this->EnableAll();
 
     // listen to commands
-    sub_duty_cycle_ = this->create_subscription<ThrusterCommand>(
+    sub_duty_cycle_ = this->create_subscription<ThrusterPWMCommand>(
       "commands/duty_cycle",
-      10, [this](const ThrusterCommand::SharedPtr msg) {DutyCycleCallback(msg);});
+      10, [this](const ThrusterPWMCommand::SharedPtr msg) {DutyCycleCallback(msg);});
   }
 
 private:
   std::shared_ptr<rclcpp::ParameterEventHandler> sub_params_;
   std::shared_ptr<rclcpp::ParameterCallbackHandle> cb_period_;
-  rclcpp::Subscription<ThrusterCommand>::SharedPtr sub_duty_cycle_;
+  rclcpp::Subscription<ThrusterPWMCommand>::SharedPtr sub_duty_cycle_;
 
-  void DutyCycleCallback(const ThrusterCommand::SharedPtr msg)
+  void DutyCycleCallback(const ThrusterPWMCommand::SharedPtr msg)
   {
     for (size_t i = 0; i < NUM_THRUSTERS; ++i) {
-      this->SetDutyCycle(i, msg->duty_cycle[i]);
+      this->SetDutyCycle(i, msg->duty_cycles[i]);
     }
   }
 };

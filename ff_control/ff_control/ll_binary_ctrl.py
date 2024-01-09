@@ -1,4 +1,4 @@
-from ff_msgs.msg import ThrusterCommand
+from ff_msgs.msg import ThrusterPWMCommand
 from ff_msgs.msg import BinaryCommand
 from ff_params import RobotParams
 

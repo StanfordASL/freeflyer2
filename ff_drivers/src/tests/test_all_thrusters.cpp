@@ -25,10 +25,10 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_msgs/msg/thruster_command.hpp"
+#include "ff_msgs/msg/thruster_pwm_command.hpp"
 
 using namespace std::chrono_literals;
-using ff_msgs::msg::ThrusterCommand;
+using ff_msgs::msg::ThrusterPWMCommand;
 
 
 class TestAllThrustersNode : public rclcpp::Node
@@ -37,13 +37,13 @@ public:
   TestAllThrustersNode()
   : rclcpp::Node("test_all_thrusters_node")
   {
-    thrust_cmd_pub_ = this->create_publisher<ThrusterCommand>("commands/duty_cycle", 10);
+    thrust_cmd_pub_ = this->create_publisher<ThrusterPWMCommand>("commands/duty_cycle", 10);
     timer_ = this->create_wall_timer(5s, std::bind(&TestAllThrustersNode::TimerCallback, this));
     this->declare_parameter("duty_cycle", .2);
   }
 
 private:
-  rclcpp::Publisher<ThrusterCommand>::SharedPtr thrust_cmd_pub_;
+  rclcpp::Publisher<ThrusterPWMCommand>::SharedPtr thrust_cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
   int th_idx_ = 0;
 
@@ -52,11 +52,11 @@ private:
     double duty_cycle = this->get_parameter("duty_cycle").as_double();
 
     // populate thrust msg
-    ThrusterCommand msg{};
+    ThrusterPWMCommand msg{};
     for (int i = 0; i < 8; ++i) {
-      msg.duty_cycle[i] = 0.;
+      msg.duty_cycles[i] = 0.;
       if (i == th_idx_) {
-        msg.duty_cycle[i] = duty_cycle;
+        msg.duty_cycles[i] = duty_cycle;
       }
     }
 

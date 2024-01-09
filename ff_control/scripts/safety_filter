@@ -29,7 +29,7 @@ from rclpy.duration import Duration
 import numpy as np
 import time
 
-from ff_msgs.msg import ThrusterCommand
+from ff_msgs.msg import ThrusterPWMCommand
 from ff_msgs.msg import WheelVelCommand
 from ff_msgs.msg import BinaryCommand
 from std_msgs.msg import Bool
@@ -45,13 +45,13 @@ class SafetyFilter(Node):
         self.kill_state = False
 
         # Create publishers for thruster and wheel commands
-        self.thrust_pub = self.create_publisher(ThrusterCommand, 'commands/duty_cycle', 10)
+        self.thrust_pub = self.create_publisher(ThrusterPWMCommand, 'commands/duty_cycle', 10)
         self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
         self.bool_thrust_pub = self.create_publisher(BinaryCommand, 'commands/binary', 10)
 
         # Create subscribers for thruster and wheel commands
         self.thrust_sub = self.create_subscription(
-            ThrusterCommand,
+            ThrusterPWMCommand,
             'ctrl/duty_cycle',
             self.thrust_callback,
             10)
@@ -121,17 +121,17 @@ class SafetyFilter(Node):
         self.last_wheel_time = self.get_clock().now()
 
     def send_zero_thrust(self):
-        zero_thrust_msg = ThrusterCommand()
+        zero_thrust_msg = ThrusterPWMCommand()
         zero_thrust_msg.header.stamp = self.get_clock().now().to_msg()
-        zero_thrust_msg.duty_cycle = np.zeros(8)
+        zero_thrust_msg.duty_cycles = np.zeros(8)
 
         zero_thrust_binary_msg = BinaryCommand()
         zero_thrust_binary_msg.header.stamp = self.get_clock().now().to_msg()
         zero_thrust_binary_msg.binary_command = [False] * 8
-        
+
         self.thrust_pub.publish(zero_thrust_msg)
         self.bool_thrust_pub.publish(zero_thrust_binary_msg)
-        
+
 
     def send_zero_wheel(self):
         zero_wheel_msg = WheelVelCommand()

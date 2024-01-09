@@ -1,2 +1,2 @@
 std_msgs/Header header
-bool[8] binary_command
+bool[8] switches

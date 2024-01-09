@@ -28,7 +28,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_msgs/msg/thruster_command.hpp"
+#include "ff_msgs/msg/thruster_pwm_command.hpp"
 #include "ff_msgs/msg/wheel_vel_command.hpp"
 #include "ff_params/robot_params.hpp"
 
@@ -62,7 +62,7 @@ protected:
   void SetWheelVelocity(const double & velocity);
 
 private:
-  rclcpp::Publisher<ff_msgs::msg::ThrusterCommand>::SharedPtr thruster_pub_;
+  rclcpp::Publisher<ff_msgs::msg::ThrusterPWMCommand>::SharedPtr thruster_pub_;
   rclcpp::Publisher<ff_msgs::msg::WheelVelCommand>::SharedPtr wheel_pub_;
 };
 

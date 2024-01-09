@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from ff_msgs.msg import ThrusterCommand
+from ff_msgs.msg import ThrusterPWMCommand
 from ff_msgs.msg import WheelVelCommand
 from ff_params import RobotParams
 
@@ -37,7 +37,7 @@ class LowLevelController(Node):
         self.p = RobotParams(self)
 
         # low level control publishers
-        self._thruster_pub = self.create_publisher(ThrusterCommand, "ctrl/duty_cycle", 10)
+        self._thruster_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
         self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
 
     def set_thrust_duty_cycle(self, duty_cycle: np.ndarray) -> None:
@@ -46,12 +46,12 @@ class LowLevelController(Node):
 
         :param duty_cycle: duty cycle for each thrust (in [0, 1])
         """
-        if len(duty_cycle) != len(ThrusterCommand().duty_cycle):
+        if len(duty_cycle) != len(ThrusterPWMCommand().duty_cycles):
             self.get_logger().error("Incompatible thruster length sent.")
             return
-        msg = ThrusterCommand()
+        msg = ThrusterPWMCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.duty_cycle = duty_cycle
+        msg.duty_cycles = duty_cycle
         self._thruster_pub.publish(msg)
 
     def set_wheel_velocity(self, velocity: float) -> None:
