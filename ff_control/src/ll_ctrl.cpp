@@ -48,7 +48,8 @@ void LowLevelController::SetThrustDutyCycle(const std::array<double, 8> & duty_c
   thrust_pwm_pub_->publish(msg);
 }
 
-void LowLevelController::SetBinaryThrust(const std::array<bool, 8> & switches) {
+void LowLevelController::SetBinaryThrust(const std::array<bool, 8> & switches)
+{
   ThrusterBinaryCommand msg{};
   msg.header.stamp = this->get_clock()->now();
   msg.switches = switches;
