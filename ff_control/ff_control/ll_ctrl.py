@@ -48,6 +48,8 @@ class LowLevelController(Node):
         Send command to set the thrusters duty cycles.
 
         :param duty_cycle: duty cycle for each thrust (in [0, 1])
+
+        Note: this function works only when pwm_ctrl_cpp_node is running
         """
         if len(duty_cycle) != len(ThrusterPWMCommand().duty_cycles):
             self.get_logger().error("Incompatible thruster length sent.")
