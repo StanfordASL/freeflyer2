@@ -24,6 +24,7 @@
 #include "ff_control/ll_ctrl.hpp"
 
 using ff_msgs::msg::ThrusterPWMCommand;
+using ff_msgs::msg::ThrusterBinaryCommand;
 using ff_msgs::msg::WheelVelCommand;
 
 namespace ff
@@ -33,7 +34,8 @@ LowLevelController::LowLevelController()
 : rclcpp::Node("ll_ctrl_node"),
   p_(this)
 {
-  thruster_pub_ = this->create_publisher<ThrusterPWMCommand>("ctrl/duty_cycle", 10);
+  thrust_pwm_pub_ = this->create_publisher<ThrusterPWMCommand>("ctrl/duty_cycle", 10);
+  thrust_binary_pub_ = this->create_publisher<ThrusterBinaryCommand>("ctrl/binary_command", 10);
   wheel_pub_ = this->create_publisher<WheelVelCommand>("ctrl/velocity", 10);
 }
 
@@ -43,7 +45,15 @@ void LowLevelController::SetThrustDutyCycle(const std::array<double, 8> & duty_c
   msg.header.stamp = this->get_clock()->now();
   msg.duty_cycles = duty_cycle;
 
-  thruster_pub_->publish(msg);
+  thrust_pwm_pub_->publish(msg);
+}
+
+void LowLevelController::SetBinaryThrust(const std::array<bool, 8> & switches) {
+  ThrusterBinaryCommand msg{};
+  msg.header.stamp = this->get_clock()->now();
+  msg.switches = switches;
+
+  thrust_binary_pub_->publish(msg);
 }
 
 void LowLevelController::SetWheelVelocity(const double & velocity)

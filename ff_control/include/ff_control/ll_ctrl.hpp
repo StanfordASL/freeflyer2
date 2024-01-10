@@ -29,6 +29,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "ff_msgs/msg/thruster_pwm_command.hpp"
+#include "ff_msgs/msg/thruster_binary_command.hpp"
 #include "ff_msgs/msg/wheel_vel_command.hpp"
 #include "ff_params/robot_params.hpp"
 
@@ -54,6 +55,13 @@ protected:
   void SetThrustDutyCycle(const std::array<double, 8> & duty_cycle);
 
   /**
+   * @brief send binary switching command to the thrusters
+   *
+   * @param switches boolean switches for each thruster (True is on, False is off)
+   */
+  void SetBinaryThrust(const std::array<bool, 8> & switches);
+
+  /**
    * @brief send command to set the inertial wheel velocity
    *        @TODO(alvin): support this or remove?
    *
@@ -62,7 +70,8 @@ protected:
   void SetWheelVelocity(const double & velocity);
 
 private:
-  rclcpp::Publisher<ff_msgs::msg::ThrusterPWMCommand>::SharedPtr thruster_pub_;
+  rclcpp::Publisher<ff_msgs::msg::ThrusterPWMCommand>::SharedPtr thrust_pwm_pub_;
+  rclcpp::Publisher<ff_msgs::msg::ThrusterBinaryCommand>::SharedPtr thrust_binary_pub_;
   rclcpp::Publisher<ff_msgs::msg::WheelVelCommand>::SharedPtr wheel_pub_;
 };
 
