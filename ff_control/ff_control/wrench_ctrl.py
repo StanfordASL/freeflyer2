@@ -93,7 +93,7 @@ class WrenchController(LowLevelController):
 
     def clip_wrench(self, wrench: Wrench2D) -> Wrench2D:
         wrench_clipped = Wrench2D()
-        force = np.sqrt(wrench.fx**2 + wrench.fy**2)
+        force = np.sqrt(wrench.fx ** 2 + wrench.fy ** 2)
         force_scale = max(force / self.p.actuators["F_body_max"], 1.0)
         torque_scale = max(abs(wrench.tz) / self.p.actuators["M_body_max"], 1.0)
 

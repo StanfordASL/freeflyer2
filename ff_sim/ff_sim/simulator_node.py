@@ -38,7 +38,13 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 
-from ff_msgs.msg import FreeFlyerStateStamped, Wrench2DStamped, ThrusterPWMCommand, WheelVelCommand, BinaryCommand
+from ff_msgs.msg import (
+    FreeFlyerStateStamped,
+    Wrench2DStamped,
+    ThrusterPWMCommand,
+    WheelVelCommand,
+    ThrusterBinaryCommand,
+)
 
 from ff_params import RobotParams
 
@@ -163,7 +169,7 @@ class FreeFlyerSimulator(Node):
             ThrusterPWMCommand, "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10
         )
         self.sub_thrusters_cmd_binary = self.create_subscription(
-            BinaryCommand, "commands/binary", self.update_thrusters_binary_cmd_cb, 10
+            ThrusterBinaryCommand, "commands/binary", self.update_thrusters_binary_cmd_cb, 10
         )
         self.sub_state_init = self.create_subscription(
             FreeFlyerStateStamped, "state_init", self.update_state_init_cb, 10
@@ -264,8 +270,8 @@ class FreeFlyerSimulator(Node):
         # Saturate controls so within [0,1] (in %)
         self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycles, 0.0, 1.0)
 
-    def update_thrusters_binary_cmd_cb(self, msg: BinaryCommand) -> None:
-        self.thrusters_dutycycle_cmd = np.array(msg.binary_command, dtype = float)
+    def update_thrusters_binary_cmd_cb(self, msg: ThrusterBinaryCommand) -> None:
+        self.thrusters_dutycycle_cmd = np.array(msg.switches, dtype=float)
 
     def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
         self.x_cur = np.array(
@@ -377,7 +383,7 @@ class FreeFlyerSimulator(Node):
         f[2] = thetadot
         thetaddot = (M - F[1] * p0[0] + F[0] * p0[1]) / J
         f[3:5] = np.matmul(
-            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0))
+            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot ** 2 * p0))
         )
         f[5] = thetaddot
 

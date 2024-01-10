@@ -31,7 +31,7 @@ import time
 
 from ff_msgs.msg import ThrusterPWMCommand
 from ff_msgs.msg import WheelVelCommand
-from ff_msgs.msg import BinaryCommand
+from ff_msgs.msg import ThrusterBinaryCommand
 from std_msgs.msg import Bool
 
 class SafetyFilter(Node):
@@ -47,7 +47,7 @@ class SafetyFilter(Node):
         # Create publishers for thruster and wheel commands
         self.thrust_pub = self.create_publisher(ThrusterPWMCommand, 'commands/duty_cycle', 10)
         self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
-        self.bool_thrust_pub = self.create_publisher(BinaryCommand, 'commands/binary', 10)
+        self.bool_thrust_pub = self.create_publisher(ThrusterBinaryCommand, 'commands/binary', 10)
 
         # Create subscribers for thruster and wheel commands
         self.thrust_sub = self.create_subscription(
@@ -61,7 +61,7 @@ class SafetyFilter(Node):
             self.wheel_callback,
             10)
         self.bool_thrust_sub = self.create_subscription(
-            BinaryCommand,
+            ThrusterBinaryCommand,
             'ctrl/binary',
             self.bool_thrust_callback,
             10)
@@ -125,9 +125,9 @@ class SafetyFilter(Node):
         zero_thrust_msg.header.stamp = self.get_clock().now().to_msg()
         zero_thrust_msg.duty_cycles = np.zeros(8)
 
-        zero_thrust_binary_msg = BinaryCommand()
+        zero_thrust_binary_msg = ThrusterBinaryCommand()
         zero_thrust_binary_msg.header.stamp = self.get_clock().now().to_msg()
-        zero_thrust_binary_msg.binary_command = [False] * 8
+        zero_thrust_binary_msg.switches = [False] * 8
 
         self.thrust_pub.publish(zero_thrust_msg)
         self.bool_thrust_pub.publish(zero_thrust_binary_msg)

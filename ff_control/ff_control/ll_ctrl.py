@@ -20,12 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from ff_msgs.msg import ThrusterPWMCommand
+import numpy as np
+import typing as T
+
+from ff_msgs.msg import ThrusterPWMCommand, ThrusterBinaryCommand
 from ff_msgs.msg import WheelVelCommand
 from ff_params import RobotParams
-
-import numpy as np
-
 from rclpy.node import Node
 
 
@@ -36,8 +36,12 @@ class LowLevelController(Node):
         # robot parameters that can be accessed by sub-classes
         self.p = RobotParams(self)
 
-        # low level control publishers
-        self._thruster_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
+        # low level thruster control publishers
+        self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
+        self._thruster_binary_pub = self.create_publisher(
+            ThrusterBinaryCommand, "ctrl/binary_command", 10
+        )
+
         self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
 
     def set_thrust_duty_cycle(self, duty_cycle: np.ndarray) -> None:
@@ -52,7 +56,21 @@ class LowLevelController(Node):
         msg = ThrusterPWMCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.duty_cycles = duty_cycle
-        self._thruster_pub.publish(msg)
+        self._thruster_pwm_pub.publish(msg)
+
+    def set_thrust_binary(self, binary_command: T.Sequence[bool]) -> None:
+        """
+        Send command to set the thrusters binary output.
+
+        :param binary_command: binary switch for each thrust
+        """
+        if len(binary_command) != len(ThrusterBinaryCommand().switches):
+            self.get_logger().error("Incompatible thruster length sent.")
+            return
+        msg = ThrusterBinaryCommand()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.switches = binary_command
+        self._thruster_binary_pub.publish(msg)
 
     def set_wheel_velocity(self, velocity: float) -> None:
         """
