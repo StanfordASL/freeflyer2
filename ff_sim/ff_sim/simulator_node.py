@@ -24,7 +24,7 @@
 """
 Simulates the freeflyer.
 
-Maps thrusters duty cycle + wheel control input
+Maps thrusters + wheel control input
 to a state evolution over time
 -----------------------------------------------
 """
@@ -155,7 +155,7 @@ class FreeFlyerSimulator(Node):
         self.F_cmd_body = np.zeros(2)  # (x,y)
         self.theta_dot_cmd = 0.0
         # commands
-        self.thrusters_dutycycle_cmd = np.zeros(8)
+        self.thrusters = np.zeros(8)
         self.wheel_vel_cmd = 0.0
         # current states of the freeflyer, in world frame
         self.x_cur = self.x_0.copy()  # (x, y, theta, v_x, v_y, theta_dot)
@@ -165,11 +165,8 @@ class FreeFlyerSimulator(Node):
         self.sub_wheel_cmd_vel = self.create_subscription(
             WheelVelCommand, "commands/velocity", self.update_wheel_cmd_vel_cb, 10
         )
-        self.sub_thrusters_cmd_dutycycle = self.create_subscription(
-            ThrusterPWMCommand, "commands/duty_cycle", self.update_thrusters_dutycycle_cmd_cb, 10
-        )
         self.sub_thrusters_cmd_binary = self.create_subscription(
-            ThrusterBinaryCommand, "commands/binary", self.update_thrusters_binary_cmd_cb, 10
+            ThrusterBinaryCommand, "commands/thrust_binary", self.update_thrusters_binary_cmd_cb, 10
         )
         self.sub_state_init = self.create_subscription(
             FreeFlyerStateStamped, "state_init", self.update_state_init_cb, 10
@@ -194,13 +191,13 @@ class FreeFlyerSimulator(Node):
         now = self.get_clock().now().to_msg()
 
         # Get thrusters forces
-        # Note: assume perfect mapping from duty cycle to true forces. (ToDo: simulate missmatch)
-        F_bodyFrame, M = self.thrusters_dutycycle_to_body_wrench(self.thrusters_dutycycle_cmd)
+        # Note: assume perfect mapping from thrust to true forces. (ToDo: simulate missmatch)
+        F_bodyFrame, M = self.thrusters_to_body_wrench(self.thrusters)
         # Get true torque
-        # Note: assume perfect mapping from duty cycle to true forces. (ToDo: simulate missmatch)
+        # Note: assume perfect mapping from thrust to true forces. (ToDo: simulate missmatch)
         self.F_cmd_body = F_bodyFrame
 
-        # Publish true exerted force on freeflyer, as a mapping of the thrusters command duty cycle
+        # Publish true exerted force on freeflyer, as a mapping of the thrusters command
         R = self.get_rotmatrix_body_to_world(self.x_cur[2])
         F_worldFrame = np.matmul(R, F_bodyFrame)
         wrench_msg = Wrench2DStamped()
@@ -266,12 +263,8 @@ class FreeFlyerSimulator(Node):
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
 
-    def update_thrusters_dutycycle_cmd_cb(self, msg: ThrusterPWMCommand) -> None:
-        # Saturate controls so within [0,1] (in %)
-        self.thrusters_dutycycle_cmd = np.clip(msg.duty_cycles, 0.0, 1.0)
-
-    def update_thrusters_binary_cmd_cb(self, msg: ThrusterBinaryCommand) -> None:
-        self.thrusters_dutycycle_cmd = np.array(msg.switches, dtype=float)
+    def update_thrusters_cb(self, msg: ThrusterBinaryCommand) -> None:
+        self.thrusters = np.array(msg.switches, dtype=float)
 
     def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
         self.x_cur = np.array(
@@ -285,7 +278,7 @@ class FreeFlyerSimulator(Node):
             ]
         )
 
-    def thrusters_dutycycle_to_body_wrench(self, thrusters_dutycycles_vec):
+    def thrusters_to_body_wrench(self, thrusters_vec):
         # Thrusters Configuration
         #      (2) e_y (1)        ___
         #     <--   ^   -->      /   \
@@ -302,7 +295,7 @@ class FreeFlyerSimulator(Node):
         Fmax = self.p.actuators["F_max_per_thruster"]
         dist = self.p.actuators["thrusters_lever_arm"]
 
-        u_dc = thrusters_dutycycles_vec
+        u_dc = thrusters_vec
 
         F_x = Fmax * ((u_dc[2] + u_dc[5]) - (u_dc[1] + u_dc[6]))
         F_y = Fmax * ((u_dc[4] + u_dc[7]) - (u_dc[0] + u_dc[3]))

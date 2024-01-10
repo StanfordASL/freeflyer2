@@ -47,7 +47,7 @@ class SafetyFilter(Node):
         # Create publishers for thruster and wheel commands
         self.thrust_pub = self.create_publisher(ThrusterPWMCommand, 'commands/duty_cycle', 10)
         self.wheel_pub = self.create_publisher(WheelVelCommand, 'commands/velocity', 10)
-        self.bool_thrust_pub = self.create_publisher(ThrusterBinaryCommand, 'commands/binary', 10)
+        self.bool_thrust_pub = self.create_publisher(ThrusterBinaryCommand, 'commands/thrust_binary', 10)
 
         # Create subscribers for thruster and wheel commands
         self.thrust_sub = self.create_subscription(
@@ -62,7 +62,7 @@ class SafetyFilter(Node):
             10)
         self.bool_thrust_sub = self.create_subscription(
             ThrusterBinaryCommand,
-            'ctrl/binary',
+            'ctrl/thrust_binary',
             self.bool_thrust_callback,
             10)
 
