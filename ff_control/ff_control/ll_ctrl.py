@@ -39,7 +39,7 @@ class LowLevelController(Node):
         # low level thruster control publishers
         self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
         self._thruster_binary_pub = self.create_publisher(
-            ThrusterBinaryCommand, "ctrl/binary_command", 10
+            ThrusterBinaryCommand, "ctrl/binary_thrust", 10
         )
 
         self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
@@ -58,18 +58,18 @@ class LowLevelController(Node):
         msg.duty_cycles = duty_cycle
         self._thruster_pwm_pub.publish(msg)
 
-    def set_thrust_binary(self, binary_command: T.Sequence[bool]) -> None:
+    def set_thrust_binary(self, switches: T.Sequence[bool]) -> None:
         """
         Send command to set the thrusters binary output.
 
-        :param binary_command: binary switch for each thrust
+        :param switches: binary switch for each thrust
         """
-        if len(binary_command) != len(ThrusterBinaryCommand().switches):
+        if len(switches) != len(ThrusterBinaryCommand().switches):
             self.get_logger().error("Incompatible thruster length sent.")
             return
         msg = ThrusterBinaryCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.switches = binary_command
+        msg.switches = switches
         self._thruster_binary_pub.publish(msg)
 
     def set_wheel_velocity(self, velocity: float) -> None:

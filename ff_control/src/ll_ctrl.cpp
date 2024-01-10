@@ -35,7 +35,7 @@ LowLevelController::LowLevelController()
   p_(this)
 {
   thrust_pwm_pub_ = this->create_publisher<ThrusterPWMCommand>("ctrl/duty_cycle", 10);
-  thrust_binary_pub_ = this->create_publisher<ThrusterBinaryCommand>("ctrl/binary_command", 10);
+  thrust_binary_pub_ = this->create_publisher<ThrusterBinaryCommand>("ctrl/binary_thrust", 10);
   wheel_pub_ = this->create_publisher<WheelVelCommand>("ctrl/velocity", 10);
 }
 
