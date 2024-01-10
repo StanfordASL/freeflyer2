@@ -23,8 +23,7 @@
 
 #include "ff_control/ll_ctrl.hpp"
 
-using ff_msgs::msg::ThrusterPWMCommand;
-using ff_msgs::msg::ThrusterBinaryCommand;
+using ff_msgs::msg::ThrusterCommand;
 using ff_msgs::msg::WheelVelCommand;
 
 namespace ff
@@ -34,27 +33,34 @@ LowLevelController::LowLevelController()
 : rclcpp::Node("ll_ctrl_node"),
   p_(this)
 {
-  thrust_pwm_pub_ = this->create_publisher<ThrusterPWMCommand>("ctrl/duty_cycle", 10);
-  thrust_binary_pub_ = this->create_publisher<ThrusterBinaryCommand>("ctrl/binary_thrust", 10);
+  thrust_pub_ = this->create_publisher<ThrusterCommand>("ctrl/binary_thrust", 10);
   wheel_pub_ = this->create_publisher<WheelVelCommand>("ctrl/velocity", 10);
 }
 
-void LowLevelController::SetThrustDutyCycle(const std::array<double, 8> & duty_cycle)
+void LowLevelController::SetAllThrusts(const std::array<bool, 8> & thrusts)
 {
-  ThrusterPWMCommand msg{};
-  msg.header.stamp = this->get_clock()->now();
-  msg.duty_cycles = duty_cycle;
+  thrust_cmd_.header.stamp = this->get_clock()->now();
+  thrust_cmd_.switches = thrusts;
 
-  thrust_pwm_pub_->publish(msg);
+  thrust_pub_->publish(thrust_cmd_);
 }
 
-void LowLevelController::SetBinaryThrust(const std::array<bool, 8> & switches)
+void LowLevelController::SetThrust(size_t idx, bool on)
 {
-  ThrusterBinaryCommand msg{};
-  msg.header.stamp = this->get_clock()->now();
-  msg.switches = switches;
+  if (idx > thrust_cmd_.switches.size()) {
+    RCLCPP_ERROR(this->get_logger(), "thrust index out of range");
+    return;
+  }
 
-  thrust_binary_pub_->publish(msg);
+  thrust_cmd_.header.stamp = this->get_clock()->now();
+  thrust_cmd_.switches[idx] = on;
+
+  thrust_pub_->publish(thrust_cmd_);
+}
+
+const std::array<bool, 8> & LowLevelController::GetThrust() const
+{
+  return thrust_cmd_.switches;
 }
 
 void LowLevelController::SetWheelVelocity(const double & velocity)

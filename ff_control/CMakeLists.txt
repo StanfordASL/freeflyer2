@@ -16,7 +16,13 @@ find_package(rclcpp REQUIRED)
 find_package(ff_msgs REQUIRED)
 find_package(ff_params REQUIRED)
 
-add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp src/keyboard_ctrl.cpp src/linear_ctrl.cpp)
+add_library(ctrl_lib
+    src/ll_ctrl.cpp
+    src/pwm_ctrl.cpp
+    src/wrench_ctrl.cpp
+    src/keyboard_ctrl.cpp
+    src/linear_ctrl.cpp
+)
 target_include_directories(ctrl_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)

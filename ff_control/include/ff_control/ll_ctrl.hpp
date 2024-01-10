@@ -24,12 +24,10 @@
 #pragma once
 
 #include <array>
-#include <string>
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_msgs/msg/thruster_pwm_command.hpp"
-#include "ff_msgs/msg/thruster_binary_command.hpp"
+#include "ff_msgs/msg/thruster_command.hpp"
 #include "ff_msgs/msg/wheel_vel_command.hpp"
 #include "ff_params/robot_params.hpp"
 
@@ -48,18 +46,26 @@ protected:
   const ff::RobotParams p_;
 
   /**
-   * @brief send command to set the thrusters duty cycles
-   *
-   * @param duty_cycle duty cycle for each thruster (in [0, 1])
-   */
-  void SetThrustDutyCycle(const std::array<double, 8> & duty_cycle);
-
-  /**
    * @brief send binary switching command to the thrusters
    *
-   * @param switches boolean switches for each thruster (True is on, False is off)
+   * @param thrusts boolean switches for each thruster (True is on, False is off)
    */
-  void SetBinaryThrust(const std::array<bool, 8> & switches);
+  void SetAllThrusts(const std::array<bool, 8> & thrusts);
+
+  /**
+   * @brief set single thrust command
+   *
+   * @param idx index of the target thruster
+   * @param on  set to true to turn on thruster, false to turn off
+   */
+  void SetThrust(size_t idx, bool on);
+
+  /**
+   * @brief obtain the current state of thrusters
+   *
+   * @return boolean states for each thruster
+   */
+  const std::array<bool, 8> & GetThrust() const;
 
   /**
    * @brief send command to set the inertial wheel velocity
@@ -70,9 +76,9 @@ protected:
   void SetWheelVelocity(const double & velocity);
 
 private:
-  rclcpp::Publisher<ff_msgs::msg::ThrusterPWMCommand>::SharedPtr thrust_pwm_pub_;
-  rclcpp::Publisher<ff_msgs::msg::ThrusterBinaryCommand>::SharedPtr thrust_binary_pub_;
+  rclcpp::Publisher<ff_msgs::msg::ThrusterCommand>::SharedPtr thrust_pub_;
   rclcpp::Publisher<ff_msgs::msg::WheelVelCommand>::SharedPtr wheel_pub_;
+  ff_msgs::msg::ThrusterCommand thrust_cmd_{};
 };
 
 }  // namespace ff

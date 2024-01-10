@@ -25,25 +25,22 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_msgs/msg/thruster_pwm_command.hpp"
+#include "ff_control/pwm_ctrl.hpp"
 
 using namespace std::chrono_literals;
-using ff_msgs::msg::ThrusterPWMCommand;
 
 
-class TestAllThrustersNode : public rclcpp::Node
+class TestAllThrustersNode : public ff::PWMController
 {
 public:
   TestAllThrustersNode()
   : rclcpp::Node("test_all_thrusters_node")
   {
-    thrust_cmd_pub_ = this->create_publisher<ThrusterPWMCommand>("commands/duty_cycle", 10);
     timer_ = this->create_wall_timer(5s, std::bind(&TestAllThrustersNode::TimerCallback, this));
     this->declare_parameter("duty_cycle", .2);
   }
 
 private:
-  rclcpp::Publisher<ThrusterPWMCommand>::SharedPtr thrust_cmd_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
   int th_idx_ = 0;
 
@@ -51,17 +48,17 @@ private:
   {
     double duty_cycle = this->get_parameter("duty_cycle").as_double();
 
+    std::array<double, 8> duty_cycles;
     // populate thrust msg
-    ThrusterPWMCommand msg{};
     for (int i = 0; i < 8; ++i) {
-      msg.duty_cycles[i] = 0.;
+      duty_cycles[i] = 0.;
       if (i == th_idx_) {
-        msg.duty_cycles[i] = duty_cycle;
+        duty_cycles[i] = duty_cycle;
       }
     }
 
     // publish thrust msg
-    this->thrust_cmd_pub_->publish(msg);
+    SetThrustDutyCycle(duty_cycles);
     RCLCPP_INFO(this->get_logger(), "opening valve %d", th_idx_);
 
     // increment th_idx

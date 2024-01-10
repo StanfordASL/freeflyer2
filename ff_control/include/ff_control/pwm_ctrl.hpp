@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2023 Stanford Autonomous Systems Lab
+// Copyright (c) 2024 Stanford Autonomous Systems Lab
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -23,39 +23,37 @@
 
 #pragma once
 
-#include <string>
+#include <array>
+#include <chrono>
 
-#include "ff_control/pwm_ctrl.hpp"
+#include <rclcpp/rclcpp.hpp>
 
-#include "ff_msgs/msg/wrench2_d.hpp"
+#include "ff_control/ll_ctrl.hpp"
 
 namespace ff
 {
 
-class WrenchController : public PWMController
+class PWMController : public LowLevelController
 {
 public:
-  WrenchController();
+  PWMController();
 
 protected:
   /**
-   * @brief set wrench in body frame
+   * @brief send binary switching command to the thrusters
    *
-   * @param wrench_body wrench in body frame
-   * @param use_wheel   set to true to use the inertial wheel (TODO(alvin): unsupported)
+   * @param thrusts boolean switches for each thruster (True is on, False is off)
    */
-  void SetBodyWrench(const ff_msgs::msg::Wrench2D & wrench_body, bool use_wheel = false);
-
-  /**
-   * @brief set wrench in world frame
-   *
-   * @param wrench_world  wrench in world frame
-   * @param theta         rotational state of the freeflyer
-   */
-  void SetWorldWrench(const ff_msgs::msg::Wrench2D & wrench_world, double theta);
+  void SetThrustDutyCycle(const std::array<double, 8> & duty_cycle);
 
 private:
-  ff_msgs::msg::Wrench2D ClipWrench(const ff_msgs::msg::Wrench2D & wrench) const;
+  std::array<double, 8> duty_cycle_ = {0};
+  std::array<rclcpp::TimerBase::SharedPtr, 8> switch_timers_;
+  std::chrono::duration<double> period_ = std::chrono::seconds(0);
+  rclcpp::TimerBase::SharedPtr period_timer_;
+
+  void PeriodCallback();
+  void SwitchCallback(size_t idx);
 };
 
 }  // namespace ff
