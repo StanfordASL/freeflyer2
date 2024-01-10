@@ -37,7 +37,6 @@ class LowLevelController(Node):
         self.p = RobotParams(self)
 
         # low level thruster control publishers
-        self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
         self._thruster_binary_pub = self.create_publisher(ThrusterCommand, "ctrl/binary_thrust", 10)
         self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/pwm_thrust", 10)
 
