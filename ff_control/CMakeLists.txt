@@ -48,6 +48,9 @@ install(
   INCLUDES DESTINATION include
 )
 
+add_executable(pwm_ctrl_cpp_node src/nodes/pwm_ctrl_node.cpp)
+target_link_libraries(pwm_ctrl_cpp_node ctrl_lib)
+
 add_executable(wrench_ctrl_cpp_node src/nodes/wrench_ctrl_node.cpp)
 target_link_libraries(wrench_ctrl_cpp_node ctrl_lib)
 
@@ -59,7 +62,7 @@ add_executable(key_teleop_cpp_node src/nodes/key_teleop_node.cpp)
 target_link_libraries(key_teleop_cpp_node ctrl_lib)
 
 # install CPP nodes
-install(TARGETS wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
+install(TARGETS pwm_ctrl_cpp_node wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
   DESTINATION lib/${PROJECT_NAME})
 
 # install Python libraries

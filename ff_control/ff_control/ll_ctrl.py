@@ -23,7 +23,7 @@
 import numpy as np
 import typing as T
 
-from ff_msgs.msg import ThrusterPWMCommand, ThrusterBinaryCommand
+from ff_msgs.msg import ThrusterPWMCommand, ThrusterCommand
 from ff_msgs.msg import WheelVelCommand
 from ff_params import RobotParams
 from rclpy.node import Node
@@ -38,9 +38,8 @@ class LowLevelController(Node):
 
         # low level thruster control publishers
         self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/duty_cycle", 10)
-        self._thruster_binary_pub = self.create_publisher(
-            ThrusterBinaryCommand, "ctrl/binary_thrust", 10
-        )
+        self._thruster_binary_pub = self.create_publisher(ThrusterCommand, "ctrl/binary_thrust", 10)
+        self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/pwm_thrust", 10)
 
         self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
 
@@ -64,10 +63,10 @@ class LowLevelController(Node):
 
         :param switches: binary switch for each thrust
         """
-        if len(switches) != len(ThrusterBinaryCommand().switches):
+        if len(switches) != len(ThrusterCommand().switches):
             self.get_logger().error("Incompatible thruster length sent.")
             return
-        msg = ThrusterBinaryCommand()
+        msg = ThrusterCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.switches = switches
         self._thruster_binary_pub.publish(msg)

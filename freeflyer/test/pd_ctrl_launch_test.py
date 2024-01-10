@@ -28,7 +28,8 @@ from ff_msgs.msg import FreeFlyerStateStamped
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch_testing.actions import ReadyToTest
@@ -58,6 +59,13 @@ def generate_test_description():
         name="pd_ctrl_node",
         namespace=ROBOT_NAME,
     )
+    pwm_ctrl_node = Node(
+        package="ff_control",
+        executable=["pwm_ctrl_cpp_node"],
+        name="pwm_ctrl_node",
+        namespace=ROBOT_NAME,
+        condition=IfCondition(PythonExpression(["'", impl, "'", " == 'py'"])),
+    )
     estimator = Node(
         package="ff_estimate",
         executable="moving_avg_estimator_node",
@@ -70,6 +78,7 @@ def generate_test_description():
             DeclareLaunchArgument("impl", default_value="cpp", choices=["cpp", "py"]),
             sim_launch,
             pd_ctrl_node,
+            pwm_ctrl_node,
             estimator,
             ReadyToTest(),
         ]

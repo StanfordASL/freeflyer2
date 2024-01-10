@@ -21,6 +21,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FreeFlyerStateStamped.msg"
   "msg/WheelVelCommand.msg"
   "msg/ThrusterCommand.msg"
+  "msg/ThrusterPWMCommand.msg"
   DEPENDENCIES std_msgs
 )
 
