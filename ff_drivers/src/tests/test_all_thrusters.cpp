@@ -34,7 +34,8 @@ class TestAllThrustersNode : public ff::PWMController
 {
 public:
   TestAllThrustersNode()
-  : rclcpp::Node("test_all_thrusters_node")
+  : rclcpp::Node("test_all_thrusters_node"),
+    ff::PWMController()
   {
     timer_ = this->create_wall_timer(5s, std::bind(&TestAllThrustersNode::TimerCallback, this));
     this->declare_parameter("duty_cycle", .2);
