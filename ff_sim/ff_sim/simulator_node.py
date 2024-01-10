@@ -41,9 +41,8 @@ from geometry_msgs.msg import PoseStamped
 from ff_msgs.msg import (
     FreeFlyerStateStamped,
     Wrench2DStamped,
-    ThrusterPWMCommand,
     WheelVelCommand,
-    ThrusterBinaryCommand,
+    ThrusterCommand,
 )
 
 from ff_params import RobotParams
@@ -166,7 +165,7 @@ class FreeFlyerSimulator(Node):
             WheelVelCommand, "commands/velocity", self.update_wheel_cmd_vel_cb, 10
         )
         self.sub_thrusters_cmd_binary = self.create_subscription(
-            ThrusterBinaryCommand, "commands/thrust_binary", self.update_thrusters_binary_cmd_cb, 10
+            ThrusterCommand, "commands/binary_thrust", self.update_thrusters_cb, 10
         )
         self.sub_state_init = self.create_subscription(
             FreeFlyerStateStamped, "state_init", self.update_state_init_cb, 10
@@ -263,7 +262,7 @@ class FreeFlyerSimulator(Node):
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
 
-    def update_thrusters_cb(self, msg: ThrusterBinaryCommand) -> None:
+    def update_thrusters_cb(self, msg: ThrusterCommand) -> None:
         self.thrusters = np.array(msg.switches, dtype=float)
 
     def update_state_init_cb(self, msg: FreeFlyerStateStamped) -> None:
