@@ -140,7 +140,7 @@ class FreeFlyerSimulator(Node):
         p_sim = self.declare_parameters(
             "",
             [
-                ("sim_dt", 0.01),  # update period in [s]
+                ("sim_dt", 0.001),  # update period in [s]
                 ("discretization", "Euler"),  # discretization scheme from {"Euler", "RungeKutta"}
                 ("x_0", [0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
                 ("B_sim_contacts", True),  # if True, simulates contacts
