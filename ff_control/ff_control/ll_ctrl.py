@@ -20,12 +20,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-from ff_msgs.msg import ThrusterCommand
+import numpy as np
+import typing as T
+
+from ff_msgs.msg import ThrusterPWMCommand, ThrusterCommand
 from ff_msgs.msg import WheelVelCommand
 from ff_params import RobotParams
-
-import numpy as np
-
 from rclpy.node import Node
 
 
@@ -36,8 +36,10 @@ class LowLevelController(Node):
         # robot parameters that can be accessed by sub-classes
         self.p = RobotParams(self)
 
-        # low level control publishers
-        self._thruster_pub = self.create_publisher(ThrusterCommand, "ctrl/duty_cycle", 10)
+        # low level thruster control publishers
+        self._thruster_binary_pub = self.create_publisher(ThrusterCommand, "ctrl/binary_thrust", 10)
+        self._thruster_pwm_pub = self.create_publisher(ThrusterPWMCommand, "ctrl/pwm_thrust", 10)
+
         self._wheel_pub = self.create_publisher(WheelVelCommand, "ctrl/velocity", 10)
 
     def set_thrust_duty_cycle(self, duty_cycle: np.ndarray) -> None:
@@ -45,14 +47,30 @@ class LowLevelController(Node):
         Send command to set the thrusters duty cycles.
 
         :param duty_cycle: duty cycle for each thrust (in [0, 1])
+
+        Note: this function works only when pwm_ctrl_cpp_node is running
         """
-        if len(duty_cycle) != len(ThrusterCommand().duty_cycle):
+        if len(duty_cycle) != len(ThrusterPWMCommand().duty_cycles):
+            self.get_logger().error("Incompatible thruster length sent.")
+            return
+        msg = ThrusterPWMCommand()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.duty_cycles = duty_cycle
+        self._thruster_pwm_pub.publish(msg)
+
+    def set_thrust_binary(self, switches: T.Sequence[bool]) -> None:
+        """
+        Send command to set the thrusters binary output.
+
+        :param switches: binary switch for each thrust
+        """
+        if len(switches) != len(ThrusterCommand().switches):
             self.get_logger().error("Incompatible thruster length sent.")
             return
         msg = ThrusterCommand()
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.duty_cycle = duty_cycle
-        self._thruster_pub.publish(msg)
+        msg.switches = switches
+        self._thruster_binary_pub.publish(msg)
 
     def set_wheel_velocity(self, velocity: float) -> None:
         """

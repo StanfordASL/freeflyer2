@@ -1,2 +1,2 @@
 std_msgs/Header header
-bool[8] switches
+float64[8] duty_cycles

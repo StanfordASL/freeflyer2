@@ -16,7 +16,13 @@ find_package(rclcpp REQUIRED)
 find_package(ff_msgs REQUIRED)
 find_package(ff_params REQUIRED)
 
-add_library(ctrl_lib src/ll_ctrl.cpp src/wrench_ctrl.cpp src/keyboard_ctrl.cpp src/linear_ctrl.cpp)
+add_library(ctrl_lib
+    src/ll_ctrl.cpp
+    src/pwm_ctrl.cpp
+    src/wrench_ctrl.cpp
+    src/keyboard_ctrl.cpp
+    src/linear_ctrl.cpp
+)
 target_include_directories(ctrl_lib PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -42,6 +48,9 @@ install(
   INCLUDES DESTINATION include
 )
 
+add_executable(pwm_ctrl_cpp_node src/nodes/pwm_ctrl_node.cpp)
+target_link_libraries(pwm_ctrl_cpp_node ctrl_lib)
+
 add_executable(wrench_ctrl_cpp_node src/nodes/wrench_ctrl_node.cpp)
 target_link_libraries(wrench_ctrl_cpp_node ctrl_lib)
 
@@ -53,7 +62,7 @@ add_executable(key_teleop_cpp_node src/nodes/key_teleop_node.cpp)
 target_link_libraries(key_teleop_cpp_node ctrl_lib)
 
 # install CPP nodes
-install(TARGETS wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
+install(TARGETS pwm_ctrl_cpp_node wrench_ctrl_cpp_node pd_ctrl_cpp_node key_teleop_cpp_node
   DESTINATION lib/${PROJECT_NAME})
 
 # install Python libraries

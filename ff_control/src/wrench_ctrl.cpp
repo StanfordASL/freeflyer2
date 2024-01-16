@@ -32,7 +32,7 @@ namespace ff
 
 WrenchController::WrenchController()
 : rclcpp::Node("wrench_ctrl_node"),
-  LowLevelController() {}
+  PWMController() {}
 
 void WrenchController::SetBodyWrench(const Wrench2D & wrench_body, bool use_wheel)
 {

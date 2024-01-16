@@ -23,7 +23,8 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -66,6 +67,13 @@ def generate_launch_description():
                 executable=["pd_ctrl_", impl, "_node"],
                 name="pd_ctrl_node",
                 namespace=robot_name,
+            ),
+            Node(
+                package="ff_control",
+                executable=["pwm_ctrl_cpp_node"],
+                name="pwm_ctrl_node",
+                namespace=robot_name,
+                condition=IfCondition(PythonExpression(["'", impl, "'", " == 'py'"])),
             ),
             Node(
                 package="ff_estimate",

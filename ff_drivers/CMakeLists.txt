@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 
 find_package(ff_msgs REQUIRED)
+find_package(ff_control REQUIRED)
 
 add_library(pwm src/pwm.cpp)
 target_include_directories(pwm PUBLIC
@@ -18,20 +19,20 @@ target_include_directories(pwm PUBLIC
 target_compile_features(pwm PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(pwm rclcpp)
 
-# nodes
-add_executable(thruster_node src/thruster_node.cpp)
-target_link_libraries(thruster_node pwm)
-ament_target_dependencies(thruster_node ff_msgs)
+# nodes (TODO: needs to be updated)
+# add_executable(thruster_node src/thruster_node.cpp)
+# target_link_libraries(thruster_node pwm)
+# ament_target_dependencies(thruster_node ff_msgs)
 
 # tests
 add_executable(test_single src/tests/test_single.cpp)
 target_link_libraries(test_single pwm)
 
 add_executable(test_all_thrusters src/tests/test_all_thrusters.cpp)
-ament_target_dependencies(test_all_thrusters rclcpp ff_msgs)
+ament_target_dependencies(test_all_thrusters rclcpp ff_msgs ff_control)
 
 # install nodes
-install(TARGETS thruster_node test_single test_all_thrusters
+install(TARGETS test_single test_all_thrusters
         DESTINATION lib/${PROJECT_NAME})
 
 # install launch files

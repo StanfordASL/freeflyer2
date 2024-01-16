@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2023 Stanford Autonomous Systems Lab
+// Copyright (c) 2024 Stanford Autonomous Systems Lab
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,57 +21,39 @@
 // SOFTWARE.
 
 
+#pragma once
+
+#include <array>
 #include <chrono>
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_control/pwm_ctrl.hpp"
+#include "ff_control/ll_ctrl.hpp"
 
-using namespace std::chrono_literals;
+namespace ff
+{
 
-
-class TestAllThrustersNode : public ff::PWMController
+class PWMController : public LowLevelController
 {
 public:
-  TestAllThrustersNode()
-  : rclcpp::Node("test_all_thrusters_node"),
-    ff::PWMController()
-  {
-    timer_ = this->create_wall_timer(5s, std::bind(&TestAllThrustersNode::TimerCallback, this));
-    this->declare_parameter("duty_cycle", .2);
-  }
+  PWMController();
+
+protected:
+  /**
+   * @brief send binary switching command to the thrusters
+   *
+   * @param thrusts boolean switches for each thruster (True is on, False is off)
+   */
+  void SetThrustDutyCycle(const std::array<double, 8> & duty_cycle);
 
 private:
-  rclcpp::TimerBase::SharedPtr timer_;
-  int th_idx_ = 0;
+  std::array<double, 8> duty_cycle_ = {0};
+  std::array<rclcpp::TimerBase::SharedPtr, 8> switch_timers_;
+  std::chrono::duration<double> period_ = std::chrono::seconds(0);
+  rclcpp::TimerBase::SharedPtr period_timer_;
 
-  void TimerCallback()
-  {
-    double duty_cycle = this->get_parameter("duty_cycle").as_double();
-
-    std::array<double, 8> duty_cycles;
-    // populate thrust msg
-    for (int i = 0; i < 8; ++i) {
-      duty_cycles[i] = 0.;
-      if (i == th_idx_) {
-        duty_cycles[i] = duty_cycle;
-      }
-    }
-
-    // publish thrust msg
-    SetThrustDutyCycle(duty_cycles);
-    RCLCPP_INFO(this->get_logger(), "opening valve %d", th_idx_);
-
-    // increment th_idx
-    th_idx_ = (th_idx_ + 1) % 8;
-  }
+  void PeriodCallback();
+  void SwitchCallback(size_t idx);
 };
 
-
-int main(int argc, char ** argv)
-{
-  rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<TestAllThrustersNode>());
-  rclcpp::shutdown();
-  return 0;
-}
+}  // namespace ff
