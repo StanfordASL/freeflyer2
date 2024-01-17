@@ -26,7 +26,7 @@ from ff_msgs.msg import ThrusterCommand
 import numpy as np
 
 
-class TriThrusterController(LowLevelController):
+class TrinaryThrusterController(LowLevelController):
     def __init__(self, node_name: str = "tri_thruster_ctrl_node") -> None:
         super().__init__(node_name)
 
