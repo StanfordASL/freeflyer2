@@ -28,6 +28,7 @@ import rclpy
 
 import numpy as np
 from casadi import *
+import typing as T
 import matplotlib.pyplot as plt
 
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
@@ -139,6 +140,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def control_loop(self) -> None:
         # state not yet ready
         if not self.state_is_ready():
+            self.get_logger().error("control_loop not started: state not yet ready")
             return
 
         # build feedback gain matrix
@@ -152,7 +154,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
 
 
-        self.send_control(self.state_desired.state, K)
+        self.send_control(np.array([0,0,0,0,0,0]))
 
     def init_solver(self):
         T = 3
