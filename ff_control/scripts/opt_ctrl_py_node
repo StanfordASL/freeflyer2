@@ -264,7 +264,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Create an NLP solver
         nlp_prob = {'f': J, 'x': w, 'g': g}
         cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
-        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg]
+        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     @staticmethod
     def state2vec(state: FreeFlyerState) -> np.ndarray:
@@ -320,8 +320,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
 def main(args=None):
     rclpy.init(args=args)
-    pd_ctrl = PDControlNode()
-    rclpy.spin(pd_ctrl)
+    opt_ctrl = ThrusterOptControlNode()
+    rclpy.spin(opt_ctrl)
     rclpy.shutdown()
 
 
