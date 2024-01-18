@@ -70,7 +70,7 @@ ament_python_install_package(${PROJECT_NAME})
 
 # install Python nodes
 install(PROGRAMS
-  scripts/pd_ctrl_py_node
+  scripts/opt_ctrl_py_node
   scripts/safety_filter
   DESTINATION lib/${PROJECT_NAME}
 )
