@@ -81,24 +81,26 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
-    def send_control(self, state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
+    def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
         """
         Send desirable target state for optimization-based control.
 
         :param state_des: desired state
         """
         if not self._state_ready:
-            self.get_logger().warn("send_control ignored, state not yet ready")
+            self.get_logger().warn("send_control ignored, current state not yet ready")
             return
 
         # convert desired state to vector form
         if isinstance(state_des, FreeFlyerState):
             state_des = self.state2vec(state_des)
 
+        if isinstance(curr_state, FreeFlyerState):
+            curr_state = self.state2vec(curr_state)
 
-        self.lbw[:len(state_des)] = state_des
-        self.ubw[:len(state_des)] = state_des
-        self.w0[0] = state_des
+        self.lbw[:len(curr_state)] = curr_state
+        self.ubw[:len(curr_state)] = curr_state
+        self.w0[0] = curr_state
         
         sol = self.cont_nlp_solver(x0=vertcat(*self.w0), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
         output = sol['x']
@@ -146,11 +148,11 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self.get_logger().error("control_loop not started: state not yet ready")
             return
 
-        self.send_control(self.state_desired.state)
+        self.send_control(self.get_state(), self.state_desired.state)
         self.send_control(np.array([0,0,0,0,0,0]))
 
     def init_solver(self):
-        T = self.get_parameter('horizon_secs').get_parameter_value().double_value
+        T = self.get_parameter('opt_horizon_secs').get_parameter_value().double_value
         N = int(T * self.freq)
         # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
         lbx = [-4., -4., -np.pi, -0.5, -0.5, -0.5]
@@ -162,8 +164,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         x0 = list(self.observer.get_state()) # TODO
 
         # Declare model variables
-        x = MX.sym('x', STATE_DIM) # x,y,th,xdot,ydot,thdot
-        u = MX.sym('u', CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
+        x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
+        u = MX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
         
         body_Fx, body_Fy, M = self._map_to_force(u)
 
@@ -237,8 +239,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             # New NLP variable for the control
             Uk = MX.sym('U_' + str(k), 4)
             w   += [Uk]
-            lbw += self.lbu
-            ubw += self.ubu
+            lbw += lbu
+            ubw += ubu
             w0  += [u_start[k]]
 
             # Integrate till the end of the interval
@@ -249,8 +251,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             # New NLP variable for state at end of interval
             Xk = MX.sym('X_' + str(k+1), 6)
             w   += [Xk]
-            lbw += self.lbx
-            ubw += self.ubx
+            lbw += lbx
+            ubw += ubx
             w0  += [x_start[k+1]]
             # Add equality dynamics constraint 
             g   += [Xk_end-Xk]
@@ -359,20 +361,24 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @property
     def r(self):
-        return self.p.actuators["thrusters_lever_arm"]
+        # return self.p.actuators["thrusters_lever_arm"]
+        return 0.11461
 
     @property
     def Fmax(self):
-        self.get_logger().error("Maximum force is currently" + self.p.actuators["F_max_per_thruster"])
-        return self.p.actuators["F_max_per_thruster"]
+        # self.get_logger().error("Maximum force is currently" + str(self.p.actuators["F_max_per_thruster"]))
+        # return self.p.actuators["F_max_per_thruster"]
+        return 0.2
 
     @property
     def m(self):
-        return self.p.dynamics["mass"]
+        # return self.p.dynamics["mass"]
+        return 16
     
     @property
     def Ixx(self):
-        return self.p.dynamics["inertia"]
+        # return self.p.dynamics["inertia"]
+        return 0.18
 
     def state_is_ready(self) -> bool:
         """
@@ -383,6 +389,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return self._state_ready
 
     def _state_callback(self, msg: FreeFlyerStateStamped) -> None:
+        """
+        Get called when the first current state measurement comes in.
+        """
         self._state_stamped = copy.deepcopy(msg)
 
         if not self._state_ready:
