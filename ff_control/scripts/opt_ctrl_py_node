@@ -71,6 +71,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.state_desired = FreeFlyerStateStamped()
 
         # feedback gain params
+        self.declare_parameter('horizon_secs', 3)
+
         # self.declare_parameter('gain_f', 2.0)
         # self.declare_parameter('gain_df', 10.0)
         # self.declare_parameter('gain_t', 0.2)
@@ -152,10 +154,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
 
 
-        self.send_control(self.state_desired.state, K)
+        self.send_control(self.state_desired.state)
 
     def init_solver(self):
-        T = 3
+        T = self.get_parameter('horizon_secs').get_parameter_value().double_value
         N = int(T * self.freq)
         x0 = list(self.observer.get_state())
 
