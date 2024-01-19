@@ -82,7 +82,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @override
     def param_init_callback(self):
-        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg, self.goalparam = self.init_solver()
         self._params_ready = True
     
     def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
@@ -109,6 +109,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.lbw[:len(curr_state)] = curr_state
         self.ubw[:len(curr_state)] = curr_state
         self.w0[0] = curr_state
+
+        set_value(self.goalparam, state_des)
         
         sol = self.cont_nlp_solver(x0=vertcat(*self.w0), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
         output = sol['x']
@@ -187,8 +189,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        world_Fy / self.m,
                        M / self.Ixx)
 
+        goal = parameter(1, self.STATE_DIM)
+
         # Stepwise Cost
-        L =  self.k_th*(self.goal[2]-x[2])**2 + self.k_pos*(self.normsq(self.goal[0:2] - x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(x[3:])
+        L =  self.k_th*(goal[2]-x[2])**2 + self.k_pos*(self.normsq(goal[0:2] - x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(x[3:]-goal[3:])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
@@ -261,7 +265,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-self.goal[0:2])) + 10*self.k_th*(self.normsq(self.goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:])
+        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(self.normsq(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -270,7 +274,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Create an NLP solver
         nlp_prob = {'f': J, 'x': w, 'g': g}
         cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
-        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
+        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg, goal
 
     ############################### Helper Functions for Opt ###############################
     def _map_to_force(self, u):
