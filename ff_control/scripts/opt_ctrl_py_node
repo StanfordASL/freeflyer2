@@ -152,16 +152,14 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.send_control(np.array([0,0,0,0,0,0]))
 
     def init_solver(self):
-        T = self.get_parameter('opt_horizon_secs').get_parameter_value().double_value
-        N = int(T * self.freq)
         # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
         lbx = [-4., -4., -np.pi, -0.5, -0.5, -0.5]
         ubx = [4., 4., np.pi, 0.5, 0.5, 0.5]
         lbu = [-self.Fmax] * 4 
         ubu = [self.Fmax] * 4 
 
-        N = int(T * self.freq)
-        x0 = list(self.observer.get_state()) # TODO
+        N = int(self.T * self.freq)
+        x0 = [0]*6 # Just initialize to zeros, will revise once first state measurement comes in
 
         # Declare model variables
         x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
@@ -181,12 +179,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        world_Fy / self.m,
                        M / self.Ixx)
 
-        k_th = self.get_parameter('opt_gain_kth').get_parameter_value().double_value
-        k_pos = self.get_parameter('opt_gain_kpos').get_parameter_value().double_value
-        k_input = self.get_parameter('opt_gain_kinput').get_parameter_value().double_value
-        k_velo = self.get_parameter('opt_gain_kvelo').get_parameter_value().double_value
         # Stepwise Cost
-        L =  k_th*(self.goal[2]-x[2])**2 + k_pos*(self.normsq(self.goal[0:2] - x[0:2])) + k_input*(self.normsq(u)) + k_velo*self.normsq(x[3:])
+        L =  self.k_th*(self.goal[2]-x[2])**2 + self.k_pos*(self.normsq(self.goal[0:2] - x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(x[3:])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
@@ -259,7 +253,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 10*k_pos*(self.normsq(Xk_end[0:2]-self.goal[0:2])) + 10*k_th*(self.normsq(self.goal[2]-Xk_end[2])) + 10*k_velo*self.normsq(Xk_end[3:])
+        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-self.goal[0:2])) + 10*self.k_th*(self.normsq(self.goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:])
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -379,6 +373,26 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def Ixx(self):
         # return self.p.dynamics["inertia"]
         return 0.18
+    
+    @property
+    def k_th(self):
+        return self.get_parameter('opt_gain_kth').get_parameter_value().double_value
+    
+    @property
+    def k_pos(self):
+        return self.get_parameter('opt_gain_kpos').get_parameter_value().double_value
+    
+    @property
+    def k_input(self):
+        return self.get_parameter('opt_gain_kinput').get_parameter_value().double_value
+    
+    @property
+    def k_velo(self):
+        return self.get_parameter('opt_gain_kvelo').get_parameter_value().double_value
+    
+    @property
+    def T(self):
+        return self.get_parameter('opt_horizon_secs').get_parameter_value().double_value
 
     def state_is_ready(self) -> bool:
         """
