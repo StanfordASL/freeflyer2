@@ -34,7 +34,7 @@ class LowLevelController(Node):
         super().__init__(node_name)
 
         # robot parameters that can be accessed by sub-classes
-        self.p = RobotParams(self)
+        self.p = RobotParams(self, self.param_init_callback)
 
         # low level thruster control publishers
         self._thruster_binary_pub = self.create_publisher(ThrusterCommand, "ctrl/binary_thrust", 10)
@@ -84,3 +84,10 @@ class LowLevelController(Node):
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.velocity = velocity
         self._wheel_pub.publish(msg)
+
+    def param_init_callback(self):
+        """ 
+        Callback when parameters are initialized
+        Override in subclass
+        """
+        pass

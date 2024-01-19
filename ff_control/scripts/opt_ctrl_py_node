@@ -61,6 +61,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         )
         self._state_ready = False
         self._state_stamped = FreeFlyerStateStamped()
+        self._state_desired = FreeFlyerStateStamped()
+        self._params_ready = False
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -69,7 +71,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             '/goal_pose', self.rviz_setpoint_callback, 10)
         
         self.timer = self.create_timer(0.3, self.control_loop)
-        self.state_desired = FreeFlyerStateStamped()
 
         # Optimization hyperparameters/gains
         self.declare_parameter('opt_horizon_secs', 3)
@@ -79,8 +80,11 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('opt_gain_kinput', 3)
         self.declare_parameter('opt_gain_kvelo', 40)
 
+    @override
+    def param_init_callback(self):
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
-
+        self._params_ready = True
+    
     def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
         """
         Send desirable target state for optimization-based control.
@@ -89,6 +93,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         """
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
+            return
+
+        if not self._params_ready:
+            self.get_logger().warn("send_control ignored, parameters not yet ready")
             return
 
         # convert desired state to vector form
@@ -123,24 +131,24 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     def state_ready_callback(self) -> None:
         # copy current position as goal position
-        self.state_desired.header.stamp = self.get_clock().now().to_msg()
-        self.state_desired.state = self.get_state()
+        self._state_desired.header.stamp = self.get_clock().now().to_msg()
+        self._state_desired.state = self.get_state()
 
     def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
-        self.state_desired = copy.deepcopy(msg)
+        self._state_desired = copy.deepcopy(msg)
 
     def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
-        self.state_desired.header.stamp = msg.header.stamp
+        self._state_desired.header.stamp = msg.header.stamp
 
-        self.state_desired.state.pose.x = msg.pose.position.x
-        self.state_desired.state.pose.y = msg.pose.position.y
+        self._state_desired.state.pose.x = msg.pose.position.x
+        self._state_desired.state.pose.y = msg.pose.position.y
         z = msg.pose.orientation.z
         w = msg.pose.orientation.w
-        self.state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+        self._state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
 
-        self.state_desired.state.twist.vx = 0.
-        self.state_desired.state.twist.vy = 0.
-        self.state_desired.state.twist.wz = 0.
+        self._state_desired.state.twist.vx = 0.
+        self._state_desired.state.twist.vy = 0.
+        self._state_desired.state.twist.wz = 0.
     
     def control_loop(self) -> None:
         # state not yet ready
@@ -148,7 +156,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self.get_logger().error("control_loop not started: state not yet ready")
             return
 
-        self.send_control(self.get_state(), self.state_desired.state)
+        self.send_control(self.get_state(), self._state_desired.state)
         self.send_control(np.array([0,0,0,0,0,0]))
 
     def init_solver(self):
