@@ -24,13 +24,14 @@ from ff_control.ll_ctrl import LowLevelController
 from ff_msgs.msg import ThrusterCommand
 
 import numpy as np
+import typing as T
 
 
 class TrinaryThrusterController(LowLevelController):
     def __init__(self, node_name: str = "tri_thruster_ctrl_node") -> None:
         super().__init__(node_name)
 
-    def set_tri_thrusters(self, tri_switches: T.sequence[int], use_wheel: bool = False) -> None:
+    def set_tri_thrusters(self, tri_switches: T.Sequence[int], use_wheel: bool = False) -> None:
         """
         Convert trinary thruster commands into binary thruster commands
         """
@@ -38,12 +39,17 @@ class TrinaryThrusterController(LowLevelController):
             self.get_logger().error("set_tri_thrusters failed: use_wheel not implemented")
             return
 
-        if len(tri_switches) != len(ThrusterCommand().switches) / 2):
+        if len(tri_switches) != len(ThrusterCommand().switches) / 2:
             self.get_logger().error("Incompatible thruster length sent.")
             return
 
+        switches = []
         for i in range(len(tri_switches)):
-            addition = [1, 0] if tri_switches[i] > 0 else [0, 1]
-            switches.extend(addition)
+            if tri_switches[i] > 0:
+                switches.extend([True,False])
+            elif tri_switches[i] == 0:
+                switches.extend([False,False])
+            else:
+                switches.extend([False,True])
 
         self.set_thrust_binary(switches)
