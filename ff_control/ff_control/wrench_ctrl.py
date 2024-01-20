@@ -35,7 +35,7 @@ class WrenchController(LowLevelController):
         Set wrench in body frame.
 
         :param wrench_body: wrench in body frame
-        :param use_wheel: set to ture to use the inertial wheel (TODO(alvin): unsupported)
+        :param use_wheel: set to true to use the inertial wheel (TODO(alvin): unsupported)
         """
         if use_wheel:
             self.get_logger().error("set_wrench failed: use_wheel not implemented")
