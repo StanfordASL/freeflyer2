@@ -10,16 +10,18 @@
 #include <std_msgs/msg/header.hpp>
 #include <optional>
 
+using namespace std
+
 class ConstantVelKF {
 public:
-    Eigen::MatrixXf Q;
-    Eigen::MatrixXf R;
+    Eigen::MatrixXd Q;
+    Eigen::MatrixXd R;
     double MAX_DT;
 
-    ConstantAccelKF(Eigen::VectorXf x0, Eigen::MatrixXf P0, int dim = 3, int angle_idx = 2)
+    ConstantAccelKF(Eigen::VectorXd x0, Eigen::MatrixXd P0, int dim = 3, int angle_idx = 2)
         : x(x0), P(P0), dim(dim), angle_idx(angle_idx) {
-        Q = Eigen::MatrixXf::Identity(2 * dim, 2 * dim);
-        R = Eigen::MatrixXf::Identity(dim, dim) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
+        Q = Eigen::MatrixXd::Identity(2 * dim, 2 * dim);
+        R = Eigen::MatrixXd::Identity(dim, dim) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
         MAX_DT = 1e-3;
     }
 
@@ -28,20 +30,20 @@ public:
             return;
         }
 
-        Eigen::MatrixXf A = Eigen::MatrixXf::Identity(2 * dim, 2 * dim);
-        A.block(0, dim, dim, dim) = Eigen::MatrixXf::Identity(dim, dim) * dt;
+        Eigen::MatrixXd A = Eigen::MatrixXd::Identity(2 * dim, 2 * dim);
+        A.block(0, dim, dim, dim) = Eigen::MatrixXd::Identity(dim, dim) * dt;
 
         x = A * x;
         P = A * P * A.transpose() + Q * dt;
     }
 
-    void measurement_update(Eigen::VectorXf z) {
-        Eigen::MatrixXf H = Eigen::MatrixXf::Zero(dim, 2 * dim);
-        H.block(0, 0, dim, dim) = Eigen::MatrixXf::Identity(dim, dim);
+    void measurement_update(Eigen::VectorXd z) {
+        Eigen::MatrixXd H = Eigen::MatrixXd::Zero(dim, 2 * dim);
+        H.block(0, 0, dim, dim) = Eigen::MatrixXd::Identity(dim, dim);
 
-        Eigen::MatrixXf S = H * P * H.transpose() + R;
-        Eigen::MatrixXf K = P * H.transpose() * S.inverse();
-        Eigen::VectorXf y = z - H * x;
+        Eigen::MatrixXd S = H * P * H.transpose() + R;
+        Eigen::MatrixXd K = P * H.transpose() * S.inverse();
+        Eigen::VectorXd y = z - H * x;
         y(angle_idx) = wrap_angle(y(angle_idx));
 
         x += K * y;
@@ -53,44 +55,56 @@ public:
     }
 
 private:
-    Eigen::VectorXf x;
-    Eigen::MatrixXf P;
+    Eigen::VectorXd x;
+    Eigen::MatrixXd P;
     int dim;
     int angle_idx;
 };
 
 
 
-using namespace std::chrono_literals;
 
-class DockNode : public rclcpp::Node {
+#include "ff_estimate/base_mocap_estimator.hpp"
+
+class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
 public:
-    DockNode() : Node("dock_node") {
-        // target pose tracker
-        declare_parameter("target_pose_channel", "exp/target_pose");
-        target_pose_ = std::nullopt;
-        target_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-            get_parameter("target_pose_channel").get_parameter_value().string_value,
-            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
-            [this](const geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
-                target_callback(target_pose);
-            });
-
-        // CV estimation relay
-        state_pub_ = create_publisher<geometry_msgs::msg::TwistStamped>("exp/state", 10);
-        pose_sub_ = create_subscription<geometry_msgs::msg::Pose2DStamped>(
-            "exp/cv_pose",
-            rclcpp::QoS(rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data)),
-            [this](const geometry_msgs::msg::Pose2DStamped::SharedPtr cv_pose) {
-                est_callback(cv_pose);
-            });
-
-        // target state publish loop
-        target_timer_ = create_wall_timer(100ms, [this]() {
-            target_loop();
-        });
-        target_pub_ = create_publisher<geometry_msgs::msg::TwistStamped>("ctrl/state", 10);
+    ConstVelKalmanFilterNode() : ff::BaseMocapEstimator("const_vel_kalman_filter_node") {
+        this->declare_parameter("min_dt", 0.005);
+        this->target_pose = Pose2D;
     }
+void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override
+{
+    FreeFlyerState state{};
+    Pose2DStamped pose2d{};
+
+    state.pose = pose_stamped.pose;
+    if (prev_state_ready_) {
+      const rclcpp::Time now = pose_stamped.header.stamp;
+      const rclcpp::Time last = prev_.header.stamp;
+      double dt = (now - last).seconds();
+
+        if (dt < (this->get_parameter("min_dt").as_double())) {
+            return;
+        }  
+        pose2d.header = pose->header;
+        pose2d.pose.x = pose->pose.position.x;
+        pose2d.pose.y = pose->pose.position.y;
+        double w = pose->pose.orientation.w;
+        double z = pose->pose.orientation.z;
+        pose2d.pose.theta = atan2(2 * w * z, w * w - z * z);
+
+        state.state.twist = pose_stamped.state.twist;
+        state.state.pose.x = 
+        state.header = est_state.header
+        state.state.twist = est_state.state.twist
+        state.state.pose.x = self.target_pose.x + cv_pose.pose.x
+        state.state.pose.y = self.target_pose.y + cv_pose.pose.y
+        state.state.pose.theta = self.target_pose.theta + cv_pose.pose.theta
+
+    } else {
+        prev_state_ready_ = true;
+    } 
+}
 
 private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
