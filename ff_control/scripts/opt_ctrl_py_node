@@ -174,6 +174,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Declare model variables
         x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
         u = MX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
+        goal = MX.sym("goal", self.STATE_DIM)
         
         body_Fx, body_Fy, M = self._map_to_force(u)
 
@@ -188,8 +189,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        world_Fx / self.m,
                        world_Fy / self.m,
                        M / self.Ixx)
-
-        goal = MX.sym("goal", self.STATE_DIM)
 
         # Stepwise Cost
         L =  self.k_th*(goal[2]-x[2])**2 + self.k_pos*(self.normsq(goal[0:2] - x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(x[3:]-goal[3:])
@@ -210,7 +209,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             k4, k4_q = f(X + DT * k3, U, goal)
             X=X+DT/6*(k1 +2*k2 +2*k3 +k4)
             Q = Q + DT/6*(k1_q + 2*k2_q + 2*k3_q + k4_q)
-        F = Function('F', [X0, U, goal], [X, Q],['x0','p','goal'],['xf','qf'])   # Take in initial state and current input and outputs final state and cost after one step (Runge-Kutta integrated)
+        F = Function('F', [X0, U], [X, Q],['x0','p'],['xf','qf'])   # Take in initial state and current input and outputs final state and cost after one step (Runge-Kutta integrated)
 
         # Initial guess for u
         u_start = [DM([0.,0.,0.,0.])] * N
@@ -219,7 +218,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         xk = DM(x0)
         x_start = [xk]
         for k in range(N):
-            xk = F(x0=xk, p=u_start[k], goal=goal)['xf']
+            xk = F(x0=xk, p=u_start[k])['xf']
             x_start += [xk]
 
         # Start with an empty NLP
@@ -251,7 +250,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             w0  += [u_start[k]]
 
             # Integrate till the end of the interval
-            Fk = F(x0=Xk, p=Uk, goal=goal)
+            Fk = F(x0=Xk, p=Uk)
             Xk_end = Fk['xf']
             J=J+Fk['qf']
 
@@ -385,7 +384,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def k_th(self):
         # return self.get_parameter('opt_gain_kth').get_parameter_value().double_value
         return 1.0
-        
+
     @property
     def k_pos(self):
         # return self.get_parameter('opt_gain_kpos').get_parameter_value().double_value
