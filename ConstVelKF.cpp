@@ -75,7 +75,7 @@ public:
 void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override
 {
     FreeFlyerState state{};
-    Pose2DStamped pose2d{};
+    Pose2D pose2d{};
 
     state.pose = pose_stamped.pose;
     if (prev_state_ready_) {
@@ -86,36 +86,37 @@ void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override
         if (dt < (this->get_parameter("min_dt").as_double())) {
             return;
         }  
-        pose2d.header = pose->header;
-        pose2d.pose.x = pose->pose.position.x;
-        pose2d.pose.y = pose->pose.position.y;
-        double w = pose->pose.orientation.w;
-        double z = pose->pose.orientation.z;
-        pose2d.pose.theta = atan2(2 * w * z, w * w - z * z);
 
+        target_pose.pose.x = pose2d.pose.position.x;
+        target_pose.pose.y = pose2d.pose.position.y;
+        target_pose.pose.theta = pose2d.pose.position.theta;
+        
         state.state.twist = pose_stamped.state.twist;
         state.state.pose.x = 
         state.header = est_state.header
-        state.state.twist = est_state.state.twist
-        state.state.pose.x = self.target_pose.x + cv_pose.pose.x
-        state.state.pose.y = self.target_pose.y + cv_pose.pose.y
-        state.state.pose.theta = self.target_pose.theta + cv_pose.pose.theta
+        state.state.twist = est_state.state.twist;
+        state.state.pose.x = self.target_pose.x;
+        state.state.pose.y = self.target_pose.y;
+        state.state.pose.theta = self.target_pose.theta;
 
     } else {
         prev_state_ready_ = true;
     } 
+
+    prev_.state = state;
+    prev_.header = pose_stamped.header;
+
+    SendStateEstimate(state);
 }
 
 private:
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr target_sub_;
-    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr state_pub_;
-    rclcpp::Subscription<geometry_msgs::msg::Pose2DStamped>::SharedPtr pose_sub_;
-    rclcpp::TimerBase::SharedPtr target_timer_;
-    rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr target_pub_;
+    geometry_msgs::msg::TwistStamped;
+    geometry_msgs::msg::Pose2DStamped;
+    ff_msgs::msg::FreeFlyerStateStamped prev_;
+    bool prev_state_ready_ = false;
+    geometry_msgs::msg::Pose2D;
 
-    std::optional<geometry_msgs::msg::Pose2D> target_pose_;
-
-    void target_loop() {
+    /* void target_loop() {
         if (!target_pose_.has_value()) {
             return;
         }
@@ -152,13 +153,12 @@ private:
         target_pose_->x = target_pose->pose.position.x;
         target_pose_->y = target_pose->pose.position.y;
         target_pose_->theta = M_PI / 2.0;
-    }
+    } */
 };
 
-int main(int argc, char **argv) {
-    rclcpp::init(argc, argv);
-    auto dock_node = std::make_shared<DockNode>();
-    rclcpp::spin(dock_node);
-    rclcpp::shutdown();
-    return 0;
+int main(int argc, char ** argv)
+{
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<ConstantVelKalmanFilterNode>());
+  rclcpp::shutdown();
 }
