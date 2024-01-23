@@ -382,34 +382,34 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     
     @property
     def k_th(self):
-        # return self.get_parameter('opt_gain_kth').get_parameter_value().double_value
-        return 1.0
+        return self.get_parameter('opt_gain_kth').value
+        # return 1.0
 
     @property
     def k_pos(self):
-        # return self.get_parameter('opt_gain_kpos').get_parameter_value().double_value
-        return 2.5
+        return self.get_parameter('opt_gain_kpos').value
+        # return 2.5
 
     @property
     def k_input(self):
-        # return self.get_parameter('opt_gain_kinput').get_parameter_value().double_value
-        return 3.0
+        return self.get_parameter('opt_gain_kinput').value
+        # return 3.0
 
     @property
     def k_velo(self):
-        # return self.get_parameter('opt_gain_kvelo').get_parameter_value().double_value
-        return 40.0
+        return self.get_parameter('opt_gain_kvelo').value
+        # return 40.0
 
     @property
     def T(self):
         # self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').get_parameter_value().double_value))
-        # return self.get_parameter('opt_horizon_secs').get_parameter_value().double_value
-        return 3.0
+        return self.get_parameter('opt_horizon_secs').value
+        # return 3.0
 
     @property
     def freq(self):
-        # return self.get_parameter('opt_freq').get_parameter_value().double_value
-        return 3.0
+        return self.get_parameter('opt_freq').value
+        # return 3.0
 
     def state_is_ready(self) -> bool:
         """
