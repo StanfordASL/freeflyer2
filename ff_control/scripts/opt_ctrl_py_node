@@ -63,6 +63,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
+        self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -73,17 +74,17 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.timer = self.create_timer(0.3, self.control_loop)
 
         # Optimization hyperparameters/gains
-        self.declare_parameter('opt_horizon_secs', 3.0)
+        self.declare_parameter('opt_horizon_secs', 2.5)
         self.declare_parameter('opt_freq', 3.0)
         self.declare_parameter('opt_gain_kth', 1.0)
-        self.declare_parameter('opt_gain_kpos', 2.5)
+        self.declare_parameter('opt_gain_kpos', 4.5)
         self.declare_parameter('opt_gain_kinput', 3.0)
-        self.declare_parameter('opt_gain_kvelo', 40.0)
+        self.declare_parameter('opt_gain_kvelo', 30.0)
 
-        # self.declare_parameter('opt_gain_kth', 0.0)
-        # self.declare_parameter('opt_gain_kpos', 3.0)
+        # self.declare_parameter('opt_gain_kth', 1.0)
+        # self.declare_parameter('opt_gain_kpos', 2.5)
         # self.declare_parameter('opt_gain_kinput', 3.0)
-        # self.declare_parameter('opt_gain_kvelo', 4.0)
+        # self.declare_parameter('opt_gain_kvelo', 40.0)
 
         self.get_logger().info("****** Already defined values!" + str(self.get_parameter("opt_horizon_secs").value))
 
@@ -112,22 +113,28 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if isinstance(curr_state, FreeFlyerState):
             curr_state = self.state2vec(curr_state)
 
-        self.lbw[:len(curr_state)] = curr_state
-        self.ubw[:len(curr_state)] = curr_state
-        self.w0[0] = curr_state
-        
-        sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
-        output = sol['x']
-        # u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt = self.unpack_wopt(output)
-        u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
-        cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
-        self.get_logger().info("Goal"+str(state_des) + "\n")
-        self.get_logger().info("Current"+str(curr_state) + "\n")
-        self.get_logger().info("Thrust"+str(cont_thrust.T) + "\n")
-        self._u = np.round(cont_thrust)
+        if np.all((state_des - curr_state) < self._deadband):
+            self._u = np.zeros(4)
+            self.get_logger().info("Goal"+str(state_des) + "\n")
+            self.get_logger().info("Current"+str(curr_state) + "\n")
+            self.get_logger().info("Thrust"+str(self._u.T) + "\n")
+        else:
+            self.lbw[:len(curr_state)] = curr_state
+            self.ubw[:len(curr_state)] = curr_state
+            self.w0[0] = curr_state
+            
+            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
+            output = sol['x']
+            # u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt = self.unpack_wopt(output)
+            u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
+            cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
+            self.get_logger().info("Goal"+str(state_des) + "\n")
+            self.get_logger().info("Current"+str(curr_state) + "\n")
+            self.get_logger().info("Thrust"+str(cont_thrust.T) + "\n")
+            self._u = np.round(cont_thrust)
 
-        # Warm Start next run
-        self.w0 = self.get_next_warm_start(output)
+            # Warm Start next run
+            self.w0 = self.get_next_warm_start(output)
 
         self.set_tri_thrusters(self._u)
     
