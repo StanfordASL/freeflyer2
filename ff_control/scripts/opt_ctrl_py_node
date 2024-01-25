@@ -71,23 +71,22 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.rviz_sp_sub = self.create_subscription(PoseStamped,
             '/goal_pose', self.rviz_setpoint_callback, 10)
         
-        self.timer = self.create_timer(0.3, self.control_loop)
+        self.timer = self.create_timer(0.333, self.control_loop)
 
         # Optimization hyperparameters/gains
-        self.declare_parameter('opt_horizon_secs', 2.5)
+        self.declare_parameter('opt_horizon_secs', 3.0)
         self.declare_parameter('opt_freq', 3.0)
 
-        # self.declare_parameter('opt_gain_kth', 1.0)
-        # self.declare_parameter('opt_gain_kpos', 4.5)
-        # self.declare_parameter('opt_gain_kinput', 3.0)
-        # self.declare_parameter('opt_gain_kvelo', 30.0)
-
-        self.declare_parameter('opt_gain_kth', 1.0)
-        self.declare_parameter('opt_gain_kpos', 2.5)
+        self.declare_parameter('opt_gain_kth', 10.0)
+        self.declare_parameter('opt_gain_kpos', 0)
         self.declare_parameter('opt_gain_kinput', 3.0)
         self.declare_parameter('opt_gain_kvelo', 40.0)
 
-        self.get_logger().info("****** Already defined values!" + str(self.get_parameter("opt_horizon_secs").value))
+        # self.declare_parameter('opt_gain_kth', 1.0)
+        # self.declare_parameter('opt_gain_kpos', 2.5)
+        # self.declare_parameter('opt_gain_kinput', 3.0)
+        # self.declare_parameter('opt_gain_kvelo', 40.0)
+
 
     def param_update_callback(self):
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()

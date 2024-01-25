@@ -118,11 +118,12 @@ class FreeFlyerSimulator(Node):
         self.p = RobotParams(self)
 
         self.running_total_gas = 0
-        self.one_sec_thrust_hist = [[] for i in range(8)]
+        self.thrust_hist = [[] for i in range(8)]
+        self.thrust_duty_cycles = [0]*8
         # self.start_time = self.get_clock().now().to_msg()
         self.steps = 0
-        self.duty_cycle_window = 1000
-        self.one_sec_rolled_up = False
+        self.duty_cycle_window = 200
+        self.rolled_up = False
         # self.get_logger().info("********MESSAGE"+str(self.start_time))
         # self.get_logger().info("********SEC"+str(self.start_time.sec))
 
@@ -269,22 +270,24 @@ class FreeFlyerSimulator(Node):
 
         # Metrics
         self.running_total_gas += np.sum(self.thrusters)*self.SIM_DT
+        self.steps+=1
         metrics = ControllerMetrics()
         metrics.header.stamp = now
         metrics.total_gas_time = self.running_total_gas
-        if not self.one_sec_rolled_up:
+        if not self.rolled_up:
             for i in range(8):
-                self.one_sec_thrust_hist[i].append(self.thrusters[i])
-                metrics.running_duty_cycles[i] = np.sum(self.one_sec_thrust_hist[i]) / len(self.one_sec_thrust_hist[i])
+                self.thrust_hist[i].append(self.thrusters[i])
+                self.thrust_duty_cycles[i] = np.sum(self.thrust_hist[i]) / len(self.thrust_hist[i])
             # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
             if (self.steps >= self.duty_cycle_window):
-                self.one_sec_rolled_up = True
+                self.rolled_up = True
         else:
             for i in range(8):
-                self.one_sec_thrust_hist[i].pop(0)
-                self.one_sec_thrust_hist[i].append(self.thrusters[i])
-                metrics.running_duty_cycles[i] = np.sum(self.one_sec_thrust_hist[i]) / len(self.one_sec_thrust_hist[i])
-        # Publish
+                self.thrust_duty_cycles[i] -= self.thrust_hist[i].pop(0)/self.duty_cycle_window
+                self.thrust_duty_cycles[i] += self.thrusters[i]/self.duty_cycle_window
+                self.thrust_hist[i].append(self.thrusters[i])
+        metrics.running_duty_cycles = self.thrust_duty_cycles
+        # # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
         self.pub_controller_metrics.publish(metrics)
