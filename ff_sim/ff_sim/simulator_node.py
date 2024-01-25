@@ -43,6 +43,7 @@ from ff_msgs.msg import (
     Wrench2DStamped,
     WheelVelCommand,
     ThrusterCommand,
+    ControllerMetrics
 )
 
 from ff_params import RobotParams
@@ -116,6 +117,10 @@ class FreeFlyerSimulator(Node):
 
         self.p = RobotParams(self)
 
+        self.running_total_gas = 0
+        # self.thirty_sec_duty_cycle = 
+        # self.thirty_sec_horizon = 0
+
         # obstacles
         p_obstacles = self.declare_parameters(
             "obstacles",
@@ -180,6 +185,7 @@ class FreeFlyerSimulator(Node):
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
         self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
+        self.pub_controller_metrics = self.create_publisher(ControllerMetrics, "controller/metrics", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
@@ -255,9 +261,16 @@ class FreeFlyerSimulator(Node):
         mocap.pose.orientation.y = 0.0
         mocap.pose.orientation.z = np.sin(theta / 2)
 
+        # Metrics
+        self.running_total_gas += np.sum(self.thrusters)*self.SIM_DT
+        metrics = ControllerMetrics()
+        metrics.header.stamp = now
+        metrics.total_gas_time = self.running_total_gas
+
         # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
+        self.pub_controller_metrics(metrics)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity

@@ -83,7 +83,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.get_logger().info("****** Already defined values!" + str(self.get_parameter("opt_horizon_secs").get_parameter_value().double_value))
 
     def param_update_callback(self):
-        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg, self.goalparam = self.init_solver()
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
         self._params_ready = True
     
     def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
@@ -274,13 +274,13 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Create an NLP solver
         nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
         cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
-        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg, goal
+        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     ############################### Helper Functions for Opt ###############################
     def _map_to_force(self, u):
         # Compute body-frame force from thrusters
         Fx = -u[0] + u[2] 
-        Fy = -u[1] + u[3]
+        Fy = -u[1] + u[3] 
         M = self.r * (u[0]+u[1]+u[2]+u[3])
         return Fx, Fy, M
 
