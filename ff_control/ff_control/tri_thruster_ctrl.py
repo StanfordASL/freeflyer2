@@ -40,7 +40,7 @@ class TrinaryThrusterController(LowLevelController):
             return
 
         if len(tri_switches) != len(ThrusterCommand().switches) / 2:
-            self.get_logger().error("Incompatible thruster length sent.")
+            self.get_logger().error("Incompatible thruster length sent." + str(len(tri_switches)))
             return
 
         switches = []
@@ -51,5 +51,7 @@ class TrinaryThrusterController(LowLevelController):
                 switches.extend([False,False])
             else:
                 switches.extend([False,True])
+        lastVal = switches.pop(-1)
+        switches = [lastVal] + switches
 
         self.set_thrust_binary(switches)
