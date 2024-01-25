@@ -118,8 +118,14 @@ class FreeFlyerSimulator(Node):
         self.p = RobotParams(self)
 
         self.running_total_gas = 0
-        # self.thirty_sec_duty_cycle = 
-        # self.thirty_sec_horizon = 0
+        self.one_sec_thrust_hist = [[] for i in range(8)]
+        # self.start_time = self.get_clock().now().to_msg()
+        self.steps = 0
+        self.duty_cycle_window = 1000
+        self.one_sec_rolled_up = False
+        # self.get_logger().info("********MESSAGE"+str(self.start_time))
+        # self.get_logger().info("********SEC"+str(self.start_time.sec))
+
 
         # obstacles
         p_obstacles = self.declare_parameters(
@@ -266,11 +272,22 @@ class FreeFlyerSimulator(Node):
         metrics = ControllerMetrics()
         metrics.header.stamp = now
         metrics.total_gas_time = self.running_total_gas
-
+        if not self.one_sec_rolled_up:
+            for i in range(8):
+                self.one_sec_thrust_hist[i].append(self.thrusters[i])
+                metrics.running_duty_cycles[i] = np.sum(self.one_sec_thrust_hist[i]) / len(self.one_sec_thrust_hist[i])
+            # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
+            if (self.steps >= self.duty_cycle_window):
+                self.one_sec_rolled_up = True
+        else:
+            for i in range(8):
+                self.one_sec_thrust_hist[i].pop(0)
+                self.one_sec_thrust_hist[i].append(self.thrusters[i])
+                metrics.running_duty_cycles[i] = np.sum(self.one_sec_thrust_hist[i]) / len(self.one_sec_thrust_hist[i])
         # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
-        self.pub_controller_metrics(metrics)
+        self.pub_controller_metrics.publish(metrics)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity

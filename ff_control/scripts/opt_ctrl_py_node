@@ -76,15 +76,16 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization hyperparameters/gains
         self.declare_parameter('opt_horizon_secs', 2.5)
         self.declare_parameter('opt_freq', 3.0)
-        self.declare_parameter('opt_gain_kth', 1.0)
-        self.declare_parameter('opt_gain_kpos', 4.5)
-        self.declare_parameter('opt_gain_kinput', 3.0)
-        self.declare_parameter('opt_gain_kvelo', 30.0)
 
         # self.declare_parameter('opt_gain_kth', 1.0)
-        # self.declare_parameter('opt_gain_kpos', 2.5)
+        # self.declare_parameter('opt_gain_kpos', 4.5)
         # self.declare_parameter('opt_gain_kinput', 3.0)
-        # self.declare_parameter('opt_gain_kvelo', 40.0)
+        # self.declare_parameter('opt_gain_kvelo', 30.0)
+
+        self.declare_parameter('opt_gain_kth', 1.0)
+        self.declare_parameter('opt_gain_kpos', 2.5)
+        self.declare_parameter('opt_gain_kinput', 3.0)
+        self.declare_parameter('opt_gain_kvelo', 40.0)
 
         self.get_logger().info("****** Already defined values!" + str(self.get_parameter("opt_horizon_secs").value))
 
