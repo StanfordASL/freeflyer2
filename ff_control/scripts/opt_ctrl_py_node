@@ -77,8 +77,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('opt_horizon_secs', 3.0)
         self.declare_parameter('opt_freq', 3.0)
 
-        self.declare_parameter('opt_gain_kth', 10.0)
-        self.declare_parameter('opt_gain_kpos', 0)
+        self.declare_parameter('opt_gain_kth', 1.0)
+        self.declare_parameter('opt_gain_kpos', 2.5)
         self.declare_parameter('opt_gain_kinput', 3.0)
         self.declare_parameter('opt_gain_kvelo', 40.0)
 
@@ -98,6 +98,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         :param state_des: desired state
         """
+        self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
             return
@@ -330,7 +331,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return u0_opt, u1_opt, u2_opt, u3_opt
 
     def get_next_warm_start(self, w_opt):
-        output = w_opt.full().flatten()
+        output = w_opt.full().flatten()     
         x = [output[i:6+i] for i in range(w_opt.size()[0]//10+1)]
         u = [output[6+i:10+i] for i in range(w_opt.size()[0]//10)]
 
