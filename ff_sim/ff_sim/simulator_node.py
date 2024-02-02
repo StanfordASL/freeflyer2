@@ -43,6 +43,7 @@ from ff_msgs.msg import (
     Wrench2DStamped,
     WheelVelCommand,
     ThrusterCommand,
+    ControllerMetrics
 )
 
 from ff_params import RobotParams
@@ -116,6 +117,17 @@ class FreeFlyerSimulator(Node):
 
         self.p = RobotParams(self)
 
+        self.running_total_gas = 0
+        self.thrust_hist = [[] for i in range(8)]
+        self.thrust_duty_cycles = [0]*8
+        # self.start_time = self.get_clock().now().to_msg()
+        self.steps = 0
+        self.duty_cycle_window = 200
+        self.rolled_up = False
+        # self.get_logger().info("********MESSAGE"+str(self.start_time))
+        # self.get_logger().info("********SEC"+str(self.start_time.sec))
+
+
         # obstacles
         p_obstacles = self.declare_parameters(
             "obstacles",
@@ -180,6 +192,7 @@ class FreeFlyerSimulator(Node):
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
         self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
+        self.pub_controller_metrics = self.create_publisher(ControllerMetrics, "controller/metrics", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
@@ -255,9 +268,29 @@ class FreeFlyerSimulator(Node):
         mocap.pose.orientation.y = 0.0
         mocap.pose.orientation.z = np.sin(theta / 2)
 
-        # Publish
+        # Metrics
+        self.running_total_gas += np.sum(self.thrusters)*self.SIM_DT
+        self.steps+=1
+        metrics = ControllerMetrics()
+        metrics.header.stamp = now
+        metrics.total_gas_time = self.running_total_gas
+        if not self.rolled_up:
+            for i in range(8):
+                self.thrust_hist[i].append(self.thrusters[i])
+                self.thrust_duty_cycles[i] = np.sum(self.thrust_hist[i]) / len(self.thrust_hist[i])
+            # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
+            if (self.steps >= self.duty_cycle_window):
+                self.rolled_up = True
+        else:
+            for i in range(8):
+                self.thrust_duty_cycles[i] -= self.thrust_hist[i].pop(0)/self.duty_cycle_window
+                self.thrust_duty_cycles[i] += self.thrusters[i]/self.duty_cycle_window
+                self.thrust_hist[i].append(self.thrusters[i])
+        metrics.running_duty_cycles = self.thrust_duty_cycles
+        # # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
+        self.pub_controller_metrics.publish(metrics)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity

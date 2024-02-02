@@ -35,7 +35,7 @@ class WrenchController(LowLevelController):
         Set wrench in body frame.
 
         :param wrench_body: wrench in body frame
-        :param use_wheel: set to ture to use the inertial wheel (TODO(alvin): unsupported)
+        :param use_wheel: set to true to use the inertial wheel (TODO(alvin): unsupported)
         """
         if use_wheel:
             self.get_logger().error("set_wrench failed: use_wheel not implemented")
@@ -45,6 +45,7 @@ class WrenchController(LowLevelController):
         wrench_body_clipped = self.clip_wrench(wrench_body)
 
         # convert force
+        self.get_logger().info("Checking value of actuators" + str(self.p.actuators["F_max_per_thruster"]))
         u_Fx = wrench_body_clipped.fx / (2 * self.p.actuators["F_max_per_thruster"])
         u_Fy = wrench_body_clipped.fy / (2 * self.p.actuators["F_max_per_thruster"])
         if u_Fx > 0:

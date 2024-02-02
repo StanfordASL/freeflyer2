@@ -1,0 +1,517 @@
+#!/usr/bin/env python3
+
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+import copy
+import rclpy
+
+
+import numpy as np
+from casadi import *
+import typing as T
+import matplotlib.pyplot as plt
+
+from ff_control.tri_thruster_ctrl import TrinaryThrusterController
+from ff_msgs.msg import FreeFlyerState
+from ff_msgs.msg import FreeFlyerStateStamped
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32
+
+
+class ThrusterOptControlNode(TrinaryThrusterController):
+    """
+    Class for a CasADi-based optimization controller (based on linear_ctrl.py.
+
+    state definition:   [x, y, theta, vx, vy, wz]
+    control definition: [u0, u1, u2, u3] Trinary (-1, 0, 1) thruster representation of 8-thruster config
+
+    Note: the current implementation is not thread safe
+    """
+    STATE_DIM = 6
+    CONTROL_DIM = 4
+
+    def __init__(self):
+        super().__init__('thrust_opt_control_node')
+        # State estimator
+        self.declare_parameter("state_channel", "est/state")
+        self._state_sub = self.create_subscription(
+            FreeFlyerStateStamped,
+            self.get_parameter("state_channel").get_parameter_value().string_value,
+            self._state_callback,
+            10,
+        )
+        self._state_ready = False
+        self._state_stamped = FreeFlyerStateStamped()
+        self._state_desired = FreeFlyerStateStamped()
+        self._params_ready = False
+        self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
+        # self._readjust_controller_bounds = np.array([0, 0, 0])
+        self._readjust_controller_bounds = np.array([0.5, 0.5, 1])
+
+        # Goal State command
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            'ctrl/state', self.state_setpoint_callback, 10)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            '/goal_pose', self.rviz_setpoint_callback, 10)
+        
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+        
+        self.timer = self.create_timer(0.333, self.control_loop)
+
+        # Optimization far hyperparameters/gains
+        self.get_logger().info("*** Reset to default hyperparams ***")
+        self._close_controller = False
+        self.declare_parameter('opt_horizon_secs', 1.0)
+        self.declare_parameter('opt_freq', 3.0)
+
+        # self.declare_parameter('opt_gain_kth', 200.0)
+        # self.declare_parameter('opt_gain_kpos', 0.00)
+        # self.declare_parameter('opt_gain_kinput', 1.0)
+        # self.declare_parameter('opt_gain_kvelo', 1.0)
+
+        self.declare_parameter('opt_gain_kth', 1.0)
+        self.declare_parameter('opt_gain_kpos', 2.5)
+        self.declare_parameter('opt_gain_kinput', 3.0)
+        self.declare_parameter('opt_gain_kvelo', 40.0)
+
+
+    def param_update_callback(self):
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+        self._params_ready = True
+    
+    def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
+        """
+        Send desirable target state for optimization-based control.
+
+        :param state_des: desired state
+        """
+        # self.get_logger().info("Goal"+str(state_des) + "\n")
+        if not self._state_ready:
+            self.get_logger().warn("send_control ignored, current state not yet ready")
+            return
+
+        if not self._params_ready:
+            self.get_logger().warn("send_control ignored, parameters not yet ready")
+            return
+
+        self.goal_repeater_pub.publish(self._state_desired)
+
+        # convert desired state to vector form
+        if isinstance(state_des, FreeFlyerState):
+            state_des = self.state2vec(state_des)
+
+        if isinstance(curr_state, FreeFlyerState):
+            curr_state = self.state2vec(curr_state)
+
+        if np.all((state_des - curr_state) < self._deadband):
+            self._u = np.zeros(4)
+        else:
+            if not self._close_controller and np.all(np.abs(state_des[:3] - curr_state[:3]) < self._readjust_controller_bounds):
+                self.set_close_hyperparameters()
+
+            self.lbw[:len(curr_state)] = curr_state
+            self.ubw[:len(curr_state)] = curr_state
+            self.w0[0] = curr_state
+            
+            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
+            output = sol['x']
+            
+            # self.get_logger().info("******" + str(sol['f']))
+            cost = Float32()
+            cost.data = float(sol['f'])
+            self.opt_cost_pub.publish(cost)   
+
+            # u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt = self.unpack_wopt(output)
+            u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
+            cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
+            self._u = np.round(cont_thrust)
+
+            # Warm Start next run
+            self.w0 = self.get_next_warm_start(output)
+
+        self.set_tri_thrusters(self._u)
+    
+    def get_state(self) -> T.Optional[FreeFlyerState]:
+        """Get the current latest state."""
+        if not self._state_ready:
+            self.get_logger().error("get_state failed: state not yet ready")
+            return None
+
+        return self._state_stamped.state
+
+    def state_ready_callback(self) -> None:
+        # copy current position as goal position
+        self._state_desired.header.stamp = self.get_clock().now().to_msg()
+        self._state_desired.state = self.get_state()
+
+    def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self.set_default_hyperparameters()
+        self._state_desired = copy.deepcopy(msg)
+
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        self.set_default_hyperparameters()
+        self._state_desired.header.stamp = msg.header.stamp
+
+        self._state_desired.state.pose.x = msg.pose.position.x
+        self._state_desired.state.pose.y = msg.pose.position.y
+        z = msg.pose.orientation.z
+        w = msg.pose.orientation.w
+        self._state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+
+        self._state_desired.state.twist.vx = 0.
+        self._state_desired.state.twist.vy = 0.
+        self._state_desired.state.twist.wz = 0.
+    
+    def control_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            self.get_logger().error("control_loop not started: state not yet ready")
+            return
+
+        self.send_control(self.get_state(), self._state_desired.state)
+        # self.send_control(np.array([0,0,0,0,0,0]))
+
+    def init_solver(self):
+        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
+        lbx = [-4., -4., -np.pi, -0.5, -0.5, -0.5]
+        ubx = [4., 4., np.pi, 0.5, 0.5, 0.5]
+        lbu = [-self.Fmax] * 4 
+        ubu = [self.Fmax] * 4 
+
+        N = int(self.T * self.freq)
+        x0 = [0]*6 # Just initialize to zeros, will revise once first state measurement comes in
+
+        # Declare model variables
+        x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
+        u = MX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
+        goal = MX.sym("goal", self.STATE_DIM)
+        
+        body_Fx, body_Fy, M = self._map_to_force(u)
+
+        th = x[2]
+        world_Fx = body_Fx*cos(th) - body_Fy*sin(th)
+        world_Fy = body_Fx*sin(th) + body_Fy*cos(th)
+        
+        # Model equations
+        xdot = vertcat(x[3],
+                       x[4],
+                       x[5],
+                       world_Fx / self.m,
+                       world_Fy / self.m,
+                       M / self.Ixx)
+
+        # Stepwise Cost
+        L =  self.k_th*(goal[2]-x[2])**2 + self.k_pos*(self.normsq(goal[0:2] - x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(x[3:]-goal[3:])
+
+        # Fixed step Runge-Kutta 4 integrator
+        M = 4 # RK4 steps per interval
+        self.get_logger().info("Time: {}, Timesteps: {}".format(self.T,N))
+        DT = self.T/N/M
+        f = Function('f', [x, u, goal], [xdot, L])    # Define function to take in current state/input and output xdot and cost
+        X0 = MX.sym('X0', 6)                
+        U = MX.sym('U', 4)
+        X = X0
+        Q = 0
+        for j in range(M):
+            k1, k1_q = f(X, U, goal)
+            k2, k2_q = f(X + DT/2 * k1, U, goal)
+            k3, k3_q = f(X + DT/2 * k2, U, goal)
+            k4, k4_q = f(X + DT * k3, U, goal)
+            X=X+DT/6*(k1 +2*k2 +2*k3 +k4)
+            Q = Q + DT/6*(k1_q + 2*k2_q + 2*k3_q + k4_q)
+        F = Function('F', [X0, U, goal], [X, Q],['x0','p', 'param_goal'],['xf','qf'])   # Take in initial state and current input and outputs final state and cost after one step (Runge-Kutta integrated)
+
+        # Initial guess for u
+        u_start = [DM([0.,0.,0.,0.])] * N
+
+        # Get a feasible trajectory as an initial guess
+        xk = DM(x0)
+        x_start = [xk]
+        for k in range(N):
+            xk = F(x0=xk, p=u_start[k])['xf']
+            x_start += [xk]
+
+        # Start with an empty NLP
+        w=[]
+        w0 = []
+        lbw = []
+        ubw = []
+        discrete = []
+        J = 0
+        g=[]
+        lbg = []
+        ubg = []
+
+        # "Lift" initial conditions
+        X0 = MX.sym('X0', self.STATE_DIM)
+        w += [X0]
+        lbw += x0
+        ubw += x0
+        w0 += [x_start[0]]
+
+        # Formulate the NLP
+        Xk = X0
+        for k in range(N):
+            # New NLP variable for the control
+            Uk = MX.sym('U_' + str(k), 4)
+            w   += [Uk]
+            lbw += lbu
+            ubw += ubu
+            w0  += [u_start[k]]
+
+            # Integrate till the end of the interval
+            Fk = F(x0=Xk, p=Uk)
+            Xk_end = Fk['xf']
+            J=J+Fk['qf']
+
+            # New NLP variable for state at end of interval
+            Xk = MX.sym('X_' + str(k+1), 6)
+            w   += [Xk]
+            lbw += lbx
+            ubw += ubx
+            w0  += [x_start[k+1]]
+            # Add equality dynamics constraint 
+            g   += [Xk_end-Xk]
+            lbg += [0, 0, 0, 0, 0, 0]
+            ubg += [0, 0, 0, 0, 0, 0]
+
+        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(self.normsq(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
+
+        # Concatenate decision variables and constraint terms
+        w = vertcat(*w)
+        g = vertcat(*g)
+
+        # Create an NLP solver
+        nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
+        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
+        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
+
+    ############################### Helper Functions for Opt ###############################
+    def _map_to_force(self, u):
+        # Compute body-frame force from thrusters
+        Fx = -u[0] + u[2] 
+        Fy = -u[1] + u[3] 
+        M = self.r * (u[0]+u[1]+u[2]+u[3])
+        return Fx, Fy, M
+
+    def normsq(self, x):
+        sum = 0
+        for i in range(x.shape[0]):
+            sum += x[i]**2
+        return sum
+
+    def unpack_wopt(self, w_opt):
+        # w_opt = w_opt.full().flatten()
+        # w_opt = w_opt.flatten()
+        # x_opt = w_opt[0::10]
+        # y_opt = w_opt[1::10]
+        # th_opt = w_opt[2::10]
+        # xdot_opt = w_opt[3::10]
+        # ydot_opt = w_opt[4::10]
+        # thdot_opt = w_opt[5::10]
+        # u0_opt = np.multiply(w_opt[6::10] > 0, w_opt[6::10])
+        # u1_opt = np.multiply(w_opt[6::10] < 0, -w_opt[6::10])
+        # u2_opt = np.multiply(w_opt[7::10] > 0, w_opt[7::10])
+        # u3_opt = np.multiply(w_opt[7::10] < 0, -w_opt[7::10])
+        # u4_opt = np.multiply(w_opt[8::10] > 0, w_opt[8::10])
+        # u5_opt = np.multiply(w_opt[8::10] < 0, -w_opt[8::10])
+        # u6_opt = np.multiply(w_opt[9::10] > 0, w_opt[9::10])
+        # u7_opt = np.multiply(w_opt[9::10] < 0, -w_opt[9::10])
+        # return u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt #, x_opt, y_opt, th_opt, xdot_opt, ydot_opt, thdot_opt
+        u0_opt = w_opt[6::10]
+        u1_opt = w_opt[7::10]
+        u2_opt = w_opt[8::10]
+        u3_opt = w_opt[9::10]
+        return u0_opt, u1_opt, u2_opt, u3_opt
+
+    def get_next_warm_start(self, w_opt):
+        output = w_opt.full().flatten()     
+        x = [output[i:6+i] for i in range(w_opt.size()[0]//10+1)]
+        u = [output[6+i:10+i] for i in range(w_opt.size()[0]//10)]
+
+        w0 = [DM(x[1])]
+        for i in range(len(u)-1):
+            w0 += [DM(u[i+1])]
+            w0 += [DM(x[i+2])]
+        w0 += [DM(u[-1])]
+        w0 += [DM(x[-1])]
+
+        return w0
+
+    ############################### Helper Functions to unpack FreeFlyerState ###############################
+    @staticmethod
+    def state2vec(state: FreeFlyerState) -> np.ndarray:
+        """
+        Convert state message to state vector.
+
+        :param state: state message
+        :return: state vector
+        """
+        return np.array(
+            [
+                state.pose.x,
+                state.pose.y,
+                state.pose.theta,
+                state.twist.vx,
+                state.twist.vy,
+                state.twist.wz,
+            ]
+        )
+
+    @staticmethod
+    def vec2state(vec: np.ndarray) -> FreeFlyerState:
+        """
+        Convert state vector to state message.
+
+        :param vec: state vector
+        :return: state message
+        """
+        state = FreeFlyerState()
+        state.pose.x = vec[0]
+        state.pose.y = vec[1]
+        state.pose.theta = vec[2]
+        state.twist.vx = vec[3]
+        state.twist.vy = vec[4]
+        state.twist.wz = vec[5]
+
+        return state
+
+    ############################### Helper Functions to access ROS parameters ###############################
+
+    @property
+    def r(self):
+        return self.p.actuators["thrusters_lever_arm"]
+
+    @property
+    def Fmax(self):
+        # self.get_logger().info("Maximum force is currently " + str(self.p.actuators["F_max_per_thruster"]))
+        return self.p.actuators["F_max_per_thruster"]
+
+    @property
+    def m(self):
+        return self.p.dynamics["mass"]
+    
+    @property
+    def Ixx(self):
+        return self.p.dynamics["inertia"]
+    
+    @property
+    def k_th(self):
+        return self.get_parameter('opt_gain_kth').value
+        # return 1.0
+
+    @property
+    def k_pos(self):
+        return self.get_parameter('opt_gain_kpos').value
+        # return 2.5
+
+    @property
+    def k_input(self):
+        return self.get_parameter('opt_gain_kinput').value
+        # return 3.0
+
+    @property
+    def k_velo(self):
+        return self.get_parameter('opt_gain_kvelo').value
+        # return 40.0
+
+    @property
+    def T(self):
+        self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
+        return self.get_parameter('opt_horizon_secs').value
+        # return 3.0
+
+    @property
+    def freq(self):
+        return self.get_parameter('opt_freq').value
+        # return 3.0
+
+    def state_is_ready(self) -> bool:
+        """
+        Check if state is ready.
+
+        :return: True if state is ready, False otherwise
+        """
+        return self._state_ready
+
+    def _state_callback(self, msg: FreeFlyerStateStamped) -> None:
+        """
+        Get called when the first current state measurement comes in.
+        """
+        self._state_stamped = copy.deepcopy(msg)
+
+        if not self._state_ready:
+            self._state_ready = True
+            self.state_ready_callback()
+
+    def set_default_hyperparameters(self) -> None:
+        # Optimization far hyperparameters/gains
+        self.get_logger().info("*** Reset to default hyperparams ***")
+        self._close_controller = False
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 3.0)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 200.0)
+        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
+        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 1.0)
+        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 1.0)
+
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 1.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
+
+    def set_close_hyperparameters(self) -> None:
+        # Optimization close hyperparameters/gains
+        self.get_logger().info("*** Set to close hyperparams ***")
+        self._close_controller = True
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 1.0)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+
+        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
+        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
+        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 2.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 3.5)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    opt_ctrl = ThrusterOptControlNode()
+    rclpy.spin(opt_ctrl)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
