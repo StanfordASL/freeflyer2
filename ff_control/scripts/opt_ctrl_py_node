@@ -138,10 +138,15 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self.ubw[:self.STATE_DIM] = curr_state - state_des
             self.w0[0] = curr_state - state_des
             lbx, ubx = self.update_bounds(state_des)
+            self.get_logger().info("Current State: *****" + str(curr_state))
+            self.get_logger().info("Desired State: *****" + str(state_des))
+            self.get_logger().info("Lower Bound: *****" + str(lbx))
+            self.get_logger().info("Upper Bound: *****" + str(ubx))
             self.get_logger().info("NUMBER OF ITERS: *****" + str((len(self.lbw)-self.STATE_DIM) / (self.STATE_DIM+self.CONTROL_DIM)))
             for i in range((len(self.lbw)-self.STATE_DIM) // (self.STATE_DIM+self.CONTROL_DIM)):
-                self.lbw[self.STATE_DIM+self.CONTROL_DIM:2*self.STATE_DIM+self.CONTROL_DIM] = lbx
-                self.ubw[self.STATE_DIM+self.CONTROL_DIM:2*self.STATE_DIM+self.CONTROL_DIM] = ubx
+                firstInd = self.STATE_DIM*i+self.CONTROL_DIM
+                self.lbw[firstInd:firstInd+self.STATE_DIM] = lbx
+                self.ubw[firstInd:firstInd+self.STATE_DIM] = ubx
             
             sol = self.cont_nlp_solver(x0=vertcat(*self.w0), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
             output = sol['x']
@@ -368,8 +373,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return w0
 
     def update_bounds(self, goal_state):
-        lbx = self._true_lbx
-        ubx = self._true_ubx
+        lbx = copy.deepcopy(self._true_lbx)
+        ubx = copy.deepcopy(self._true_ubx)
         for i in range(self.STATE_DIM):
             lbx[i] -= goal_state[i]
             ubx[i] -= goal_state[i]
