@@ -66,8 +66,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
         self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
-        self._readjust_controller_bounds = np.array([0, 0, 0])
-        # self._readjust_controller_bounds = np.array([0.5, 0.5, 1])
+        # self._readjust_controller_bounds = np.array([0, 0, 0])
+        self._readjust_controller_bounds = np.array([0.5, 0.5, 1])
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -83,7 +83,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization far hyperparameters/gains
         self.get_logger().info("*** Reset to default hyperparams ***")
         self._close_controller = False
-        self.declare_parameter('opt_horizon_secs', 3.0)
+        self.declare_parameter('opt_horizon_secs', 1.0)
         self.declare_parameter('opt_freq', 3.0)
 
         # self.declare_parameter('opt_gain_kth', 200.0)
@@ -439,7 +439,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @property
     def T(self):
-        # self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
+        self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
         return self.get_parameter('opt_horizon_secs').value
         # return 3.0
 
@@ -490,11 +490,15 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization close hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
         self._close_controller = True
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 3.0)
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 1.0)
         freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
 
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
+        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
+        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
+        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 2.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 3.5)
         kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
         kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
 
