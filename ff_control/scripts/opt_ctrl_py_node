@@ -26,6 +26,7 @@
 import copy
 import rclpy
 
+
 import numpy as np
 from casadi import *
 import typing as T
@@ -35,6 +36,7 @@ from ff_control.tri_thruster_ctrl import TrinaryThrusterController
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32
 
 
 class ThrusterOptControlNode(TrinaryThrusterController):
@@ -64,6 +66,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
         self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
+        self._readjust_controller_bounds = np.array([0.5, 0.5, 1])
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -71,9 +74,14 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.rviz_sp_sub = self.create_subscription(PoseStamped,
             '/goal_pose', self.rviz_setpoint_callback, 10)
         
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+        
         self.timer = self.create_timer(0.333, self.control_loop)
 
-        # Optimization hyperparameters/gains
+        # Optimization far hyperparameters/gains
+        self.get_logger().info("*** Reset to default hyperparams ***")
+        self._close_controller = False
         self.declare_parameter('opt_horizon_secs', 3.0)
         self.declare_parameter('opt_freq', 3.0)
 
@@ -98,7 +106,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         :param state_des: desired state
         """
-        self.get_logger().info("Goal"+str(state_des) + "\n")
+        # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
             return
@@ -106,6 +114,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if not self._params_ready:
             self.get_logger().warn("send_control ignored, parameters not yet ready")
             return
+
+        self.goal_repeater_pub.publish(self._state_desired)
 
         # convert desired state to vector form
         if isinstance(state_des, FreeFlyerState):
@@ -116,22 +126,25 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         if np.all((state_des - curr_state) < self._deadband):
             self._u = np.zeros(4)
-            self.get_logger().info("Goal"+str(state_des) + "\n")
-            self.get_logger().info("Current"+str(curr_state) + "\n")
-            self.get_logger().info("Thrust"+str(self._u.T) + "\n")
         else:
+            if not self._close_controller and np.all(np.abs(state_des[:3] - curr_state[:3]) < self._readjust_controller_bounds):
+                self.set_close_hyperparameters()
+
             self.lbw[:len(curr_state)] = curr_state
             self.ubw[:len(curr_state)] = curr_state
             self.w0[0] = curr_state
             
             sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
             output = sol['x']
+            
+            # self.get_logger().info("******" + str(sol['f']))
+            cost = Float32()
+            cost.data = float(sol['f'])
+            self.opt_cost_pub.publish(cost)   
+
             # u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt = self.unpack_wopt(output)
             u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
             cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
-            self.get_logger().info("Goal"+str(state_des) + "\n")
-            self.get_logger().info("Current"+str(curr_state) + "\n")
-            self.get_logger().info("Thrust"+str(cont_thrust.T) + "\n")
             self._u = np.round(cont_thrust)
 
             # Warm Start next run
@@ -153,9 +166,11 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired.state = self.get_state()
 
     def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self.set_default_hyperparameters()
         self._state_desired = copy.deepcopy(msg)
 
     def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        self.set_default_hyperparameters()
         self._state_desired.header.stamp = msg.header.stamp
 
         self._state_desired.state.pose.x = msg.pose.position.x
@@ -390,7 +405,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @property
     def Fmax(self):
-        self.get_logger().info("Maximum force is currently " + str(self.p.actuators["F_max_per_thruster"]))
+        # self.get_logger().info("Maximum force is currently " + str(self.p.actuators["F_max_per_thruster"]))
         return self.p.actuators["F_max_per_thruster"]
 
     @property
@@ -423,7 +438,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @property
     def T(self):
-        self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
+        # self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
         return self.get_parameter('opt_horizon_secs').value
         # return 3.0
 
@@ -449,6 +464,37 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if not self._state_ready:
             self._state_ready = True
             self.state_ready_callback()
+
+    def set_default_hyperparameters(self) -> None:
+        # Optimization far hyperparameters/gains
+        self.get_logger().info("*** Reset to default hyperparams ***")
+        self._close_controller = False
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 3.0)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 1.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
+
+    def set_close_hyperparameters(self) -> None:
+        # Optimization close hyperparameters/gains
+        self.get_logger().info("*** Set to close hyperparams ***")
+        self._close_controller = True
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 3.0)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 30.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
 
 def main(args=None):
     rclpy.init(args=args)
