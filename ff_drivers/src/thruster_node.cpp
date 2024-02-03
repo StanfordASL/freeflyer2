@@ -59,7 +59,7 @@ public:
 
     // listen to commands
     sub_thruster_ = this->create_subscription<ThrusterCommand>(
-      "commands/binary_thruster",
+      "commands/binary_thrust",
       10,
       [this](const ThrusterCommand::SharedPtr msg) {ThrusterCommandCallback(msg);});
   }
