@@ -76,7 +76,7 @@ class LowLevelController(Node):
         """
         Send command to set the inertial wheel velocity.
 
-        TODO(alvin): suppor this or remove?
+        TODO(alvin): support this or remove?
 
         :param velocity: angular velocity in [rad/s]
         """

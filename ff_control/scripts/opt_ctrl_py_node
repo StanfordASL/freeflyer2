@@ -26,11 +26,11 @@
 import copy
 import rclpy
 
-
 import numpy as np
 from casadi import *
 import typing as T
 import matplotlib.pyplot as plt
+import time
 
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
 from ff_msgs.msg import FreeFlyerState
@@ -66,7 +66,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
         self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
-        # self._readjust_controller_bounds = np.array([0, 0, 0])
         self._readjust_controller_bounds = np.array([0.5, 0.5, 1])
 
         # Goal State command
@@ -86,16 +85,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('opt_horizon_secs', 1.0)
         self.declare_parameter('opt_freq', 3.0)
 
-        # self.declare_parameter('opt_gain_kth', 200.0)
-        # self.declare_parameter('opt_gain_kpos', 0.00)
-        # self.declare_parameter('opt_gain_kinput', 1.0)
-        # self.declare_parameter('opt_gain_kvelo', 1.0)
-
         self.declare_parameter('opt_gain_kth', 1.0)
         self.declare_parameter('opt_gain_kpos', 2.5)
         self.declare_parameter('opt_gain_kinput', 3.0)
         self.declare_parameter('opt_gain_kvelo', 40.0)
-
 
     def param_update_callback(self):
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
@@ -107,6 +100,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         :param state_des: desired state
         """
+        t = time.time()
         # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
@@ -138,12 +132,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
             output = sol['x']
             
-            # self.get_logger().info("******" + str(sol['f']))
             cost = Float32()
             cost.data = float(sol['f'])
             self.opt_cost_pub.publish(cost)   
 
-            # u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt = self.unpack_wopt(output)
             u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
             cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
             self._u = np.round(cont_thrust)
@@ -152,6 +144,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self.w0 = self.get_next_warm_start(output)
 
         self.set_tri_thrusters(self._u)
+        self.get_logger().info("Control Computation Time: " + str(time.time()-t))
     
     def get_state(self) -> T.Optional[FreeFlyerState]:
         """Get the current latest state."""
@@ -191,7 +184,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             return
 
         self.send_control(self.get_state(), self._state_desired.state)
-        # self.send_control(np.array([0,0,0,0,0,0]))
 
     def init_solver(self):
         # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
@@ -323,23 +315,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return sum
 
     def unpack_wopt(self, w_opt):
-        # w_opt = w_opt.full().flatten()
-        # w_opt = w_opt.flatten()
-        # x_opt = w_opt[0::10]
-        # y_opt = w_opt[1::10]
-        # th_opt = w_opt[2::10]
-        # xdot_opt = w_opt[3::10]
-        # ydot_opt = w_opt[4::10]
-        # thdot_opt = w_opt[5::10]
-        # u0_opt = np.multiply(w_opt[6::10] > 0, w_opt[6::10])
-        # u1_opt = np.multiply(w_opt[6::10] < 0, -w_opt[6::10])
-        # u2_opt = np.multiply(w_opt[7::10] > 0, w_opt[7::10])
-        # u3_opt = np.multiply(w_opt[7::10] < 0, -w_opt[7::10])
-        # u4_opt = np.multiply(w_opt[8::10] > 0, w_opt[8::10])
-        # u5_opt = np.multiply(w_opt[8::10] < 0, -w_opt[8::10])
-        # u6_opt = np.multiply(w_opt[9::10] > 0, w_opt[9::10])
-        # u7_opt = np.multiply(w_opt[9::10] < 0, -w_opt[9::10])
-        # return u0_opt, u1_opt, u2_opt, u3_opt, u4_opt, u5_opt, u6_opt, u7_opt #, x_opt, y_opt, th_opt, xdot_opt, ydot_opt, thdot_opt
+        w_opt = w_opt.full().flatten()
         u0_opt = w_opt[6::10]
         u1_opt = w_opt[7::10]
         u2_opt = w_opt[8::10]
@@ -406,7 +382,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     @property
     def Fmax(self):
-        # self.get_logger().info("Maximum force is currently " + str(self.p.actuators["F_max_per_thruster"]))
         return self.p.actuators["F_max_per_thruster"]
 
     @property
@@ -420,33 +395,26 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     @property
     def k_th(self):
         return self.get_parameter('opt_gain_kth').value
-        # return 1.0
 
     @property
     def k_pos(self):
         return self.get_parameter('opt_gain_kpos').value
-        # return 2.5
 
     @property
     def k_input(self):
         return self.get_parameter('opt_gain_kinput').value
-        # return 3.0
 
     @property
     def k_velo(self):
         return self.get_parameter('opt_gain_kvelo').value
-        # return 40.0
 
     @property
     def T(self):
-        self.get_logger().info("Horizon seconds is currently" + str(self.get_parameter('opt_horizon_secs').value))
         return self.get_parameter('opt_horizon_secs').value
-        # return 3.0
 
     @property
     def freq(self):
         return self.get_parameter('opt_freq').value
-        # return 3.0
 
     def state_is_ready(self) -> bool:
         """
@@ -472,10 +440,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._close_controller = False
         horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 3.0)
         freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
-        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 200.0)
-        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
-        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 1.0)
-        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 1.0)
 
         kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 1.0)
         kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
@@ -493,10 +457,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 1.0)
         freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
 
-        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
-        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.0)
-        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
-        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
         kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 2.0)
         kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 3.5)
         kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
