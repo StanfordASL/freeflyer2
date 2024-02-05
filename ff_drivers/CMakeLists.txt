@@ -20,7 +20,7 @@ target_compile_features(pwm PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 ament_target_dependencies(pwm rclcpp)
 
 # nodes (TODO: needs to be updated)
-# add_executable(thruster_node src/thruster_node.cpp)
+# add_executaeble(thruster_node src/thruster_node.cpp)
 # target_link_libraries(thruster_node pwm)
 # ament_target_dependencies(thruster_node ff_msgs)
 
