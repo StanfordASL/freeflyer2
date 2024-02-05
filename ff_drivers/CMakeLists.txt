@@ -32,7 +32,7 @@ add_executable(test_all_thrusters src/tests/test_all_thrusters.cpp)
 ament_target_dependencies(test_all_thrusters rclcpp ff_msgs ff_control)
 
 # install nodes
-install(TARGETS test_single test_all_thrusters
+install(TARGETS thruster_node test_single test_all_thrusters
         DESTINATION lib/${PROJECT_NAME})
 
 # install launch files
