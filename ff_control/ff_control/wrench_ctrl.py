@@ -45,7 +45,9 @@ class WrenchController(LowLevelController):
         wrench_body_clipped = self.clip_wrench(wrench_body)
 
         # convert force
-        self.get_logger().info("Checking value of actuators" + str(self.p.actuators["F_max_per_thruster"]))
+        self.get_logger().info(
+            "Checking value of actuators" + str(self.p.actuators["F_max_per_thruster"])
+        )
         u_Fx = wrench_body_clipped.fx / (2 * self.p.actuators["F_max_per_thruster"])
         u_Fy = wrench_body_clipped.fy / (2 * self.p.actuators["F_max_per_thruster"])
         if u_Fx > 0:
@@ -94,7 +96,7 @@ class WrenchController(LowLevelController):
 
     def clip_wrench(self, wrench: Wrench2D) -> Wrench2D:
         wrench_clipped = Wrench2D()
-        force = np.sqrt(wrench.fx**2 + wrench.fy**2)
+        force = np.sqrt(wrench.fx ** 2 + wrench.fy ** 2)
         force_scale = max(force / self.p.actuators["F_body_max"], 1.0)
         torque_scale = max(abs(wrench.tz) / self.p.actuators["M_body_max"], 1.0)
 

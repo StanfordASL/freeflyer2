@@ -46,11 +46,11 @@ class TrinaryThrusterController(LowLevelController):
         switches = []
         for i in range(len(tri_switches)):
             if tri_switches[i] > 0:
-                switches.extend([True,False])
+                switches.extend([True, False])
             elif tri_switches[i] == 0:
-                switches.extend([False,False])
+                switches.extend([False, False])
             else:
-                switches.extend([False,True])
+                switches.extend([False, True])
         lastVal = switches.pop(-1)
         switches = [lastVal] + switches
 

@@ -85,8 +85,8 @@ class LowLevelController(Node):
         msg.velocity = velocity
         self._wheel_pub.publish(msg)
 
-    def param_upda_callback(self):
-        """ 
+    def param_update_callback(self):
+        """
         Callback when parameters are initialized
         Override in subclass
         """
