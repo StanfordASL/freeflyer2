@@ -444,7 +444,7 @@ class FreeFlyerSimulator(Node):
         if (x_next[2] > np.pi):
             x_next[2] -= 2*np.pi
 
-s        return x_next
+        return x_next
 
 
 def main():
