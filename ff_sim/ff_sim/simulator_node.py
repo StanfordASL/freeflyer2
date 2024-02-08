@@ -433,11 +433,18 @@ class FreeFlyerSimulator(Node):
             k4 = self.f_dynamics_continuous_time(x4, u_k)
 
             x_next = x_k + (1.0 / 6.0) * dt * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-
+            
         else:
             print("[FreeFlyerSimulator::compute_dynamics_dt]: Unknown Discretization Scheme.")
 
-        return x_next
+
+        # Wrap theta to [-pi, pi]
+        temp = x_next[2]
+        x_next[2] = ((x_next[2]%(2*np.pi))+2*np.pi) % (2*np.pi)
+        if (x_next[2] > np.pi):
+            x_next[2] -= 2*np.pi
+
+s        return x_next
 
 
 def main():

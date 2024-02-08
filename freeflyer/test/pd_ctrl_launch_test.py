@@ -129,7 +129,7 @@ class TestPDControlNode(unittest.TestCase):
                     and "simulator_node" in self.node.get_node_names()
                 )
                 time.sleep(0.1)
-            assert node_flag, "pd_ctrl_node or simualtor_node launch failure"
+            assert node_flag, "pd_ctrl_node or simulator_node launch failure"
 
             # wait for node to initialize
             time.sleep(3.0)
