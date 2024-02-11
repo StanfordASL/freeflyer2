@@ -219,7 +219,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        M / self.Ixx)
 
         # Stepwise Cost
-        L =  self.k_th*(1-cos(goal[2]-x[2]))**2 + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:]-x[3:])
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:]-x[3:])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
@@ -293,7 +293,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(1-cos(goal[2]-Xk_end[2]))**2 + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
+        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(1-cos(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -461,24 +461,24 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization close hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
         self._close_controller = True
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.8)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 5.0)
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.3)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 10.0)
 
-        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 8.0)
-        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 0.35)
-        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 1.50)
-        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 2.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 5.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 3.0)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 1.5)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 2.5)
 
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
-        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
-        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+        # kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 50.0)
+        # kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
+        # kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.0)
+        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
 
         self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.2, self.control_loop)
+        self.timer = self.create_timer(0.1, self.control_loop)
 
 
 def main(args=None):
