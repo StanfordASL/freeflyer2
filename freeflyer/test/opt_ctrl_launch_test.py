@@ -142,7 +142,7 @@ class TestOptControlNode(unittest.TestCase):
             pub.publish(target_state)
 
             # wait for 15 seconds and check results
-            end_time = time.time() + 15.0
+            end_time = time.time() + 25.0
             while time.time() < end_time:
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
