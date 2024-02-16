@@ -48,7 +48,7 @@ from ff_msgs.msg import (
 
 from ff_params import RobotParams
 
-class ControllerMetrics(Node):
+class ControllerMetricsPublisher(Node):
     """ Class to listen to free flyer commands and calculate metrics """
 
     def __init__(self):
@@ -117,7 +117,7 @@ class ControllerMetrics(Node):
 
 def main():
     rclpy.init()
-    ff_metrics = ControllerMetrics()
+    ff_metrics = ControllerMetricsPublisher()
     rclpy.spin(ff_metrics)
     rclpy.shutdown()
 

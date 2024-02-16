@@ -21,8 +21,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-                            "simulator_node = ff_sim.simulator_node:main"
-                            # "controller_metrics = ff_sim.controller_metrics:main"
+                            "simulator_node = ff_sim.simulator_node:main",
+                            "controller_metrics = ff_sim.controller_metrics:main"
                             ],
     },
 )
