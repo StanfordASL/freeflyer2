@@ -388,9 +388,7 @@ class FreeFlyerSimulator(Node):
         f[0:2] = v
         f[2] = thetadot
         thetaddot = (M - F[1] * p0[0] + F[0] * p0[1]) / J
-        f[3:5] = np.matmul(
-            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot ** 2 * p0))
-        )
+        f[3:5] = np.matmul(R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0)))
         f[5] = thetaddot
 
         # add constant force due to table tilt
