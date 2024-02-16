@@ -270,28 +270,28 @@ class FreeFlyerSimulator(Node):
         mocap.pose.orientation.z = np.sin(theta / 2)
 
         # Metrics
-        self.running_total_gas += np.sum(self.thrusters) * self.SIM_DT
-        self.steps += 1
-        metrics = ControllerMetrics()
-        metrics.header.stamp = now
-        metrics.total_gas_time = self.running_total_gas
-        if not self.rolled_up:
-            for i in range(8):
-                self.thrust_hist[i].append(self.thrusters[i])
-                self.thrust_duty_cycles[i] = np.sum(self.thrust_hist[i]) / len(self.thrust_hist[i])
-            # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
-            if self.steps >= self.duty_cycle_window:
-                self.rolled_up = True
-        else:
-            for i in range(8):
-                self.thrust_duty_cycles[i] -= self.thrust_hist[i].pop(0) / self.duty_cycle_window
-                self.thrust_duty_cycles[i] += self.thrusters[i] / self.duty_cycle_window
-                self.thrust_hist[i].append(self.thrusters[i])
-        metrics.running_duty_cycles = self.thrust_duty_cycles
+        # self.running_total_gas += np.sum(self.thrusters) * self.SIM_DT
+        # self.steps += 1
+        # metrics = ControllerMetrics()
+        # metrics.header.stamp = now
+        # metrics.total_gas_time = self.running_total_gas
+        # if not self.rolled_up:
+        #     for i in range(8):
+        #         self.thrust_hist[i].append(self.thrusters[i])
+        #         self.thrust_duty_cycles[i] = np.sum(self.thrust_hist[i]) / len(self.thrust_hist[i])
+        #     # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
+        #     if self.steps >= self.duty_cycle_window:
+        #         self.rolled_up = True
+        # else:
+        #     for i in range(8):
+        #         self.thrust_duty_cycles[i] -= self.thrust_hist[i].pop(0) / self.duty_cycle_window
+        #         self.thrust_duty_cycles[i] += self.thrusters[i] / self.duty_cycle_window
+        #         self.thrust_hist[i].append(self.thrusters[i])
+        # metrics.running_duty_cycles = self.thrust_duty_cycles
         # # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
-        self.pub_controller_metrics.publish(metrics)
+        # self.pub_controller_metrics.publish(metrics)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
