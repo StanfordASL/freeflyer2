@@ -56,6 +56,6 @@ def generate_launch_description():
                 executable="safety_filter",
                 name="safety_filter",
                 namespace=robot_name,
-            )
+            ),
         ]
     )

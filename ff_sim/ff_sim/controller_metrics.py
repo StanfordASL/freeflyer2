@@ -48,8 +48,9 @@ from ff_msgs.msg import (
 
 from ff_params import RobotParams
 
+
 class ControllerMetricsPublisher(Node):
-    """ Class to listen to free flyer commands and calculate metrics """
+    """Class to listen to free flyer commands and calculate metrics"""
 
     def __init__(self):
         super().__init__("ff_ctrl_metrics")
@@ -74,15 +75,15 @@ class ControllerMetricsPublisher(Node):
         )
 
     def process_new_wheel_cmd(self, msg: WheelVelCommand) -> None:
-        """ Doesn't process wheel command """
+        """Doesn't process wheel command"""
         pass
 
     def process_new_binary_thrust_cmd(self, msg: ThrusterCommand) -> None:
-        """ Process binary thrusters """
+        """Process binary thrusters"""
         now = self.get_clock().now().to_msg()
         dtsec = now.sec - self.curr_time.sec
         dtnsec = now.nanosec - self.curr_time.nanosec
-        dt = dtsec + dtnsec/1e9
+        dt = dtsec + dtnsec / 1e9
 
         thrusters = np.array(msg.switches, dtype=float)
         self.running_total_gas += self.prev_thruster_sum * dt
@@ -93,7 +94,9 @@ class ControllerMetricsPublisher(Node):
             self.time_hist.append(dt)
             for i in range(8):
                 self.thrust_hist[i].append(thrusters[i])
-                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i],self.time_hist) / np.sum(self.time_hist)
+                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i], self.time_hist) / np.sum(
+                    self.time_hist
+                )
             if self.steps >= self.duty_cycle_window:
                 self.rolled_up = True
         else:
@@ -102,8 +105,10 @@ class ControllerMetricsPublisher(Node):
             for i in range(8):
                 self.thrust_hist[i].pop(0)
                 self.thrust_hist[i].append(thrusters[i])
-                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i],self.time_hist) / np.sum(self.time_hist)
-        
+                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i], self.time_hist) / np.sum(
+                    self.time_hist
+                )
+
         metrics = ControllerMetrics()
         metrics.header.stamp = now
         metrics.total_gas_time = self.running_total_gas
@@ -114,7 +119,6 @@ class ControllerMetricsPublisher(Node):
 
     def process_new_pwm_thrust_cmd(self):
         pass
-
 
 
 def main():
