@@ -53,7 +53,7 @@ class ControllerMetricsPublisher(Node):
 
     def __init__(self):
         super().__init__("ff_ctrl_metrics")
-        self.curr_time = self.get_clock().now().to_msg().sec
+        self.curr_time = self.get_clock().now().to_msg()
         self.steps = 0
         self.running_total_gas = 0
         self.prev_thruster_sum = 0
@@ -79,8 +79,10 @@ class ControllerMetricsPublisher(Node):
 
     def process_new_binary_thrust_cmd(self, msg: ThrusterCommand) -> None:
         """ Process binary thrusters """
-        now = self.get_clock().now().to_msg().sec
-        dt = now - self.curr_time
+        now = self.get_clock().now().to_msg()
+        dtsec = now.sec - self.curr_time.sec
+        dtnsec = now.nanosec - self.curr_time.nanosec
+        dt = dtsec + dtnsec/1e9
 
         thrusters = np.array(msg.switches, dtype=float)
         self.running_total_gas += self.prev_thruster_sum * dt
@@ -90,7 +92,7 @@ class ControllerMetricsPublisher(Node):
         if not self.rolled_up:
             self.time_hist.append(dt)
             for i in range(8):
-                self.thrust_hist[i].append(self.thrusters[i])
+                self.thrust_hist[i].append(thrusters[i])
                 self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i],self.time_hist) / np.sum(self.time_hist)
             if self.steps >= self.duty_cycle_window:
                 self.rolled_up = True
@@ -99,7 +101,7 @@ class ControllerMetricsPublisher(Node):
             self.time_hist.append(dt)
             for i in range(8):
                 self.thrust_hist[i].pop(0)
-                self.thrust_hist[i].append(self.thrusters[i])
+                self.thrust_hist[i].append(thrusters[i])
                 self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i],self.time_hist) / np.sum(self.time_hist)
         
         metrics = ControllerMetrics()
