@@ -43,7 +43,7 @@ from ff_msgs.msg import (
     Wrench2DStamped,
     WheelVelCommand,
     ThrusterCommand,
-    ControllerMetrics
+    ControllerMetrics,
 )
 
 from ff_params import RobotParams
@@ -119,14 +119,13 @@ class FreeFlyerSimulator(Node):
 
         self.running_total_gas = 0
         self.thrust_hist = [[] for i in range(8)]
-        self.thrust_duty_cycles = [0]*8
+        self.thrust_duty_cycles = [0] * 8
         # self.start_time = self.get_clock().now().to_msg()
         self.steps = 0
         self.duty_cycle_window = 200
         self.rolled_up = False
         # self.get_logger().info("********MESSAGE"+str(self.start_time))
         # self.get_logger().info("********SEC"+str(self.start_time.sec))
-
 
         # obstacles
         p_obstacles = self.declare_parameters(
@@ -192,7 +191,9 @@ class FreeFlyerSimulator(Node):
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
         self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
-        self.pub_controller_metrics = self.create_publisher(ControllerMetrics, "controller/metrics", 10)
+        self.pub_controller_metrics = self.create_publisher(
+            ControllerMetrics, "controller/metrics", 10
+        )
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
@@ -268,29 +269,9 @@ class FreeFlyerSimulator(Node):
         mocap.pose.orientation.y = 0.0
         mocap.pose.orientation.z = np.sin(theta / 2)
 
-        # Metrics
-        self.running_total_gas += np.sum(self.thrusters)*self.SIM_DT
-        self.steps+=1
-        metrics = ControllerMetrics()
-        metrics.header.stamp = now
-        metrics.total_gas_time = self.running_total_gas
-        if not self.rolled_up:
-            for i in range(8):
-                self.thrust_hist[i].append(self.thrusters[i])
-                self.thrust_duty_cycles[i] = np.sum(self.thrust_hist[i]) / len(self.thrust_hist[i])
-            # if (now.sec > self.start_time.sec and now.nanosec > self.start_time.nanosec):
-            if (self.steps >= self.duty_cycle_window):
-                self.rolled_up = True
-        else:
-            for i in range(8):
-                self.thrust_duty_cycles[i] -= self.thrust_hist[i].pop(0)/self.duty_cycle_window
-                self.thrust_duty_cycles[i] += self.thrusters[i]/self.duty_cycle_window
-                self.thrust_hist[i].append(self.thrusters[i])
-        metrics.running_duty_cycles = self.thrust_duty_cycles
-        # # Publish
+        # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
-        self.pub_controller_metrics.publish(metrics)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity
@@ -407,9 +388,7 @@ class FreeFlyerSimulator(Node):
         f[0:2] = v
         f[2] = thetadot
         thetaddot = (M - F[1] * p0[0] + F[0] * p0[1]) / J
-        f[3:5] = np.matmul(
-            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0))
-        )
+        f[3:5] = np.matmul(R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0)))
         f[5] = thetaddot
 
         # add constant force due to table tilt
@@ -436,6 +415,12 @@ class FreeFlyerSimulator(Node):
 
         else:
             print("[FreeFlyerSimulator::compute_dynamics_dt]: Unknown Discretization Scheme.")
+
+        # Wrap theta to [-pi, pi]
+        temp = x_next[2]
+        x_next[2] = ((x_next[2] % (2 * np.pi)) + 2 * np.pi) % (2 * np.pi)
+        if x_next[2] > np.pi:
+            x_next[2] -= 2 * np.pi
 
         return x_next
 

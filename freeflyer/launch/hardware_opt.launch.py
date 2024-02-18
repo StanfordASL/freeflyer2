@@ -58,13 +58,6 @@ def generate_launch_description():
                 name="opt_ctrl_node",
                 namespace=robot_name,
             ),
-            # Node(
-            #     package="ff_control",
-            #     executable=["pwm_ctrl_cpp_node"],
-            #     name="pwm_ctrl_node",
-            #     namespace=robot_name,
-            #     condition=IfCondition(PythonExpression(["'", impl, "'", " == 'py'"])),
-            # ),
             Node(
                 package="ff_estimate",
                 executable="moving_avg_estimator_node",
