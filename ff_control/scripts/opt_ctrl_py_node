@@ -475,7 +475,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.3)
         freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 10.0)
 
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 5.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
         kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 10.0)
         kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.5)
         kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 20.5)

@@ -32,8 +32,8 @@ import rclpy
 import math
 import sys
 
-goal_positions = [[1.0,1.0,math.pi], [0.5,0.5,0.0]]
-goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0]]
+goal_positions = [[0.5,0.5,0.0], [0.5,0.5,math.pi], [1.5,1.5,math.pi]]
+goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
 
 class GoalPublisherNode(Node):
     def __init__(self):
@@ -56,7 +56,7 @@ def main():
     rclpy.init()
     publisher = GoalPublisherNode()
     publisher.publish_goal(goal_positions[index], goal_velos[index])
-    rclpy.spin(publisher)
+    # rclpy.spin(publisher)
     rclpy.shutdown()
 
 if __name__ == "__main__":
