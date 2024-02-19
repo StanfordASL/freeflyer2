@@ -1,14 +1,14 @@
 //Dock node and Filter
+#include "ff_estimate/base_mocap_estimator.hpp"
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp/time.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
-#include <geometry_msgs/msg/pose2_d_stamped.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/twist_stamped.hpp>
-#include <std_msgs/msg/header.hpp>
-#include <optional>
+
+#include <Eigen/Dense>
+ 
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+using ff_msgs::msg::FreeFlyerState;
+using ff_msgs::msg::Pose2DStamped;
+using ff_msgs::msg::Pose2D;
 
 using namespace std
 
