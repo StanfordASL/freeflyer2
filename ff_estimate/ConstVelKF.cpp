@@ -1,16 +1,16 @@
 //Dock node and Filter
+#include "ff_estimate/base_mocap_estimator.hpp"
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp/time.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp>
-#include <geometry_msgs/msg/pose2_d.hpp>
-#include <geometry_msgs/msg/pose2_d_stamped.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/twist_stamped.hpp>
-#include <std_msgs/msg/header.hpp>
-#include <optional>
 
-using namespace std
+#include <Eigen/Dense>
+ 
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+using ff_msgs::msg::FreeFlyerState;
+using ff_msgs::msg::Pose2DStamped;
+using ff_msgs::msg::Pose2D;
+
+using namespace std;
 
 class ConstantVelKF {
     public:
@@ -18,7 +18,7 @@ class ConstantVelKF {
         Eigen::MatrixXd R;
         double MAX_DT;
 
-        ConstantAccelKF(Eigen::VectorXd x0, Eigen::MatrixXd P0, int dim = 3, int angle_idx = 2)
+        ConstantVelKF(Eigen::VectorXd x0, Eigen::MatrixXd P0, int dim = 3, int angle_idx = 2)
             : x(x0), P(P0), dim(dim), angle_idx(angle_idx) {
             Q = Eigen::MatrixXd::Identity(2 * dim, 2 * dim);
             R = Eigen::MatrixXd::Identity(dim, dim) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
