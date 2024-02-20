@@ -65,7 +65,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
-        self._deadband = np.array([0.03, 0.03, 0.05, 0.02, 0.02, 0.02])
+        self._deadband = np.array([0.03, 0.03, 0.05, 0.001, 0.001, 0.02])
         self._readjust_controller_bounds = np.array([0.4, 0.4])
 
         # Goal State command
@@ -473,18 +473,18 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.get_logger().info("*** Set to close hyperparams ***")
         self._close_controller = True
         horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.5)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 6.0)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 8.0)
 
         kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 15.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 12.0)
         kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.5)
-        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 30.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 35.0)
 
         self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.1667, self.control_loop)
+        self.timer = self.create_timer(0.125, self.control_loop)
 
 
 def main(args=None):
