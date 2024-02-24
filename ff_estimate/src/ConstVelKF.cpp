@@ -12,15 +12,52 @@ using ff_msgs::msg::Pose2D;
 
 using namespace std;
 
-class ConstantVelKF {
+class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
+
     public:
-        Eigen::MatrixXd Q;
-        Eigen::MatrixXd R;
-        double MAX_DT;
+        Eigen::Matrix<double, 6, 6> Q = Eigen::Matrix<6,6>::Identity(6, 6);
+        Eigen::Matrix<double, 3, 3> R {
+			{2.4445e-3,    0     ,     0    },
+			{    0    , 1.2527e-3,     0    },
+			{    0    ,    0     , 4.0482e-3},
+		};
+        double MAX_DT = 1e-3;
+
+        ConstVelKalmanFilterNode() : ff::BaseMocapEstimator("const_vel_kalman_filter_node") {
+            this->declare_parameter("min_dt", 0.005);
+        }
+
+        void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override {
+
+         //R = Eigen::Matrix<3,3>::Identity(3, 3) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
+        
+        FreeFlyerState state{};
+        Pose2D pose2d{};
+
+        state.pose = pose_stamped.pose;
+        if (prev_state_ready_) {
+            const rclcpp::Time now = pose_stamped.header.stamp;
+            const rclcpp::Time last = prev_.header.stamp;
+            double dt = (now - last).seconds();
+
+            if (dt < (this->get_parameter("min_dt").as_double())) {
+                return;
+            }
+
+        } else {
+            prev_state_ready_ = true;
+        }
+
+        prev_.state = state;
+        prev_.header = pose_stamped.header;
+
+        SendStateEstimate(state);
+    }
+
 
         ConstantVelKF(Eigen::VectorXd x0, Eigen::MatrixXd P0, int dim = 3, int angle_idx = 2)
             : x(x0), P(P0), dim(dim), angle_idx(angle_idx) {
-            Q = Eigen::MatrixXd::Identity(2 * dim, 2 * dim);
+            Q = Eigen::Matrix<6,6>::Identity(2 * dim, 2 * dim);
             R = Eigen::MatrixXd::Identity(dim, dim) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
             MAX_DT = 1e-3;
         }
@@ -30,8 +67,8 @@ class ConstantVelKF {
                 return;
             }
 
-            Eigen::MatrixXd A = Eigen::MatrixXd::Identity(2 * dim, 2 * dim);
-            A.block(0, dim, dim, dim) = Eigen::MatrixXd::Identity(dim, dim) * dt;
+            Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Identity(6, 6);
+            A.block<3, 3>(0, 3) = Eigen::Matrix<double, 6, 6>::Identity(3, 3) * dt;
 
             x = A * x;
             P = A * P * A.transpose() + Q * dt;
