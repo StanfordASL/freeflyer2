@@ -91,6 +91,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('opt_gain_kvelo', 40.0)
 
     def param_update_callback(self):
+        # fmax = rclpy.Parameter("F_max_per_thruster"] # self.p.actuators["F_max_per_thruster"]
+        # kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+        # self.set_parameters([fmax])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
         self._params_ready = True
     
@@ -472,19 +475,19 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization close hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
         self._close_controller = True
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.5)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 8.0)
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.417)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 12.0)
 
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 10.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 12.0)
-        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.5)
-        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 35.0)
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 4.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 22.0)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 4.5)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 60.0)
 
         self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.125, self.control_loop)
+        self.timer = self.create_timer(0.083, self.control_loop)
 
 
 def main(args=None):
