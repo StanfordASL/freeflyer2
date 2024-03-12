@@ -227,7 +227,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        M / self.Ixx)
 
         # Stepwise Cost
-        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:]-x[3:])
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:5]-x[3:5])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
@@ -475,19 +475,19 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization close hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
         self._close_controller = True
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.417)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 12.0)
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.4)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 10.0)
 
         kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 4.0)
         kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 22.0)
-        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 4.5)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 6.5)
         kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 60.0)
 
         self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.083, self.control_loop)
+        self.timer = self.create_timer(0.1, self.control_loop)
 
 
 def main(args=None):
