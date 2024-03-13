@@ -59,13 +59,6 @@ def generate_test_description():
         name="opt_ctrl_node",
         namespace=ROBOT_NAME,
     )
-    # pwm_ctrl_node = Node(
-    #     package="ff_control",
-    #     executable=["pwm_ctrl_cpp_node"],
-    #     name="pwm_ctrl_node",
-    #     namespace=ROBOT_NAME,
-    #     condition=IfCondition(PythonExpression(["'", impl, "'", " == 'py'"])),
-    # )
     estimator = Node(
         package="ff_estimate",
         executable="moving_avg_estimator_node",

@@ -43,7 +43,6 @@ from ff_msgs.msg import (
     Wrench2DStamped,
     WheelVelCommand,
     ThrusterCommand,
-    ControllerMetrics,
 )
 
 from ff_params import RobotParams
@@ -117,16 +116,6 @@ class FreeFlyerSimulator(Node):
 
         self.p = RobotParams(self)
 
-        self.running_total_gas = 0
-        self.thrust_hist = [[] for i in range(8)]
-        self.thrust_duty_cycles = [0] * 8
-        # self.start_time = self.get_clock().now().to_msg()
-        self.steps = 0
-        self.duty_cycle_window = 200
-        self.rolled_up = False
-        # self.get_logger().info("********MESSAGE"+str(self.start_time))
-        # self.get_logger().info("********SEC"+str(self.start_time.sec))
-
         # obstacles
         p_obstacles = self.declare_parameters(
             "obstacles",
@@ -191,9 +180,6 @@ class FreeFlyerSimulator(Node):
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
         self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
-        self.pub_controller_metrics = self.create_publisher(
-            ControllerMetrics, "controller/metrics", 10
-        )
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
 
