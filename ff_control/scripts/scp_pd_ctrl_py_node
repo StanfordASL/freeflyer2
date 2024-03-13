@@ -1,0 +1,750 @@
+#!/usr/bin/env python3
+
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+import copy
+import rclpy
+import sys
+sys.path.append('/home/dcelestini/Tranformer/lib/python3.10/site-packages')
+import numpy as np
+import cvxpy as cp
+import typing as T
+import matplotlib.pyplot as plt
+import time
+
+from ff_control.tri_thruster_ctrl import TrinaryThrusterController
+from ff_control.linear_ctrl import LinearController
+from ff_msgs.msg import FreeFlyerState
+from ff_msgs.msg import FreeFlyerStateStamped
+from ff_srvs.srv import ObsInfo
+from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Float32
+
+class ImpulsiveOCP():
+
+    # SCP param
+    iter_max_SCP = 20
+    trust_region0 = 10
+    trust_regionf = 0.01
+    J_tol= 1e-6
+
+    def __init__(self, n_state, n_action, param):
+        self.n_state = n_state
+        self.n_action = n_action
+        # Linear system for optimization with impulsive DeltaV, DeltaPSI_dot
+        self.A = np.array([[0, 0, 0, 1, 0, 0],
+                           [0, 0, 0, 0, 1, 0],
+                           [0, 0, 0, 0, 0, 1],
+                           [0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0]])
+        self.B = np.array([[0, 0, 0],
+                           [0, 0, 0],
+                           [0, 0, 0],
+                           [1, 0, 0],
+                           [0, 1, 0],
+                           [0, 0, 1]])
+        self.param = param
+        
+    def set_Ak(self, dt):
+        self.Ak = np.eye(self.n_state, self.n_state) + dt*self.A
+    
+    def action_bounding_box_lin(self, psi_ref, action_ref):
+        A_bb = 0.5*np.array([-np.cos(psi_ref)*action_ref[0] - np.sin(psi_ref)*action_ref[1],
+                             -np.sin(psi_ref)*action_ref[0] + np.cos(psi_ref)*action_ref[1],
+                             -np.cos(psi_ref)*action_ref[0] - np.sin(psi_ref)*action_ref[1],
+                             -np.sin(psi_ref)*action_ref[0] + np.cos(psi_ref)*action_ref[1]])
+        B_bb = np.array([[-np.sin(psi_ref)/2, np.cos(psi_ref)/2,  1/(4*self.param['b_t'])],
+                         [ np.cos(psi_ref)/2, np.sin(psi_ref)/2, -1/(4*self.param['b_t'])],
+                         [-np.sin(psi_ref)/2, np.cos(psi_ref)/2, -1/(4*self.param['b_t'])],
+                         [ np.cos(psi_ref)/2, np.sin(psi_ref)/2,  1/(4*self.param['b_t'])]])
+        
+        return A_bb, B_bb
+
+    def solve_scp(self, state_init, state_final, obs, total_time, n_timesteps):
+        T = total_time
+        dt = total_time/(n_timesteps-1)
+        tt = np.arange(0,T+dt/2,dt)
+        self.set_Ak(dt)
+        state_ref = state_init[:,None] + ((state_final - state_init)[:,None]/T)*np.repeat(tt[None,:], self.n_state, axis=0)
+        action_ref = np.zeros((self.n_action, len(tt)-1))
+        self.Dv_t_M = self.param['F_t_M']*dt/self.param['mass']
+        obs = copy.deepcopy(obs)
+        obs['radius'] = obs['radius'] + self.param['radius']
+
+        # Initial condition for the scp
+        DELTA_J = 10
+        trust_region = self.trust_region0
+        beta_SCP = (self.trust_regionf/self.trust_region0)**(1/self.iter_max_SCP)
+        J_vect = np.ones(shape=(self.iter_max_SCP,), dtype=float)*1e12
+
+        for scp_iter in range(self.iter_max_SCP):
+            # define and solve
+            states_scp, actions_scp, J, feas_scp = self.ocp_scp(state_ref, action_ref, state_init, state_final, obs, trust_region, n_timesteps-1)
+            if feas_scp == 'infeasible':
+                break
+            J_vect[scp_iter] = J
+
+            # compute error
+            trust_error = np.max(np.linalg.norm(states_scp - state_ref, axis=0))
+            if scp_iter > 0:
+                DELTA_J = J_prev - J
+
+            # Update iterations
+            state_ref = states_scp
+            action_ref = actions_scp
+            J_prev = J
+            trust_region = beta_SCP*trust_region
+            if scp_iter >= 1 and (trust_error <= self.trust_regionf and abs(DELTA_J) < self.J_tol):
+                break
+        
+        if feas_scp == 'infeasible':
+            s_opt = None
+            a_opt = None
+            a_opt_t = None
+            J = None
+        else:
+            s_opt = states_scp
+            a_opt = actions_scp
+            a_opt_t = self.param['Lambda_inv'] @ (self.R_BG(s_opt[2,:-1]) @ a_opt[:,None,:].transpose(2,0,1))[:,:,0].T
+        
+        traj_opt = {
+            'time' : tt,
+            'states' : s_opt,
+            'actions_G' : a_opt,
+            'actions_t' : a_opt_t
+        }
+        
+        return traj_opt, J_vect, scp_iter, feas_scp
+    
+    def ocp_scp(self, state_ref, action_ref, state_init, state_final, obs, trust_region, n_time):
+        s = cp.Variable((self.n_state,n_time))
+        a = cp.Variable((self.n_action,n_time))
+
+        # CONSTRAINTS
+        constraints = []
+
+        # Initial, dynamics and final state
+        constraints += [s[:,0] == state_init]
+        constraints += [s[:,k+1] == self.Ak @ (s[:,k] + self.B @ a[:,k]) for k in range(n_time-1)]
+        constraints += [(s[:,-1] + self.B @ a[:,-1]) == state_final]
+        # Trust region and koz and action bounding box
+        for k in range(0,n_time):
+            # Trust region
+            b_soc_k = -state_ref[:,k]
+            constraints += [cp.SOC(trust_region, s[:,k] + b_soc_k)]
+            # keep-out-zone
+            for n_obs in range(len(obs['radius'])):
+                c_koz_k = np.transpose(state_ref[:2,k] - obs['position'][:,n_obs]).dot(np.eye(2)/((obs['radius'][n_obs])**2))
+                b_koz_k = np.sqrt(c_koz_k.dot(state_ref[:2,k] - obs['position'][:,n_obs]))
+                constraints += [c_koz_k @ (s[:2,k] - obs['position'][:,n_obs]) >= b_koz_k]
+            # action bounding box
+            A_bb_k, B_bb_k = self.action_bounding_box_lin(state_ref[2,k], action_ref[:,k])
+            constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] >= -self.Dv_t_M]
+            constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= self.Dv_t_M]
+        
+        # Cost function
+        cost = cp.sum(cp.norm(a, 1, axis=0))
+
+        # Problem formulation
+        prob = cp.Problem(cp.Minimize(cost), constraints)
+
+        prob.solve(solver=cp.ECOS, verbose=False)
+        if prob.status == 'infeasible':
+            print("[solve]: Problem infeasible.")
+            s_opt = None
+            a_opt = None
+            J = None
+        else:
+            s_opt = s.value#np.hstack((s.value, x_final.reshape(-1,1))).T
+            a_opt = a.value
+            s_opt = np.vstack((s_opt.T, s_opt[:,-1] + self.B @ a_opt[:,-1])).T
+            J = prob.value
+
+        return s_opt, a_opt, J, prob.status
+
+    @staticmethod
+    def R_GB(psi): 
+        try:
+            R_GB = np.zeros((len(psi),3,3))
+            cos_psi = np.cos(psi)
+            sin_psi = np.sin(psi)
+            R_GB[:,0,0] = cos_psi
+            R_GB[:,1,1] = cos_psi
+            R_GB[:,0,1] = -sin_psi
+            R_GB[:,1,0] = sin_psi
+            R_GB[:,2,2] = 1
+        except:
+            R_GB = np.array([[np.cos(psi), -np.sin(psi), 0],
+                            [np.sin(psi),  np.cos(psi), 0],
+                            [          0,            0, 1]])
+        return R_GB
+    
+    @staticmethod
+    def R_BG(psi):
+        try:
+            R_BG = np.zeros((len(psi),3,3))
+            cos_psi = np.cos(psi)
+            sin_psi = np.sin(psi)
+            R_BG[:,0,0] = cos_psi
+            R_BG[:,1,1] = cos_psi
+            R_BG[:,0,1] = sin_psi
+            R_BG[:,1,0] = -sin_psi
+            R_BG[:,2,2] = 1
+        except:
+            R_BG = np.array([[ np.cos(psi),  np.sin(psi), 0],
+                            [-np.sin(psi),  np.cos(psi), 0],
+                            [           0,            0, 1]])
+        return R_BG
+
+
+class TransformerBasedSCPController(LinearController):
+    """
+    Class for a Transformer-cvxpi based optimization controller (based on linear_ctrl.py.
+
+    state definition:   [x, y, theta, vx, vy, wz]
+    control definition: [u0, u1, u2, u3] Trinary (-1, 0, 1) thruster representation of 8-thruster config
+
+    Note: the current implementation is not thread safe
+    """
+    STATE_DIM = 6
+    CONTROL_DIM = 3
+
+    def __init__(self):
+        super().__init__('thrust_opt_control_node')
+        # State estimator
+        '''self.declare_parameter("state_channel", "est/state")
+        self._state_sub = self.create_subscription(
+            FreeFlyerStateStamped,
+            self.get_parameter("state_channel").get_parameter_value().string_value,
+            self._state_callback,
+            10,
+        )'''
+        self._state_ready = False
+        self._state_stamped = FreeFlyerStateStamped()
+        self._state_desired = FreeFlyerStateStamped()
+        self._params_ready = False
+        #self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
+        #self._readjust_controller_bounds = np.array([0.5, 0.5])
+
+        # Goal State command
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            'ctrl/state', self.state_setpoint_callback, 10)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            '/goal_pose', self.rviz_setpoint_callback, 10)
+        
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+        
+        # Obstale info service client
+        self.obs_info_cli = self.create_client(ObsInfo, 'obstacles_info')
+        while not self.obs_info_cli.wait_for_service(timeout_sec=1.):
+            self.get_logger().info('obstales_info server not available yet, waiting...')
+        self.get_obs_info_request()
+
+        # Control loop
+        # feedback gain params
+        self.declare_parameter('gain_f', 2.0)
+        self.declare_parameter('gain_df', 10.0)
+        self.declare_parameter('gain_t', 0.2)
+        self.declare_parameter('gain_dt', 0.4)
+        self.declare_parameter('total_time', 20.0)
+        self.n_timesteps = 101
+        self._trajectory_ready = False
+        self.control_period = 0.1
+        self.timer = self.create_timer(self.control_period, self.control_loop)
+        self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop)
+    
+    '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
+        """
+        Send desirable target state for optimization-based control.
+
+        :param state_des: desired state
+        """
+        t = time.time()
+        # self.get_logger().info("Goal"+str(state_des) + "\n")
+        if not self._state_ready:
+            self.get_logger().warn("send_control ignored, current state not yet ready")
+            return
+
+        if not self._params_ready:
+            self.get_logger().warn("send_control ignored, parameters not yet ready")
+            return
+
+        self.goal_repeater_pub.publish(self._state_desired)
+
+        # convert desired state to vector form
+        if isinstance(state_des, FreeFlyerState):
+            state_des = self.state2vec(state_des)
+
+        if isinstance(curr_state, FreeFlyerState):
+            curr_state = self.state2vec(curr_state)
+
+        if np.all(np.abs(state_des - curr_state) < self._deadband):
+            self._u = np.zeros(4)
+        else:
+            if not self._close_controller:
+                pos_err = np.abs(state_des[:2] - curr_state[:2])
+                # state_err_vec = np.abs(np.append(pos_err, th_err))
+                if np.all(pos_err < self._readjust_controller_bounds):
+                    self.set_close_hyperparameters()
+            else:
+                pos_err = np.abs(state_des[:2] - curr_state[:2])
+                # state_err_vec = np.abs(np.append(pos_err, th_err))
+                if np.any(pos_err > self._readjust_controller_bounds):
+                    self.set_default_hyperparameters()
+
+
+            self.lbw[:len(curr_state)] = curr_state
+            self.ubw[:len(curr_state)] = curr_state
+            self.w0[0] = curr_state
+            
+            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
+            output = sol['x']
+            
+            cost = Float32()
+            cost.data = float(sol['f'])
+            self.opt_cost_pub.publish(cost)   
+
+            u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
+            cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
+            self._u = np.round(cont_thrust)
+
+            # Warm Start next run
+            self.w0 = self.get_next_warm_start(output)
+
+        self.set_tri_thrusters(self._u)
+        self.get_logger().info("Control Computation Time: " + str(time.time()-t))'''
+    
+    def get_obs_info_request(self):
+        future = self.obs_info_cli.call_async(ObsInfo.Request())
+        rclpy.spin_until_future_complete(self, future)
+        obs_info = future.result()
+        self.obstacles = {
+            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))),
+            'radius' : np.array(obs_info.cyl_rads)
+        }
+        self.get_logger().info(str(self.obstacles))
+
+    def get_state(self) -> T.Optional[FreeFlyerState]:
+        """Get the current latest state."""
+        if not self._state_ready:
+            self.get_logger().error("get_state failed: state not yet ready")
+            return None
+
+        return self._state_stamped.state
+
+    def state_ready_callback(self) -> None:
+        # copy current position as goal position
+        self._state_desired.header.stamp = self.get_clock().now().to_msg()
+        self._state_desired.state = self.get_state()
+
+    def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self._state_desired = copy.deepcopy(msg)
+
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        # Goal pose computation
+        state_desired = FreeFlyerStateStamped()
+        state_desired.header.stamp = msg.header.stamp
+        state_desired.state.pose.x = msg.pose.position.x
+        state_desired.state.pose.y = msg.pose.position.y
+        z = msg.pose.orientation.z
+        w = msg.pose.orientation.w
+        state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+        state_desired.state.twist.vx = 0.
+        state_desired.state.twist.vy = 0.
+        state_desired.state.twist.wz = 0.
+        state_init = self.state2vec(self.get_state())
+        state_final = self.state2vec(state_desired.state)
+
+        param = {
+            'mass' : self.m,
+            'J' : self.Ixx,
+            'radius' : self.radius,
+            'F_t_M' : self.Fmax,
+            'b_t' : self.r,
+            'Lambda_inv' : self.Lambda_inv
+        }
+        self.iocp = ImpulsiveOCP(self.STATE_DIM, self.CONTROL_DIM, param)
+        total_time = self.get_parameter('total_time').get_parameter_value().double_value
+        self.trajectory_timer.cancel()
+        self.trajectory_timer = self.create_timer(total_time/(self.n_timesteps - 1), self.trajectory_loop)
+        traj_scp, J_vect_scp, iter_scp, feas_scp = self.iocp.solve_scp(state_init, state_final, self.obstacles, total_time, self.n_timesteps)
+        print('============== SCP iterations:', iter_scp)
+        print('============== SCP status:', feas_scp)
+        if feas_scp == 'infeasible':
+            self.get_logger().error("SCP failed in computing an optimal path! No action will be executed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        else:
+            self._desired_trajectory = {
+                'states' : traj_scp['states'],
+                'timestep' : 0
+            }
+            self._trajectory_ready = True
+    
+    def control_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            self.get_logger().error("control_loop not started: state not yet ready")
+            return
+
+        # build feedback gain matrix
+        gain_f = self.get_parameter('gain_f').get_parameter_value().double_value
+        gain_df = self.get_parameter('gain_df').get_parameter_value().double_value
+        gain_t = self.get_parameter('gain_t').get_parameter_value().double_value
+        gain_dt = self.get_parameter('gain_dt').get_parameter_value().double_value
+        K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+                      [0, gain_f, 0, 0, gain_df, 0],
+                      [0, 0, gain_t, 0, 0, gain_dt]])
+
+        self.send_control(self._state_desired.state, K)
+
+    def trajectory_loop(self) -> None:
+        # If no trajectory has been computed yet, do nothing, else change periodically the _state_desired
+        if (self._trajectory_ready) and (self._desired_trajectory['timestep'] < self.n_timesteps):
+            self.get_logger().error('Current timesteps: ' + str(self._desired_trajectory['timestep']))
+            current_state_desired = FreeFlyerStateStamped()
+            current_state_desired.header.stamp = self.get_clock().now().to_msg()
+            current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['states'][:,self._desired_trajectory['timestep']]))
+            self._state_desired = copy.deepcopy(current_state_desired)
+            self.goal_repeater_pub.publish(self._state_desired)
+            self._desired_trajectory['timestep'] += 1
+
+    '''def init_solver(self):
+        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
+        lbx = [-4., -4., -np.pi, -0.5, -0.5, -0.5]
+        ubx = [4., 4., np.pi, 0.5, 0.5, 0.5]
+        lbu = [-self.Fmax] * 4 
+        ubu = [self.Fmax] * 4 
+
+        N = int(self.T * self.freq)
+        x0 = [0]*6 # Just initialize to zeros, will revise once first state measurement comes in
+
+        # Declare model variables
+        x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
+        u = MX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
+        goal = MX.sym("goal", self.STATE_DIM)
+        
+        body_Fx, body_Fy, M = self._map_to_force(u)
+
+        th = x[2]
+        world_Fx = body_Fx*cos(th) - body_Fy*sin(th)
+        world_Fy = body_Fx*sin(th) + body_Fy*cos(th)
+        
+        # Model equations
+        xdot = vertcat(x[3],
+                       x[4],
+                       x[5],
+                       world_Fx / self.m,
+                       world_Fy / self.m,
+                       M / self.Ixx)
+
+        # Stepwise Cost
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:]-x[3:])
+
+        # Fixed step Runge-Kutta 4 integrator
+        M = 4 # RK4 steps per interval
+        self.get_logger().info("Time: {}, Timesteps: {}".format(self.T,N))
+        DT = self.T/N/M
+        f = Function('f', [x, u, goal], [xdot, L])    # Define function to take in current state/input and output xdot and cost
+        X0 = MX.sym('X0', 6)                
+        U = MX.sym('U', 4)
+        X = X0
+        Q = 0
+        for j in range(M):
+            k1, k1_q = f(X, U, goal)
+            k2, k2_q = f(X + DT/2 * k1, U, goal)
+            k3, k3_q = f(X + DT/2 * k2, U, goal)
+            k4, k4_q = f(X + DT * k3, U, goal)
+            X=X+DT/6*(k1 +2*k2 +2*k3 +k4)
+            Q = Q + DT/6*(k1_q + 2*k2_q + 2*k3_q + k4_q)
+        F = Function('F', [X0, U, goal], [X, Q],['x0','p', 'param_goal'],['xf','qf'])   # Take in initial state and current input and outputs final state and cost after one step (Runge-Kutta integrated)
+
+        # Initial guess for u
+        u_start = [DM([0.,0.,0.,0.])] * N
+
+        # Get a feasible trajectory as an initial guess
+        xk = DM(x0)
+        x_start = [xk]
+        for k in range(N):
+            xk = F(x0=xk, p=u_start[k])['xf']
+            x_start += [xk]
+
+        # Start with an empty NLP
+        w=[]
+        w0 = []
+        lbw = []
+        ubw = []
+        discrete = []
+        J = 0
+        g=[]
+        lbg = []
+        ubg = []
+
+        # "Lift" initial conditions
+        X0 = MX.sym('X0', self.STATE_DIM)
+        w += [X0]
+        lbw += x0
+        ubw += x0
+        w0 += [x_start[0]]
+
+        # Formulate the NLP
+        Xk = X0
+        for k in range(N):
+            # New NLP variable for the control
+            Uk = MX.sym('U_' + str(k), 4)
+            w   += [Uk]
+            lbw += lbu
+            ubw += ubu
+            w0  += [u_start[k]]
+
+            # Integrate till the end of the interval
+            Fk = F(x0=Xk, p=Uk)
+            Xk_end = Fk['xf']
+            J=J+Fk['qf']
+
+            # New NLP variable for state at end of interval
+            Xk = MX.sym('X_' + str(k+1), 6)
+            w   += [Xk]
+            lbw += lbx
+            ubw += ubx
+            w0  += [x_start[k+1]]
+            # Add equality dynamics constraint 
+            g   += [Xk_end-Xk]
+            lbg += [0, 0, 0, 0, 0, 0]
+            ubg += [0, 0, 0, 0, 0, 0]
+
+        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(1-cos(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
+
+        # Concatenate decision variables and constraint terms
+        w = vertcat(*w)
+        g = vertcat(*g)
+
+        # Create an NLP solver
+        nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
+        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
+        return w0, cont_nlp_solver, lbw, ubw, lbg, ubg'''
+
+    ############################### Helper Functions for Opt ###############################
+    '''def _map_to_force(self, u):
+        # Compute body-frame force from thrusters
+        Fx = -u[0] + u[2] 
+        Fy = -u[1] + u[3] 
+        M = self.r * (u[0]+u[1]+u[2]+u[3])
+        return Fx, Fy, M
+
+    def normsq(self, x):
+        sum = 0
+        for i in range(x.shape[0]):
+            sum += x[i]**2
+        return sum
+
+    def normabs(self, x):
+        sum = 0
+        for i in range(x.shape[0]):
+            sum += fabs(x[i])
+        return sum
+
+    def unpack_wopt(self, w_opt):
+        w_opt = w_opt.full().flatten()
+        u0_opt = w_opt[6::10]
+        u1_opt = w_opt[7::10]
+        u2_opt = w_opt[8::10]
+        u3_opt = w_opt[9::10]
+        return u0_opt, u1_opt, u2_opt, u3_opt
+
+    def get_next_warm_start(self, w_opt):
+        output = w_opt.full().flatten()     
+        x = [output[i:6+i] for i in range(w_opt.size()[0]//10+1)]
+        u = [output[6+i:10+i] for i in range(w_opt.size()[0]//10)]
+
+        w0 = [DM(x[1])]
+        for i in range(len(u)-1):
+            w0 += [DM(u[i+1])]
+            w0 += [DM(x[i+2])]
+        w0 += [DM(u[-1])]
+        w0 += [DM(x[-1])]
+
+        return w0'''
+
+    ############################### Helper Functions to unpack FreeFlyerState ###############################
+    @staticmethod
+    def state2vec(state: FreeFlyerState) -> np.ndarray:
+        """
+        Convert state message to state vector.
+
+        :param state: state message
+        :return: state vector
+        """
+        return np.array(
+            [
+                state.pose.x,
+                state.pose.y,
+                state.pose.theta,
+                state.twist.vx,
+                state.twist.vy,
+                state.twist.wz,
+            ]
+        )
+
+    @staticmethod
+    def vec2state(vec: np.ndarray) -> FreeFlyerState:
+        """
+        Convert state vector to state message.
+
+        :param vec: state vector
+        :return: state message
+        """
+        state = FreeFlyerState()
+        state.pose.x = vec[0]
+        state.pose.y = vec[1]
+        state.pose.theta = vec[2]
+        state.twist.vx = vec[3]
+        state.twist.vy = vec[4]
+        state.twist.wz = vec[5]
+
+        return state
+
+    ############################### Helper Functions to access ROS parameters ###############################
+    @property
+    def r(self):
+        return self.p.actuators["thrusters_lever_arm"]
+
+    @property
+    def Lambda(self):
+        return np.array([[     0,       1,       0,      1],
+                         [     1,       0,       1,      0],
+                         [self.r, -self.r, -self.r, self.r]])
+
+    @property
+    def Lambda_inv(self):
+        return np.array([[  0, 0.5,  1/(4*self.r)],
+                         [0.5,   0, -1/(4*self.r)],
+                         [  0, 0.5, -1/(4*self.r)],
+                         [0.5,   0,  1/(4*self.r)]])
+
+    @property
+    def radius(self):
+        return self.p.dynamics["radius"]
+    
+    @property
+    def Fmax(self):
+        return self.p.actuators["F_max_per_thruster"]
+
+    @property
+    def m(self):
+        return self.p.dynamics["mass"]
+    
+    @property
+    def Ixx(self):
+        return self.p.dynamics["inertia"]
+    
+    '''@property
+    def k_th(self):
+        return self.get_parameter('opt_gain_kth').value
+
+    @property
+    def k_pos(self):
+        return self.get_parameter('opt_gain_kpos').value
+
+    @property
+    def k_input(self):
+        return self.get_parameter('opt_gain_kinput').value
+
+    @property
+    def k_velo(self):
+        return self.get_parameter('opt_gain_kvelo').value
+
+    @property
+    def T(self):
+        return self.get_parameter('opt_horizon_secs').value
+
+    @property
+    def freq(self):
+        return self.get_parameter('opt_freq').value'''
+
+    def state_is_ready(self) -> bool:
+        """
+        Check if state is ready.
+
+        :return: True if state is ready, False otherwise
+        """
+        return self._state_ready
+
+    def _state_callback(self, msg: FreeFlyerStateStamped) -> None:
+        """
+        Get called when the first current state measurement comes in.
+        """
+        self._state_stamped = copy.deepcopy(msg)
+
+        if not self._state_ready:
+            self._state_ready = True
+            self.state_ready_callback()
+
+    '''def set_default_hyperparameters(self) -> None:
+        # Optimization far hyperparameters/gains
+        self.get_logger().info("*** Reset to default hyperparams ***")
+        self._close_controller = False
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 2.667)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 1.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 20.0)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
+        self.timer.cancel()
+        self.timer = self.create_timer(0.05, self.control_loop)
+
+
+    def set_close_hyperparameters(self) -> None:
+        # Optimization close hyperparameters/gains
+        self.get_logger().info("*** Set to close hyperparams ***")
+        self._close_controller = True
+        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.3)
+        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 10.0)
+
+        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 5.0)
+        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 10.0)
+        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 3.5)
+        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 20.5)
+
+        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+
+        self.timer.cancel()
+        self.timer = self.create_timer(0.0, self.control_loop)'''
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    opt_ctrl = TransformerBasedSCPController()
+    rclpy.spin(opt_ctrl)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

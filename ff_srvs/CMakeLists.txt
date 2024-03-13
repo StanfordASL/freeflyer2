@@ -12,6 +12,7 @@ find_package(std_srvs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/ObsInfo.srv"
   "srv/PathPlan.srv"
   DEPENDENCIES std_msgs std_srvs
 )

@@ -21,6 +21,7 @@
 
   <depend>ff_estimate</depend>
   <depend>ff_msgs</depend>
+  <depend>ff_srvs</depend>
   <depend>ff_params</depend>
 
   <test_depend>ament_lint_auto</test_depend>

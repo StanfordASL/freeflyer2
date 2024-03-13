@@ -44,6 +44,7 @@ from ff_msgs.msg import (
     WheelVelCommand,
     ThrusterCommand,
 )
+from ff_srvs.srv import ObsInfo
 
 from ff_params import RobotParams
 
@@ -120,10 +121,10 @@ class FreeFlyerSimulator(Node):
         p_obstacles = self.declare_parameters(
             "obstacles",
             [
-                ("cyl_pos_x", []),
-                ("cyl_pos_y", []),
-                ("cyl_rads", []),
-                ("cyl_heights", []),
+                ("cyl_pos_x", []),#("cyl_pos_x", [2.]),
+                ("cyl_pos_y", []),#("cyl_pos_y", [1.]),
+                ("cyl_rads", []),#("cyl_rads", [0.3]),
+                ("cyl_heights", []),#("cyl_heights", [0.75]),
             ],
         )
         self.obstacles = {
@@ -176,12 +177,22 @@ class FreeFlyerSimulator(Node):
         self.pub_wrench = self.create_publisher(Wrench2DStamped, f"sim/wrench", 10)
         self.pub_ext_force = self.create_publisher(Wrench2DStamped, f"sim/ext_force", 10)
 
+        # obstale service provider
+        self.obs_info_srv = self.create_service(ObsInfo, 'obstacles_info', self.obstacles_info_callback)
+
         # simulated motion capture
         self.declare_parameter("mocap_noise_xy", 0.001)
         self.declare_parameter("mocap_noise_theta", math.radians(0.1))
         self.pub_mocap = self.create_publisher(PoseStamped, "mocap/sim/pose", 10)
 
         self.sim_timer = self.create_timer(self.SIM_DT, self.sim_loop)
+
+    def obstacles_info_callback(self, request:ObsInfo.Request, response:ObsInfo.Response) -> ObsInfo.Response:
+        response.cyl_pos_x = self.obstacles["cyl_pos_x"]
+        response.cyl_pos_y = self.obstacles["cyl_pos_y"]
+        response.cyl_rads = self.obstacles["cyl_rads"]
+        response.cyl_heights = self.obstacles["cyl_heights"]
+        return response
 
     def sim_loop(self) -> None:
         if not self.p.loaded:

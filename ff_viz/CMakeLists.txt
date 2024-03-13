@@ -12,7 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(rviz2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
-
+find_package(ff_srvs REQUIRED)
 find_package(ff_msgs REQUIRED)
 
 add_executable(renderer_node src/renderer_node.cpp)
@@ -25,7 +25,7 @@ ament_target_dependencies(renderer_node
   rclcpp
   tf2_ros
   visualization_msgs
-
+  ff_srvs
   ff_msgs
 )
 
