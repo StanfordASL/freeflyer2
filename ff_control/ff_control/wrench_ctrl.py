@@ -45,9 +45,6 @@ class WrenchController(LowLevelController):
         wrench_body_clipped = self.clip_wrench(wrench_body)
 
         # convert force
-        self.get_logger().info(
-            "Checking value of actuators" + str(self.p.actuators["F_max_per_thruster"])
-        )
         u_Fx = wrench_body_clipped.fx / (2 * self.p.actuators["F_max_per_thruster"])
         u_Fy = wrench_body_clipped.fy / (2 * self.p.actuators["F_max_per_thruster"])
         if u_Fx > 0:
