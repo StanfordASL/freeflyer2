@@ -35,7 +35,7 @@
       <plot style="Lines" mode="TimeSeries" flip_x="false" flip_y="false">
        <range left="13.262947" right="104.032200" bottom="55.533781" top="58.729647"/>
        <limitY/>
-       <curve name="/robot/controller/metrics/total_gas_time" color="#1f77b4"/>
+       <curve name="/robot/metrics/controller/total_gas_time" color="#1f77b4"/>
       </plot>
      </DockArea>
      <DockArea name="...">

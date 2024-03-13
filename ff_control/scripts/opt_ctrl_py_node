@@ -2,7 +2,7 @@
 
 # MIT License
 #
-# Copyright (c) 2023 Stanford Autonomous Systems Lab
+# Copyright (c) 2024 Stanford Autonomous Systems Lab
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -77,6 +77,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
         
+        # TODO: Frequency based on control frequency in the optimizer (3Hz). These values need to match!
         self.timer = self.create_timer(0.333, self.control_loop)
 
         # Optimization far hyperparameters/gains

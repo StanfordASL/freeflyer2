@@ -34,10 +34,29 @@ class TrinaryThrusterController(LowLevelController):
     def set_tri_thrusters(self, tri_switches: T.Sequence[int], use_wheel: bool = False) -> None:
         """
         Convert trinary thruster commands into binary thruster commands
+        This formulation represents each thruster pair (eg thruster 1 and 2 below) as a single
+        "trinary" thruster, which can either take value -1 (1 on 2 off), 0 (both off), or 1 (1 off 2 on)
+        This reduces the search space for the optimization, and implicitly removes consideration of the
+        undesirable case where both thrusters are on (0 net force or moment, only wasted fuel)
+        tri_swtiches[0] = Thruster Pair [1,2]
+        tri_swtiches[1] = Thruster Pair [3,4]
+        tri_swtiches[2] = Thruster Pair [5,6]
+        tri_swtiches[3] = Thruster Pair [7,0]
+
+        
+        Thrusters Configuration
+             (2) e_y (1)        ___
+            <--   ^   -->      /   \
+           ^  |   |   |  ^     v M  )
+        (3)|--o-------o--|(0)    __/
+              | free- |
+              | flyer |   ---> e_x
+              | robot |
+        (4)|--o-------o--|(7)
+           v  |       |  v
+            <--       -->
+             (5)     (6)
         """
-        if use_wheel:
-            self.get_logger().error("set_tri_thrusters failed: use_wheel not implemented")
-            return
 
         if len(tri_switches) != len(ThrusterCommand().switches) / 2:
             self.get_logger().error("Incompatible thruster length sent." + str(len(tri_switches)))
