@@ -8,7 +8,7 @@
       <plot style="Dots" mode="TimeSeries" flip_x="false" flip_y="false">
        <range left="13.262947" right="104.032200" bottom="0.437994" top="0.501512"/>
        <limitY/>
-       <curve name="/robot/robot/goal/state/pose/x" color="#9467bd"/>
+       <curve name="/robot/goal/state/pose/x" color="#9467bd"/>
        <curve name="/robot/sim/state/state/pose/x" color="#9467bd"/>
        <curve name="/vrpn_mocap/robot/pose/pose/position/x" color="#9467bd"/>
       </plot>
@@ -17,7 +17,7 @@
       <plot style="Dots" mode="TimeSeries" flip_x="false" flip_y="false">
        <range left="13.262947" right="104.032200" bottom="0.497600" top="0.598407"/>
        <limitY/>
-       <curve name="/robot/robot/goal/state/pose/y" color="#17becf"/>
+       <curve name="/robot/goal/state/pose/y" color="#17becf"/>
        <curve name="/robot/sim/state/state/pose/y" color="#17becf"/>
        <curve name="/vrpn_mocap/robot/pose/pose/position/y" color="#17becf"/>
       </plot>
@@ -27,7 +27,7 @@
        <range left="13.262947" right="104.032200" bottom="-0.651391" top="0.015888"/>
        <limitY/>
        <curve name="/robot/sim/state/state/pose/theta" color="#f14cc1"/>
-       <curve name="/robot/robot/goal/state/pose/theta" color="#f14cc1"/>
+       <curve name="/robot/goal/state/pose/theta" color="#f14cc1"/>
        <curve name="/vrpn_mocap/robot/pose/pose/orientation/yaw" color="#f14cc1"/>
       </plot>
      </DockArea>
