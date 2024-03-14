@@ -32,14 +32,6 @@ from pathlib import Path
 
 from rosbags.highlevel import AnyReader
 
-""" Configure custom message types """
-def guess_msgtype(path: Path) -> str:
-    """Guess message type name from path."""
-    name = path.relative_to(path.parents[2]).with_suffix('')
-    if 'msg' not in name.parts:
-        name = name.parent / 'msg' / name.name
-    return str(name)
-
 typestore = get_typestore(Stores.ROS2_HUMBLE)
 add_types = {}
 
@@ -51,7 +43,6 @@ msgnames = ["ff_msgs/msg/" + name for name in names]
 for i, pathstr in enumerate(msgfiles):
     msgpath = Path(pathstr)
     msgdef = msgpath.read_text(encoding='utf-8')
-    print(get_types_from_msg(msgdef, msgnames[i]))
     add_types.update(get_types_from_msg(msgdef, msgnames[i]))
 
 typestore.register(add_types)
@@ -110,21 +101,21 @@ def plot_experiment_results(pos_time, xlist, ylist, thlist,
     axs[0].step(goal_time, goalxlist, where='post')
     axs[0].set_ylabel("X-Position (m)")
     axs[0].minorticks_on()
-    axs[0].grid(True, which='both', axis='y')
+    axs[0].grid(True, which='major', axis='y')
     axs[0].legend(["Actual","Goal"])
 
     axs[1].plot(pos_time, ylist)
     axs[1].step(goal_time, goalylist, where='post')
     axs[1].set_ylabel("Y-Position (m)")
     axs[1].minorticks_on()
-    axs[1].grid(True, which='both', axis='y')
+    axs[1].grid(True, which='major', axis='y')
     axs[1].legend(["Actual","Goal"])
 
     axs[2].plot(pos_time, thlist)
     axs[2].step(goal_time, goalthlist, where='post')
     axs[2].set_ylabel("Orientation (rad)")
     axs[2].minorticks_on()
-    axs[2].grid(True, which='both', axis='y')
+    axs[2].grid(True, which='major', axis='y')
     axs[2].legend(["Actual","Goal"])
 
     plt.show()
