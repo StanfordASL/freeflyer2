@@ -28,6 +28,7 @@ from rosbags.serde import deserialize_cdr
 from rosbags.typesys import Stores, get_types_from_msg, get_typestore
 import matplotlib.pyplot as plt
 import math
+import numpy as np
 from pathlib import Path
 
 from rosbags.highlevel import AnyReader
@@ -60,10 +61,14 @@ FIRST_GOAL = None
 
 if EXPERIMENT_MODE == 0:
     FIRST_GOAL = [0.5, 0.5, math.pi/2]
+    RETURN_GOAL = [0.5, 0.5, -math.pi/2]
 elif EXPERIMENT_MODE == 1:
     FIRST_GOAL = [1, 1, -math.pi/2]
+    RETURN_GOAL = [0.5, 0.5, -math.pi/2]
 elif EXPERIMENT_MODE == 2:
     FIRST_GOAL = [3, 2, -math.pi/2]
+    RETURN_GOAL = [3, 2, -math.pi/2]
+    
 else:
     print("ERR: Invalid Experiment mode!")
 
@@ -156,8 +161,7 @@ def unpack_rosbag(rosbag_name):
             goal_time, goalxlist, goalylist, goalthlist, 
             metrics_time, totalgaslist)
 
-
-def plot_experiment_results(unpacked_vals, fig, axs):
+def plot_experiment_results(unpacked_vals, fig=None, axs=None):
     pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
     
     if (fig is None or axs is None):
@@ -169,7 +173,6 @@ def plot_experiment_results(unpacked_vals, fig, axs):
     goalxlist.append(goalxlist[-1])
     goalylist.append(goalylist[-1])
     goalthlist.append(goalthlist[-1])
-    
     
     axs[0].plot(pos_time, xlist)
     axs[0].step(goal_time, goalxlist, where='post')
@@ -200,12 +203,37 @@ def plot_experiment_results(unpacked_vals, fig, axs):
 
     return fig, axs
 
+def extract_performance_metrics(unpacked_vals):
+    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
+    xchange = goalxlist.index(RETURN_GOAL[0])
+    ychange = goalylist.index(RETURN_GOAL[1])
+    thchange = goalthlist.index(RETURN_GOAL[2])
+    goal_change_time = goal_time[max(xchange, ychange, thchange)]
+
+    # Process first phase (START->FIRST_GOAL)
+    pos_index = np.where(np.array(pos_time) > goal_change_time)[0][0]
+    metrics_index = np.where(np.array(metrics_time) > goal_change_time)[0][0]
+    first_slice = (pos_time[:pos_index], xlist[:pos_index], ylist[:pos_index], thlist[:pos_index],
+                   metrics_time[:metrics_index], totalgaslist[:metrics_index])
+    experiment_analysis(RETURN_GOAL, FIRST_GOAL, first_slice)
+
+def experiment_analysis(start, goal, sliced_data):
+    pos_time, xlist, ylist, thlist, metrics_time, totalgaslist = sliced_data
+    position_matrix = np.hstack((np.array(xlist).reshape((-1,1)), np.array(ylist).reshape((-1,1))))
+    pos_err = np.linalg.norm(position_matrix - np.array(goal[:2]), axis=1)
+    th_err = np.abs(np.array(thlist) - goal[2])
+
+    posRiseTime = np.where(pos_err < 0.05)[0][0]
+    thRiseTime = pos_time[np.where(th_err < 0.1)[0][0]]
+    print(thRiseTime)
+
 
 def main():        
     fig = axs = None
     for i, ROSBAG_NAME in enumerate(ROSBAG_NAMES):
         unpacked = unpack_rosbag(ROSBAG_NAME)
-        fig, axs = plot_experiment_results(unpacked, fig, axs)
+        extract_performance_metrics(unpacked)
+        fig, axs = plot_experiment_results(unpacked)
         fig.suptitle(TITLES[i])
     plt.show()
 
