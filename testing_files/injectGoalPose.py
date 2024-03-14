@@ -32,14 +32,14 @@ import rclpy
 import math
 import sys
 
-goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.5,1.5,math.pi/2]]
-goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
+goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.0,1.0,math.pi/2], [3.0,2.0,math.pi/2]]
+goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
 
 class GoalPublisherNode(Node):
     def __init__(self, index):
         super().__init__("goal_publisher")
         self.pub_goal = self.create_publisher(FreeFlyerStateStamped, f"robot/ctrl/state", 10)
-        self.create_timer(3.0, self.publish_goal_callback)
+        self.create_timer(0.5, self.publish_goal_callback)
         self.index = index
 
     def publish_goal_callback(self):

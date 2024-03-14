@@ -27,11 +27,11 @@ from rosbags.rosbag2 import Reader
 from rosbags.serde import deserialize_cdr
 from rosbags.typesys import Stores, get_types_from_msg, get_typestore
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import math
 import numpy as np
 from pathlib import Path
-
-from rosbags.highlevel import AnyReader
+import os
 
 typestore = get_typestore(Stores.ROS2_HUMBLE)
 add_types = {}
@@ -49,28 +49,25 @@ for i, pathstr in enumerate(msgfiles):
 typestore.register(add_types)
 
 
-EXPERIMENT_MODE = 0 # 0: Turnaround, 1:ShortDist, 2:LongDist
 START_POINT = [0.5, 0.5, -math.pi/2]
 # ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_17_04'
 # ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_14_38'
 # ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/rosbag2_2024_03_14-11_31_53'
-ROSBAG_NAMES = ['/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_turnaround/rosbag2_2024_03_14-11_42_04',
-                '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/rosbag2_2024_03_14-11_31_53']
-TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnaround']
-FIRST_GOAL = None
+folders = ['/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_turnaround/',
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/',
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_short/',
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_short/']
+ROSBAG_NAMES = []
+for i, folder in enumerate(folders):
+    ROSBAG_NAMES.append([])
+    for filename in os.listdir(folder):
+        ROSBAG_NAMES[i].append(folder+filename)
 
-if EXPERIMENT_MODE == 0:
-    FIRST_GOAL = [0.5, 0.5, math.pi/2]
-    RETURN_GOAL = [0.5, 0.5, -math.pi/2]
-elif EXPERIMENT_MODE == 1:
-    FIRST_GOAL = [1, 1, -math.pi/2]
-    RETURN_GOAL = [0.5, 0.5, -math.pi/2]
-elif EXPERIMENT_MODE == 2:
-    FIRST_GOAL = [3, 2, -math.pi/2]
-    RETURN_GOAL = [3, 2, -math.pi/2]
-    
-else:
-    print("ERR: Invalid Experiment mode!")
+TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnaround', 
+          'PD Baseline Controller Short-Distance', 'Optimization Controller Short-Distance']
+EXPERIMENT = [0, 0, 1, 1]
+COLORS = ['cornflowerblue', 'orangered', 'mediumseagreen']
+FIRST_GOAL = None
 
 def quat2euler(x, y, z, w):
     """
@@ -95,7 +92,19 @@ def quat2euler(x, y, z, w):
     
     return roll_x, pitch_y, yaw_z # in radians
 
-def unpack_rosbag(rosbag_name):
+def unpack_rosbag(rosbag_name, exp_number):
+    if exp_number == 0:
+        FIRST_GOAL = [0.5, 0.5, math.pi/2]
+        RETURN_GOAL = START_POINT
+    elif exp_number == 1:
+        FIRST_GOAL = [1, 1, math.pi/2]
+        RETURN_GOAL = START_POINT
+    elif exp_number == 2:
+        FIRST_GOAL = [3, 2, math.pi/2]
+        RETURN_GOAL = START_POINT
+    else:
+        print("ERR: Invalid Experiment mode!")
+
     t0 = 0
     thruster_0 = 0
     experiment_start = False
@@ -117,8 +126,8 @@ def unpack_rosbag(rosbag_name):
     # create reader instance and open for reading
     with Reader(rosbag_name) as reader:
         # topic and msgtype information is available on .connections list
-        for connection in reader.connections:
-            print(connection.topic, connection.msgtype)
+        # for connection in reader.connections:
+        #     print(connection.topic, connection.msgtype)
         # iterate over messages
         for connection, timestamp, rawdata in reader.messages():
             if (experiment_start):
@@ -149,6 +158,7 @@ def unpack_rosbag(rosbag_name):
                 if connection.topic == '/robot/ctrl/state':
                     msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                     pos = [msg.state.pose.x, msg.state.pose.y, msg.state.pose.theta]
+                    print(pos)
                     if (pos == FIRST_GOAL):
                         t0 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
                         experiment_start = True
@@ -161,7 +171,7 @@ def unpack_rosbag(rosbag_name):
             goal_time, goalxlist, goalylist, goalthlist, 
             metrics_time, totalgaslist)
 
-def plot_experiment_results(unpacked_vals, fig=None, axs=None):
+def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
     pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
     
     if (fig is None or axs is None):
@@ -174,28 +184,25 @@ def plot_experiment_results(unpacked_vals, fig=None, axs=None):
     goalylist.append(goalylist[-1])
     goalthlist.append(goalthlist[-1])
     
-    axs[0].plot(pos_time, xlist)
-    axs[0].step(goal_time, goalxlist, where='post')
+    axs[0].plot(pos_time, xlist, COLORS[color_ind])
+    axs[0].step(goal_time, goalxlist, COLORS[color_ind], where='post')
     axs[0].set_ylabel("X-Position [m]")
     # axs[0].minorticks_on()
     axs[0].grid(True, which='major', axis='y')
-    axs[0].legend(["Actual","Goal"])
 
-    axs[1].plot(pos_time, ylist)
-    axs[1].step(goal_time, goalylist, where='post')
+    axs[1].plot(pos_time, ylist, COLORS[color_ind])
+    axs[1].step(goal_time, goalylist, COLORS[color_ind],where='post')
     axs[1].set_ylabel("Y-Position [m]")
     # axs[1].minorticks_on()
     axs[1].grid(True, which='major', axis='y')
-    axs[1].legend(["Actual","Goal"])
 
-    axs[2].plot(pos_time, thlist)
-    axs[2].step(goal_time, goalthlist, where='post')
+    axs[2].plot(pos_time, thlist, COLORS[color_ind])
+    axs[2].step(goal_time, goalthlist, COLORS[color_ind], where='post')
     axs[2].set_ylabel("Orientation [rad]")
     # axs[2].minorticks_on()
     axs[2].grid(True, which='major', axis='y')
-    axs[2].legend(["Actual","Goal"])
 
-    axs[3].plot(metrics_time, totalgaslist)
+    axs[3].plot(metrics_time, totalgaslist, COLORS[color_ind])
     axs[3].set_ylabel("Total Time Thrusters On [s]")
     # axs[3].minorticks_on()
     axs[3].grid(True, which='major', axis='y')
@@ -229,12 +236,15 @@ def experiment_analysis(start, goal, sliced_data):
 
 
 def main():        
-    fig = axs = None
-    for i, ROSBAG_NAME in enumerate(ROSBAG_NAMES):
-        unpacked = unpack_rosbag(ROSBAG_NAME)
-        extract_performance_metrics(unpacked)
-        fig, axs = plot_experiment_results(unpacked)
+    for i, category in enumerate(ROSBAG_NAMES):
+        fig, axs = None, None
+        for j, ROSBAG_NAME in enumerate(ROSBAG_NAMES[i]):
+            print("Working on " + ROSBAG_NAME)
+            unpacked = unpack_rosbag(ROSBAG_NAME, EXPERIMENT[i])
+            # extract_performance_metrics(unpacked)
+            fig, axs = plot_experiment_results(unpacked, j, fig, axs)
         fig.suptitle(TITLES[i])
+        fig.legend(["Trial 1 Actual", "Trial 1 Goal", "Trial 2 Actual", "Trial 2 Goal","Trial 3 Actual", "Trial 3 Goal"])
     plt.show()
 
 if __name__ == "__main__":
