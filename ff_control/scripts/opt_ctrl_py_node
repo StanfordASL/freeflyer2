@@ -89,7 +89,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         self.declare_parameter('close_opt_horizon_secs', 0.5)
         self.declare_parameter('close_opt_freq', 10.0)
-        self.declare_parameter('close_opt_gain_kth', 4.0)
+        self.declare_parameter('close_opt_gain_kth', 5.5)
         self.declare_parameter('close_opt_gain_kpos', 23.0)
         self.declare_parameter('close_opt_gain_kinput', 7.5)
         self.declare_parameter('close_opt_gain_kvelo', 65.0)

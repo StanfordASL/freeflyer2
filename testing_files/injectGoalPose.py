@@ -36,12 +36,19 @@ goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.5,1.5,math.pi/2]
 goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
 
 class GoalPublisherNode(Node):
-    def __init__(self):
+    def __init__(self, index):
         super().__init__("goal_publisher")
         self.pub_goal = self.create_publisher(FreeFlyerStateStamped, f"robot/ctrl/state", 10)
+        self.create_timer(3.0, self.publish_goal_callback)
+        self.index = index
+
+    def publish_goal_callback(self):
+        self.publish_goal(goal_positions[self.index], goal_velos[self.index])
 
     def publish_goal(self, pos, velo):
         goal_pose = FreeFlyerStateStamped()
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.header.frame_id = "world"
         goal_pose.state.pose.x = pos[0]
         goal_pose.state.pose.y = pos[1]
         goal_pose.state.pose.theta = pos[2]
@@ -54,9 +61,9 @@ class GoalPublisherNode(Node):
 def main():
     index = int(sys.argv[1])
     rclpy.init()
-    publisher = GoalPublisherNode()
-    publisher.publish_goal(goal_positions[index], goal_velos[index])
-    # rclpy.spin(publisher)
+    publisher = GoalPublisherNode(index)
+    # publisher.publish_goal(goal_positions[index], goal_velos[index])
+    rclpy.spin(publisher)
     rclpy.shutdown()
 
 if __name__ == "__main__":

@@ -25,12 +25,42 @@
 
 from rosbags.rosbag2 import Reader
 from rosbags.serde import deserialize_cdr
+from rosbags.typesys import Stores, get_types_from_msg, get_typestore
 import matplotlib.pyplot as plt
 import math
+from pathlib import Path
+
+from rosbags.highlevel import AnyReader
+
+""" Configure custom message types """
+def guess_msgtype(path: Path) -> str:
+    """Guess message type name from path."""
+    name = path.relative_to(path.parents[2]).with_suffix('')
+    if 'msg' not in name.parts:
+        name = name.parent / 'msg' / name.name
+    return str(name)
+
+typestore = get_typestore(Stores.ROS2_HUMBLE)
+add_types = {}
+
+prefix = "/home/freeflyerhub/ff_ws/src/freeflyer2/ff_msgs/msg/"#"./ff_msgs/msg/"
+names = ["FreeFlyerStateStamped", "ControllerMetrics", "FreeFlyerState", "ThrusterCommand", "Pose2D", "Twist2D"]
+msgfiles = [prefix + name + ".msg" for name in names]
+msgnames = ["ff_msgs/msg/" + name for name in names]
+
+for i, pathstr in enumerate(msgfiles):
+    msgpath = Path(pathstr)
+    msgdef = msgpath.read_text(encoding='utf-8')
+    print(get_types_from_msg(msgdef, msgnames[i]))
+    add_types.update(get_types_from_msg(msgdef, msgnames[i]))
+
+typestore.register(add_types)
+
 
 EXPERIMENT_MODE = 0 # 0: Turnaround, 1:ShortDist, 2:LongDist
 START_POINT = [0.5, 0.5, -math.pi/2]
-ROSBAG_NAME = '/Users/andrewwang/Downloads/ROSBagProcessing/testexp_pd_turnaround/'
+# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_17_04'
+ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_14_38'
 FIRST_GOAL = None
 
 if EXPERIMENT_MODE == 0:
@@ -41,7 +71,6 @@ elif EXPERIMENT_MODE == 2:
     FIRST_GOAL = [3, 2, -math.pi/2]
 else:
     print("ERR: Invalid Experiment mode!")
-
 
 def quat2euler(x, y, z, w):
     """
@@ -69,25 +98,30 @@ def quat2euler(x, y, z, w):
 def plot_experiment_results(pos_time, xlist, ylist, thlist,
                             goal_time, goalxlist, goalylist, goalthlist,
                             metrics_time, totalgaslist):
+    
+    # Artificially add extra goal command to data to make goal step function look right
+    goal_time.append(pos_time[-1])
+    goalxlist.append(goalxlist[-1])
+    goalylist.append(goalylist[-1])
+    goalthlist.append(goalthlist[-1])
+    
     fig, axs = plt.subplots(3, 1, constrained_layout=True, sharex = True)
     axs[0].plot(pos_time, xlist)
-    axs[0].plot(goal_time, goalxlist)
+    axs[0].step(goal_time, goalxlist, where='post')
     axs[0].set_ylabel("X-Position (m)")
-    axs[0].hlines(0.5, min(pos_time), max(pos_time), colors='k', linestyles='dashed')
     axs[0].minorticks_on()
     axs[0].grid(True, which='both', axis='y')
     axs[0].legend(["Actual","Goal"])
 
     axs[1].plot(pos_time, ylist)
-    axs[1].plot(goal_time, goalylist)
+    axs[1].step(goal_time, goalylist, where='post')
     axs[1].set_ylabel("Y-Position (m)")
-    axs[1].hlines(0.5, min(pos_time), max(pos_time), colors='k', linestyles='dashed')
     axs[1].minorticks_on()
     axs[1].grid(True, which='both', axis='y')
     axs[1].legend(["Actual","Goal"])
 
     axs[2].plot(pos_time, thlist)
-    axs[2].plot(goal_time, goalthlist)
+    axs[2].step(goal_time, goalthlist, where='post')
     axs[2].set_ylabel("Orientation (rad)")
     axs[2].minorticks_on()
     axs[2].grid(True, which='both', axis='y')
@@ -123,29 +157,30 @@ def main():
             if (experiment_start):
                 try:
                     if connection.topic == '/vrpn_mocap/robot/pose':
-                        msg = deserialize_cdr(rawdata, connection.msgtype)
+                        msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                         pos_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
                         xlist.append(msg.pose.position.x)
                         ylist.append(msg.pose.position.y)
                         th = quat2euler(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w)
                         thlist.append(th[2]) # Yaw
-                    elif connection.topic == '/robot/robot/goal':
-                        msg = deserialize_cdr(rawdata, connection.msgtype)
+                    elif connection.topic == '/robot/ctrl/state':
+                        msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                         goal_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
-                        goalxlist.append(msg.pose.position.x)
-                        goalylist.append(msg.pose.position.y)
-                        th = quat2euler(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w)
-                        goalthlist.append(th[2]) # Yaw     
+                        goalxlist.append(msg.state.pose.x)
+                        goalylist.append(msg.state.pose.y)
+                        goalthlist.append(msg.state.pose.theta) # Yaw     
                     elif connection.topic == '/robot/controller/metrics':
-                        msg = deserialize_cdr(rawdata, connection.msgtype)
+                        msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                         metrics_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
-                        totalgas.append(msg.total_gas_time)
+                        totalgaslist.append(msg.total_gas_time)
                 except KeyError:
                     print("Err: Not ready to process these messages yet!")
             else:
-                if connection.topic == '/robot/robot/goal':
-                    msg = deserialize_cdr(rawdata, connection.msgtype)
-                    pos = [msg.pose.position.x, msg.pose.position.y, quat2euler(msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w)[2]]
+                if connection.topic == '/robot/ctrl/state':
+                    print("Connection Type:"+connection.msgtype)
+                    print(typestore.types[connection.msgtype])
+                    msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                    pos = [msg.state.pose.x, msg.state.pose.y, msg.state.pose.theta]
                     if (pos == FIRST_GOAL):
                         t0 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
                         experiment_start = True
