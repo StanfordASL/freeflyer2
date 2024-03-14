@@ -22,39 +22,56 @@
 
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
     robot_name = LaunchConfiguration("robot_name")
+    impl = LaunchConfiguration("impl")
 
     return LaunchDescription(
         [
             DeclareLaunchArgument("robot_name", default_value="robot"),
-            Node(
-                package="ff_params",
-                executable="robot_params_node",
-                name="robot_params_node",
-                namespace=robot_name,
+            DeclareLaunchArgument(
+                "impl",
+                default_value="py",
+                description="Optimization controller implementation",
+                choices=["cpp", "py"],
             ),
-            Node(
-                package="ff_sim",
-                executable="simulator_node",
-                name="simulator_node",
-                namespace=robot_name,
+            IncludeLaunchDescription(
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("ff_sim"),
+                        "launch",
+                        "single.launch.py",
+                    ]
+                ),
+                launch_arguments={"robot_name": robot_name}.items(),
             ),
-            Node(
-                package="ff_sim",
-                executable="controller_metrics",
-                name="controller_metrics",
-                namespace=robot_name,
+            IncludeLaunchDescription(
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("ff_viz"),
+                        "launch",
+                        "ff_viz.launch.py",
+                    ]
+                ),
+                launch_arguments={"robot_name": robot_name}.items(),
             ),
             Node(
                 package="ff_control",
-                executable="safety_filter",
-                name="safety_filter",
+                executable=["opt_ctrl_", impl, "_node"],
+                name="opt_ctrl_node",
+                namespace=robot_name,
+            ),
+            Node(
+                package="ff_estimate",
+                executable="moving_avg_estimator_node",
+                name="moving_avg_estimator_node",
                 namespace=robot_name,
             ),
         ]

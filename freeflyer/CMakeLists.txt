@@ -27,9 +27,10 @@ if(BUILD_TESTING)
   # check Python style with black
   ament_add_pytest_test(black_formatting test/black_formatting.py)
 
-  # test both implementations of PD controller
+  # test both implementations of PD controller and Opt controller
   add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_cpp_test ARGS "impl:=cpp")
   add_launch_test(test/pd_ctrl_launch_test.py TARGET pd_ctrl_py_test ARGS "impl:=py")
+  add_launch_test(test/opt_ctrl_launch_test.py TARGET opt_ctrl_py_test ARGS "impl:=py")
 endif()
 
 ament_package()

@@ -17,6 +17,8 @@
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
 
+  <exec_depend>casadi-pip</exec_depend>
+
   <depend>ff_estimate</depend>
   <depend>ff_msgs</depend>
   <depend>ff_params</depend>

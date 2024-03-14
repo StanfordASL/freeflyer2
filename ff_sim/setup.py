@@ -20,6 +20,9 @@ setup(
     license="TODO: License declaration",
     tests_require=["pytest"],
     entry_points={
-        "console_scripts": ["simulator_node = ff_sim.simulator_node:main"],
+        "console_scripts": [
+            "simulator_node = ff_sim.simulator_node:main",
+            "controller_metrics = ff_sim.controller_metrics:main",
+        ],
     },
 )

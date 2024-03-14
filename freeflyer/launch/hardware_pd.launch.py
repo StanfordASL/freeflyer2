@@ -61,6 +61,12 @@ def generate_launch_description():
                 condition=IfCondition(rviz),
             ),
             Node(
+                package="ff_sim",
+                executable=["controller_metrics"],
+                name="controller_metrics",
+                namespace=robot_name,
+            ),
+            Node(
                 package="ff_control",
                 executable=["pd_ctrl_", impl, "_node"],
                 name="pd_ctrl_node",
