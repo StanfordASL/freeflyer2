@@ -2,7 +2,7 @@
 
 # MIT License
 #
-# Copyright (c) 2023 Stanford Autonomous Systems Lab
+# Copyright (c) 2024 Stanford Autonomous Systems Lab
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._params_ready = False
         self._deadband = np.array([0.03, 0.03, 0.05, 0.001, 0.001, 0.02])
         self._readjust_controller_bounds = np.array([0.4, 0.4])
+        self._def_controller = True
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -74,21 +75,27 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.rviz_sp_sub = self.create_subscription(PoseStamped,
             '/goal_pose', self.rviz_setpoint_callback, 10)
         
-        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
-        
-        self.timer = self.create_timer(0.333, self.control_loop)
 
         # Optimization far hyperparameters/gains
         self.get_logger().info("*** Reset to default hyperparams ***")
-        self._close_controller = False
-        self.declare_parameter('opt_horizon_secs', 2.667)
-        self.declare_parameter('opt_freq', 3.0)
+        self.declare_parameter('def_opt_horizon_secs', 2.667)
+        self.declare_parameter('def_opt_freq', 3.0)
+        self.declare_parameter('def_opt_gain_kth', 1.0)
+        self.declare_parameter('def_opt_gain_kpos', 2.5)
+        self.declare_parameter('def_opt_gain_kinput', 20.0)
+        self.declare_parameter('def_opt_gain_kvelo', 40.0)
 
-        self.declare_parameter('opt_gain_kth', 1.0)
-        self.declare_parameter('opt_gain_kpos', 2.5)
-        self.declare_parameter('opt_gain_kinput', 20.0)
-        self.declare_parameter('opt_gain_kvelo', 40.0)
+        self.declare_parameter('close_opt_horizon_secs', 0.5)
+        self.declare_parameter('close_opt_freq', 10.0)
+        self.declare_parameter('close_opt_gain_kth', 4.0)
+        self.declare_parameter('close_opt_gain_kpos', 23.0)
+        self.declare_parameter('close_opt_gain_kinput', 7.5)
+        self.declare_parameter('close_opt_gain_kvelo', 65.0)
+
+        # To start, Frequency based on default control frequency in the optimizer (3Hz)
+        self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
     def param_update_callback(self):
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
@@ -122,7 +129,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if np.all(np.abs(state_des - curr_state) < self._deadband):
             self._u = np.zeros(4)
         else:
-            if not self._close_controller:
+            if self._def_controller:
                 pos_err = np.abs(state_des[:2] - curr_state[:2])
                 if np.all(pos_err < self._readjust_controller_bounds):
                     self.set_close_hyperparameters()
@@ -407,27 +414,46 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     
     @property
     def k_th(self):
-        return self.get_parameter('opt_gain_kth').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_kth').value
+        else:
+            return self.get_parameter('close_opt_gain_kth').value
 
     @property
     def k_pos(self):
-        return self.get_parameter('opt_gain_kpos').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_kpos').value
+        else:
+            return self.get_parameter('close_opt_gain_kpos').value
 
     @property
     def k_input(self):
-        return self.get_parameter('opt_gain_kinput').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_kinput').value
+        else:
+            return self.get_parameter('close_opt_gain_kinput').value
 
     @property
     def k_velo(self):
-        return self.get_parameter('opt_gain_kvelo').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_kvelo').value
+        else:
+            return self.get_parameter('close_opt_gain_kvelo').value
+
 
     @property
     def T(self):
-        return self.get_parameter('opt_horizon_secs').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_horizon_secs').value
+        else:
+            return self.get_parameter('close_opt_horizon_secs').value
 
     @property
     def freq(self):
-        return self.get_parameter('opt_freq').value
+        if (self._def_controller):
+            return self.get_parameter('def_opt_freq').value
+        else:
+            return self.get_parameter('close_opt_freq').value
 
     def state_is_ready(self) -> bool:
         """
@@ -448,41 +474,24 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self.state_ready_callback()
 
     def set_default_hyperparameters(self) -> None:
-        # Optimization far hyperparameters/gains
+        # Optimization for default longer trajectories hyperparameters/gains
         self.get_logger().info("*** Reset to default hyperparams ***")
-        self._close_controller = False
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 2.667)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 3.0)
+        self._def_controller = True
 
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 1.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 2.5)
-        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 20.0)
-        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 40.0)
-
-        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.333, self.control_loop)
+        self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
 
     def set_close_hyperparameters(self) -> None:
-        # Optimization close hyperparameters/gains
+        # Optimization close-range fine-tuning trajectories hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
-        self._close_controller = True
-        horizon = rclpy.Parameter('opt_horizon_secs', rclpy.Parameter.Type.DOUBLE, 0.4)
-        freq = rclpy.Parameter('opt_freq', rclpy.Parameter.Type.DOUBLE, 10.0)
-
-        kth = rclpy.Parameter('opt_gain_kth', rclpy.Parameter.Type.DOUBLE, 4.0)
-        kpos = rclpy.Parameter('opt_gain_kpos', rclpy.Parameter.Type.DOUBLE, 22.0)
-        kin = rclpy.Parameter('opt_gain_kinput', rclpy.Parameter.Type.DOUBLE, 6.5)
-        kvelo = rclpy.Parameter('opt_gain_kvelo', rclpy.Parameter.Type.DOUBLE, 60.0)
-
-        self.set_parameters([horizon, freq, kth, kpos, kin, kvelo])
+        self._def_controller = False
         self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
 
         self.timer.cancel()
-        self.timer = self.create_timer(0.1, self.control_loop)
+        self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
 
 def main(args=None):

@@ -8,7 +8,7 @@
       <plot mode="TimeSeries" flip_y="false" style="Dots" flip_x="false">
        <range top="2.361088" bottom="-0.068524" right="148.804484" left="98.567863"/>
        <limitY/>
-       <curve name="/robot/robot/goal/state/pose/x" color="#9467bd"/>
+       <curve name="/robot/goal/state/pose/x" color="#9467bd"/>
        <curve name="/robot/sim/state/state/pose/x" color="#9467bd"/>
       </plot>
      </DockArea>
@@ -16,7 +16,7 @@
       <plot mode="TimeSeries" flip_y="false" style="Dots" flip_x="false">
        <range top="0.981072" bottom="-0.008512" right="148.804484" left="98.567863"/>
        <limitY/>
-       <curve name="/robot/robot/goal/state/pose/y" color="#17becf"/>
+       <curve name="/robot/goal/state/pose/y" color="#17becf"/>
        <curve name="/robot/sim/state/state/pose/y" color="#17becf"/>
       </plot>
      </DockArea>
@@ -25,14 +25,14 @@
        <range top="1.228089" bottom="-0.676705" right="148.804484" left="98.567863"/>
        <limitY/>
        <curve name="/robot/sim/state/state/pose/theta" color="#f14cc1"/>
-       <curve name="/robot/robot/goal/state/pose/theta" color="#f14cc1"/>
+       <curve name="/robot/goal/state/pose/theta" color="#f14cc1"/>
       </plot>
      </DockArea>
      <DockArea name="...">
       <plot mode="TimeSeries" flip_y="false" style="Lines" flip_x="false">
        <range top="286.563575" bottom="228.243425" right="148.804484" left="98.567863"/>
        <limitY/>
-       <curve name="/robot/controller/metrics/total_gas_time" color="#1f77b4"/>
+       <curve name="/robot/metrics/controller/total_gas_time" color="#1f77b4"/>
       </plot>
      </DockArea>
      <DockArea name="...">
