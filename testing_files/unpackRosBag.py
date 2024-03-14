@@ -51,7 +51,11 @@ typestore.register(add_types)
 EXPERIMENT_MODE = 0 # 0: Turnaround, 1:ShortDist, 2:LongDist
 START_POINT = [0.5, 0.5, -math.pi/2]
 # ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_17_04'
-ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_14_38'
+# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_14_38'
+# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/rosbag2_2024_03_14-11_31_53'
+ROSBAG_NAMES = ['/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_turnaround/rosbag2_2024_03_14-11_42_04',
+                '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/rosbag2_2024_03_14-11_31_53']
+TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnaround']
 FIRST_GOAL = None
 
 if EXPERIMENT_MODE == 0:
@@ -86,44 +90,11 @@ def quat2euler(x, y, z, w):
     
     return roll_x, pitch_y, yaw_z # in radians
 
-def plot_experiment_results(pos_time, xlist, ylist, thlist,
-                            goal_time, goalxlist, goalylist, goalthlist,
-                            metrics_time, totalgaslist):
-    
-    # Artificially add extra goal command to data to make goal step function look right
-    goal_time.append(pos_time[-1])
-    goalxlist.append(goalxlist[-1])
-    goalylist.append(goalylist[-1])
-    goalthlist.append(goalthlist[-1])
-    
-    fig, axs = plt.subplots(3, 1, constrained_layout=True, sharex = True)
-    axs[0].plot(pos_time, xlist)
-    axs[0].step(goal_time, goalxlist, where='post')
-    axs[0].set_ylabel("X-Position (m)")
-    axs[0].minorticks_on()
-    axs[0].grid(True, which='major', axis='y')
-    axs[0].legend(["Actual","Goal"])
-
-    axs[1].plot(pos_time, ylist)
-    axs[1].step(goal_time, goalylist, where='post')
-    axs[1].set_ylabel("Y-Position (m)")
-    axs[1].minorticks_on()
-    axs[1].grid(True, which='major', axis='y')
-    axs[1].legend(["Actual","Goal"])
-
-    axs[2].plot(pos_time, thlist)
-    axs[2].step(goal_time, goalthlist, where='post')
-    axs[2].set_ylabel("Orientation (rad)")
-    axs[2].minorticks_on()
-    axs[2].grid(True, which='major', axis='y')
-    axs[2].legend(["Actual","Goal"])
-
-    plt.show()
-
-
-def main():
+def unpack_rosbag(rosbag_name):
     t0 = 0
+    thruster_0 = 0
     experiment_start = False
+    track_thruster_start = False
 
     pos_time = []
     xlist = []
@@ -139,7 +110,7 @@ def main():
     goalthlist = []
 
     # create reader instance and open for reading
-    with Reader(ROSBAG_NAME) as reader:
+    with Reader(rosbag_name) as reader:
         # topic and msgtype information is available on .connections list
         for connection in reader.connections:
             print(connection.topic, connection.msgtype)
@@ -160,16 +131,17 @@ def main():
                         goalxlist.append(msg.state.pose.x)
                         goalylist.append(msg.state.pose.y)
                         goalthlist.append(msg.state.pose.theta) # Yaw     
-                    elif connection.topic == '/robot/controller/metrics':
+                    elif connection.topic == '/robot/metrics/controller':
                         msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                        if not track_thruster_start:
+                            thruster_0 = msg.total_gas_time
+                            track_thruster_start = True
                         metrics_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
-                        totalgaslist.append(msg.total_gas_time)
+                        totalgaslist.append(msg.total_gas_time - thruster_0)
                 except KeyError:
                     print("Err: Not ready to process these messages yet!")
             else:
                 if connection.topic == '/robot/ctrl/state':
-                    print("Connection Type:"+connection.msgtype)
-                    print(typestore.types[connection.msgtype])
                     msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                     pos = [msg.state.pose.x, msg.state.pose.y, msg.state.pose.theta]
                     if (pos == FIRST_GOAL):
@@ -179,10 +151,63 @@ def main():
                         goalxlist.append(pos[0])
                         goalylist.append(pos[1])
                         goalthlist.append(pos[2]) # Yaw 
-                
+
+    return (pos_time, xlist, ylist, thlist, 
+            goal_time, goalxlist, goalylist, goalthlist, 
+            metrics_time, totalgaslist)
+
+
+def plot_experiment_results(unpacked_vals, fig, axs):
+    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
+    
+    if (fig is None or axs is None):
+        fig, axs = plt.subplots(4, 1, constrained_layout=True, sharex = True)
+        fig.set_figheight(12)
+        fig.set_figwidth(10)
+    # Artificially add extra goal command to data to make goal step function look right
+    goal_time.append(pos_time[-1])
+    goalxlist.append(goalxlist[-1])
+    goalylist.append(goalylist[-1])
+    goalthlist.append(goalthlist[-1])
     
     
-    plot_experiment_results(pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist)
+    axs[0].plot(pos_time, xlist)
+    axs[0].step(goal_time, goalxlist, where='post')
+    axs[0].set_ylabel("X-Position [m]")
+    # axs[0].minorticks_on()
+    axs[0].grid(True, which='major', axis='y')
+    axs[0].legend(["Actual","Goal"])
+
+    axs[1].plot(pos_time, ylist)
+    axs[1].step(goal_time, goalylist, where='post')
+    axs[1].set_ylabel("Y-Position [m]")
+    # axs[1].minorticks_on()
+    axs[1].grid(True, which='major', axis='y')
+    axs[1].legend(["Actual","Goal"])
+
+    axs[2].plot(pos_time, thlist)
+    axs[2].step(goal_time, goalthlist, where='post')
+    axs[2].set_ylabel("Orientation [rad]")
+    # axs[2].minorticks_on()
+    axs[2].grid(True, which='major', axis='y')
+    axs[2].legend(["Actual","Goal"])
+
+    axs[3].plot(metrics_time, totalgaslist)
+    axs[3].set_ylabel("Total Time Thrusters On [s]")
+    # axs[3].minorticks_on()
+    axs[3].grid(True, which='major', axis='y')
+    axs[3].set_xlabel("Time [s]")
+
+    return fig, axs
+
+
+def main():        
+    fig = axs = None
+    for i, ROSBAG_NAME in enumerate(ROSBAG_NAMES):
+        unpacked = unpack_rosbag(ROSBAG_NAME)
+        fig, axs = plot_experiment_results(unpacked, fig, axs)
+        fig.suptitle(TITLES[i])
+    plt.show()
 
 if __name__ == "__main__":
     main()
