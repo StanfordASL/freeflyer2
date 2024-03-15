@@ -36,7 +36,7 @@ import os
 typestore = get_typestore(Stores.ROS2_HUMBLE)
 add_types = {}
 
-prefix = "/home/freeflyerhub/ff_ws/src/freeflyer2/ff_msgs/msg/"#"./ff_msgs/msg/"
+prefix = "./ff_msgs/msg/"
 names = ["FreeFlyerStateStamped", "ControllerMetrics", "FreeFlyerState", "ThrusterCommand", "Pose2D", "Twist2D"]
 msgfiles = [prefix + name + ".msg" for name in names]
 msgnames = ["ff_msgs/msg/" + name for name in names]
@@ -50,15 +50,12 @@ typestore.register(add_types)
 
 
 START_POINT = [0.5, 0.5, -math.pi/2]
-# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_17_04'
-# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/rosbag2_2024_03_14-00_14_38'
-# ROSBAG_NAME = '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/rosbag2_2024_03_14-11_31_53'
-folders = ['/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_turnaround/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_short/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_short/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_long/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_long/']
+folders = ['./testing_files/experiment_data/exp_pd_turnaround/',
+           './testing_files/experiment_data/exp_opt_turnaround/',
+           './testing_files/experiment_data/exp_pd_short/',
+           './testing_files/experiment_data/exp_opt_short/',
+           './testing_files/experiment_data/exp_pd_long/',
+           './testing_files/experiment_data/exp_opt_long/']
 ROSBAG_NAMES = []
 for i, folder in enumerate(folders):
     ROSBAG_NAMES.append([])
@@ -67,11 +64,12 @@ for i, folder in enumerate(folders):
 
 TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnaround', 
           'PD Baseline Controller Short-Distance', 'Optimization Controller Short-Distance',
-          'PD Baseline Controller Long-Distance', 'Optimization Controller Long-Distance']
-          
+          'PD Baseline Controller Long-Distance', 'Optimization Controller Long-Distance']       
 EXPERIMENT = [0, 0, 1, 1, 2, 2]
 COLORS = ['cornflowerblue', 'orangered', 'mediumseagreen']
-FIRST_GOAL = None
+
+POS_THRESHOLD = 0.05 
+THETA_THRESHOLD = 0.1
 
 def quat2euler(x, y, z, w):
     """
@@ -96,7 +94,8 @@ def quat2euler(x, y, z, w):
     
     return roll_x, pitch_y, yaw_z # in radians
 
-def unpack_rosbag(rosbag_name, exp_number):
+def define_experiment(exp_number):
+    FIRST_GOAL, RETURN_GOAL = None, None
     if exp_number == 0:
         FIRST_GOAL = [0.5, 0.5, math.pi/2]
         RETURN_GOAL = START_POINT
@@ -108,6 +107,10 @@ def unpack_rosbag(rosbag_name, exp_number):
         RETURN_GOAL = START_POINT
     else:
         print("ERR: Invalid Experiment mode!")
+    return FIRST_GOAL, RETURN_GOAL
+
+def unpack_rosbag(rosbag_name, exp_number):
+    FIRST_GOAL, RETURN_GOAL = define_experiment(exp_number)
 
     t0 = 0
     thruster_0 = 0
@@ -129,10 +132,6 @@ def unpack_rosbag(rosbag_name, exp_number):
 
     # create reader instance and open for reading
     with Reader(rosbag_name) as reader:
-        # topic and msgtype information is available on .connections list
-        # for connection in reader.connections:
-        #     print(connection.topic, connection.msgtype)
-        # iterate over messages
         for connection, timestamp, rawdata in reader.messages():
             if (experiment_start):
                 try:
@@ -162,7 +161,6 @@ def unpack_rosbag(rosbag_name, exp_number):
                 if connection.topic == '/robot/ctrl/state':
                     msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
                     pos = [msg.state.pose.x, msg.state.pose.y, msg.state.pose.theta]
-                    print(pos)
                     if (pos == FIRST_GOAL):
                         t0 = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
                         experiment_start = True
@@ -214,7 +212,9 @@ def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
 
     return fig, axs
 
-def extract_performance_metrics(unpacked_vals):
+def extract_performance_metrics(unpacked_vals, exp_number):
+    FIRST_GOAL, RETURN_GOAL = define_experiment(exp_number)
+
     pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
     xchange = goalxlist.index(RETURN_GOAL[0])
     ychange = goalylist.index(RETURN_GOAL[1])
@@ -226,7 +226,14 @@ def extract_performance_metrics(unpacked_vals):
     metrics_index = np.where(np.array(metrics_time) > goal_change_time)[0][0]
     first_slice = (pos_time[:pos_index], xlist[:pos_index], ylist[:pos_index], thlist[:pos_index],
                    metrics_time[:metrics_index], totalgaslist[:metrics_index])
-    experiment_analysis(RETURN_GOAL, FIRST_GOAL, first_slice)
+    first_posRiseTime, first_posSettlingTime, first_thRiseTime, first_thSettlingTime = experiment_analysis(RETURN_GOAL, FIRST_GOAL, first_slice)
+
+    second_slice = (pos_time[pos_index:], xlist[pos_index:], ylist[pos_index:], thlist[pos_index:],
+                   metrics_time[metrics_index:], totalgaslist[metrics_index:])
+    second_posRiseTime, second_posSettlingTime, second_thRiseTime, second_thSettlingTime = experiment_analysis(FIRST_GOAL, RETURN_GOAL, second_slice)
+    
+
+    return (second_posRiseTime, second_posSettlingTime, second_thRiseTime, second_thSettlingTime)
 
 def experiment_analysis(start, goal, sliced_data):
     pos_time, xlist, ylist, thlist, metrics_time, totalgaslist = sliced_data
@@ -234,9 +241,28 @@ def experiment_analysis(start, goal, sliced_data):
     pos_err = np.linalg.norm(position_matrix - np.array(goal[:2]), axis=1)
     th_err = np.abs(np.array(thlist) - goal[2])
 
-    posRiseTime = np.where(pos_err < 0.05)[0][0]
-    thRiseTime = pos_time[np.where(th_err < 0.1)[0][0]]
-    print(thRiseTime)
+    posRiseTime = pos_time[np.where(pos_err < POS_THRESHOLD)[0][0]]
+    if np.any(pos_err > POS_THRESHOLD):
+        posSettlingTime = pos_time[np.where(pos_err > POS_THRESHOLD)[0][-1]] 
+        if (posSettlingTime == pos_time[-1]):
+            posSettlingTime = None
+    else:
+        posSettlingTime = None
+
+    thRiseTime = pos_time[np.where(th_err < THETA_THRESHOLD)[0][0]]
+    if np.any(th_err > THETA_THRESHOLD):
+        thSettlingTime = pos_time[np.where(th_err > THETA_THRESHOLD)[0][-1]] 
+        if (thSettlingTime == pos_time[-1]):
+            thSettlingTime = None
+    else:
+        posSettlingTime = None
+    
+    print("Position Rise Time:", posRiseTime)
+    print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
+    print("Theta Rise Time:", thRiseTime)
+    print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
+
+    return posRiseTime, posSettlingTime, thRiseTime, thSettlingTime
 
 
 def main():        
@@ -245,8 +271,13 @@ def main():
         for j, ROSBAG_NAME in enumerate(ROSBAG_NAMES[i]):
             print("Working on " + ROSBAG_NAME)
             unpacked = unpack_rosbag(ROSBAG_NAME, EXPERIMENT[i])
-            # extract_performance_metrics(unpacked)
+            metrics = extract_performance_metrics(unpacked, EXPERIMENT[i])
+            posRiseTime, posSettlingTime, thRiseTime, thSettlingTime = metrics
             fig, axs = plot_experiment_results(unpacked, j, fig, axs)
+            # axs[0].vlines(posRiseTime, 0.4, 0.6) if posRiseTime is not None else print("hi")
+            # axs[0].vlines(posSettlingTime, 0.4, 0.6) if posSettlingTime is not None else print("hi")
+            # axs[2].vlines(thRiseTime, -2,2) if thRiseTime is not None else print("hi")
+            # axs[2].vlines(thSettlingTime, -2,2) if thSettlingTime is not None else print("hi")
         fig.suptitle(TITLES[i])
         fig.legend(["Trial 1 Actual", "Trial 1 Goal", "Trial 2 Actual", "Trial 2 Goal","Trial 3 Actual", "Trial 3 Goal"])
     plt.show()
