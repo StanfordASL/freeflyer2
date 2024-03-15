@@ -32,7 +32,7 @@ import rclpy
 import math
 import sys
 
-goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.0,1.0,math.pi/2], [3.0,2.0,math.pi/2]]
+goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.0,1.0,math.pi/2], [2.0,1.5,math.pi/2]]
 goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
 
 class GoalPublisherNode(Node):

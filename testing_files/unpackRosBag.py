@@ -56,7 +56,9 @@ START_POINT = [0.5, 0.5, -math.pi/2]
 folders = ['/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_turnaround/',
            '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_turnaround/',
            '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_short/',
-           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_short/']
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_short/',
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_pd_long/',
+           '/home/freeflyerhub/Downloads/free_flyer_test_rosbags/exp_opt_long/']
 ROSBAG_NAMES = []
 for i, folder in enumerate(folders):
     ROSBAG_NAMES.append([])
@@ -64,8 +66,10 @@ for i, folder in enumerate(folders):
         ROSBAG_NAMES[i].append(folder+filename)
 
 TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnaround', 
-          'PD Baseline Controller Short-Distance', 'Optimization Controller Short-Distance']
-EXPERIMENT = [0, 0, 1, 1]
+          'PD Baseline Controller Short-Distance', 'Optimization Controller Short-Distance',
+          'PD Baseline Controller Long-Distance', 'Optimization Controller Long-Distance']
+          
+EXPERIMENT = [0, 0, 1, 1, 2, 2]
 COLORS = ['cornflowerblue', 'orangered', 'mediumseagreen']
 FIRST_GOAL = None
 
@@ -100,7 +104,7 @@ def unpack_rosbag(rosbag_name, exp_number):
         FIRST_GOAL = [1, 1, math.pi/2]
         RETURN_GOAL = START_POINT
     elif exp_number == 2:
-        FIRST_GOAL = [3, 2, math.pi/2]
+        FIRST_GOAL = [2.0, 1.5, math.pi/2]
         RETURN_GOAL = START_POINT
     else:
         print("ERR: Invalid Experiment mode!")
@@ -236,7 +240,7 @@ def experiment_analysis(start, goal, sliced_data):
 
 
 def main():        
-    for i, category in enumerate(ROSBAG_NAMES):
+    for i in range(len(ROSBAG_NAMES)):
         fig, axs = None, None
         for j, ROSBAG_NAME in enumerate(ROSBAG_NAMES[i]):
             print("Working on " + ROSBAG_NAME)
