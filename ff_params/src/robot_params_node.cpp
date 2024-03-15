@@ -40,7 +40,7 @@ public:
       "dynamics", {
       {"mass", 16.},      // mass [kg]
       {"inertia", 0.18},  // inertia at CoM (no payload) [kg*m^2]
-      {"radius", 0.1},    // robot radius, in [m]
+      {"radius", 0.15},    // robot radius, in [m]
     });
     this->declare_parameters<std::vector<double>>(
       "dynamics", {

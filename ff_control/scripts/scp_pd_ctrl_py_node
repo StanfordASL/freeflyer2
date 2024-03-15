@@ -40,6 +40,8 @@ from ff_msgs.msg import FreeFlyerStateStamped
 from ff_srvs.srv import ObsInfo
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Float32
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import ReentrantCallbackGroup
 
 class ImpulsiveOCP():
 
@@ -53,19 +55,19 @@ class ImpulsiveOCP():
         self.n_state = n_state
         self.n_action = n_action
         # Linear system for optimization with impulsive DeltaV, DeltaPSI_dot
+        self.param = param
         self.A = np.array([[0, 0, 0, 1, 0, 0],
                            [0, 0, 0, 0, 1, 0],
                            [0, 0, 0, 0, 0, 1],
                            [0, 0, 0, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0]])
-        self.B = np.array([[0, 0, 0],
-                           [0, 0, 0],
-                           [0, 0, 0],
-                           [1, 0, 0],
-                           [0, 1, 0],
-                           [0, 0, 1]])
-        self.param = param
+        self.B = np.array([[0, 0,                        0],
+                           [0, 0,                        0],
+                           [0, 0,                        0],
+                           [1, 0,                        0],
+                           [0, 1,                        0],
+                           [0, 0, param['mass']/param['J']]])
         
     def set_Ak(self, dt):
         self.Ak = np.eye(self.n_state, self.n_state) + dt*self.A
@@ -91,7 +93,7 @@ class ImpulsiveOCP():
         action_ref = np.zeros((self.n_action, len(tt)-1))
         self.Dv_t_M = self.param['F_t_M']*dt/self.param['mass']
         obs = copy.deepcopy(obs)
-        obs['radius'] = obs['radius'] + self.param['radius']
+        obs['radius'] = (obs['radius'] + self.param['radius'])*1.1
 
         # Initial condition for the scp
         DELTA_J = 10
@@ -248,33 +250,35 @@ class TransformerBasedSCPController(LinearController):
         #self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
         #self._readjust_controller_bounds = np.array([0.5, 0.5])
 
-        # Goal State command
-        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
-            'ctrl/state', self.state_setpoint_callback, 10)
-        self.rviz_sp_sub = self.create_subscription(PoseStamped,
-            '/goal_pose', self.rviz_setpoint_callback, 10)
-        
-        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
-        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
-        
         # Obstale info service client
         self.obs_info_cli = self.create_client(ObsInfo, 'obstacles_info')
         while not self.obs_info_cli.wait_for_service(timeout_sec=1.):
             self.get_logger().info('obstales_info server not available yet, waiting...')
         self.get_obs_info_request()
 
+        # Goal State command
+        self.state_callback_group = ReentrantCallbackGroup()
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            'ctrl/state', self.state_setpoint_callback, 10, callback_group=self.state_callback_group)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            '/goal_pose', self.rviz_setpoint_callback, 10, callback_group=self.state_callback_group)
+        
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+
         # Control loop
         # feedback gain params
+        self.timer_callback_group = ReentrantCallbackGroup()
         self.declare_parameter('gain_f', 2.0)
         self.declare_parameter('gain_df', 10.0)
         self.declare_parameter('gain_t', 0.2)
         self.declare_parameter('gain_dt', 0.4)
-        self.declare_parameter('total_time', 20.0)
+        self.declare_parameter('total_time', 40.0)
         self.n_timesteps = 101
         self._trajectory_ready = False
         self.control_period = 0.1
-        self.timer = self.create_timer(self.control_period, self.control_loop)
-        self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop)
+        self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.timer_callback_group)
+        self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop, callback_group=self.timer_callback_group)
     
     '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
         """
@@ -742,7 +746,8 @@ class TransformerBasedSCPController(LinearController):
 def main(args=None):
     rclpy.init(args=args)
     opt_ctrl = TransformerBasedSCPController()
-    rclpy.spin(opt_ctrl)
+    MTexec = MultiThreadedExecutor()
+    rclpy.spin(opt_ctrl, executor=MTexec)
     rclpy.shutdown()
 
 

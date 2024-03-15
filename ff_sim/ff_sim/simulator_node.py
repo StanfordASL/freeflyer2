@@ -37,6 +37,7 @@ import typing as T
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from visualization_msgs.msg import Marker, MarkerArray
 
 from ff_msgs.msg import (
     FreeFlyerStateStamped,
@@ -121,10 +122,10 @@ class FreeFlyerSimulator(Node):
         p_obstacles = self.declare_parameters(
             "obstacles",
             [
-                ("cyl_pos_x", []),#("cyl_pos_x", [2.]),
-                ("cyl_pos_y", []),#("cyl_pos_y", [1.]),
-                ("cyl_rads", []),#("cyl_rads", [0.3]),
-                ("cyl_heights", []),#("cyl_heights", [0.75]),
+                ("cyl_pos_x", [1., 1.5, 2.5, 2.5]),#("cyl_pos_x", []),#
+                ("cyl_pos_y", [0.7, 1.7, 0.75, 1.75]),#("cyl_pos_y", []),#
+                ("cyl_rads", [0.2, 0.2, 0.2, 0.2]),#("cyl_rads", []),#
+                ("cyl_heights", [0.6, 0.6, 0.6, 0.6]),#("cyl_heights", []),#
             ],
         )
         self.obstacles = {
@@ -133,6 +134,30 @@ class FreeFlyerSimulator(Node):
             "cyl_rads": p_obstacles[2].get_parameter_value().double_array_value,
             "cyl_heights": p_obstacles[3].get_parameter_value().double_array_value,
         }
+        self.obstacles_array_msg = MarkerArray()
+        for n_obs in range(len(self.obstacles["cyl_rads"])):
+            obs_marker = Marker()
+            obs_marker.header.frame_id = 'world'
+            obs_marker.header.stamp = self.get_clock().now().to_msg()
+            obs_marker.ns = 'obstacle'
+            obs_marker.id = n_obs
+            obs_marker.type = Marker.CYLINDER
+            obs_marker.action = Marker.ADD
+            obs_marker.scale.x = 2*self.obstacles['cyl_rads'][n_obs]
+            obs_marker.scale.y = 2*self.obstacles['cyl_rads'][n_obs]
+            obs_marker.scale.z = self.obstacles['cyl_heights'][n_obs]
+            obs_marker.pose.position.x = self.obstacles['cyl_pos_x'][n_obs]
+            obs_marker.pose.position.y = self.obstacles['cyl_pos_y'][n_obs]
+            obs_marker.pose.position.z = self.obstacles['cyl_heights'][n_obs]/2
+            obs_marker.pose.orientation.x = 0.
+            obs_marker.pose.orientation.y = 0.
+            obs_marker.pose.orientation.z = 0.
+            obs_marker.pose.orientation.w = 1.
+            obs_marker.color.r = 1.
+            obs_marker.color.g = 0.
+            obs_marker.color.b = 0.
+            obs_marker.color.a = 0.5
+            self.obstacles_array_msg.markers.append(obs_marker)
 
         self.B_ideal = self.declare_parameter("B_ideal", False).get_parameter_value().bool_value
 
@@ -176,6 +201,7 @@ class FreeFlyerSimulator(Node):
         self.pub_state = self.create_publisher(FreeFlyerStateStamped, f"sim/state", 10)
         self.pub_wrench = self.create_publisher(Wrench2DStamped, f"sim/wrench", 10)
         self.pub_ext_force = self.create_publisher(Wrench2DStamped, f"sim/ext_force", 10)
+        self.pub_obstacles = self.create_publisher(MarkerArray, f"obstacles_marker_array", 10)
 
         # obstale service provider
         self.obs_info_srv = self.create_service(ObsInfo, 'obstacles_info', self.obstacles_info_callback)
@@ -269,6 +295,9 @@ class FreeFlyerSimulator(Node):
         # Publish
         self.pub_state.publish(state)
         self.pub_mocap.publish(mocap)
+        for n_obs in range(len(self.obstacles['cyl_rads'])):
+            self.obstacles_array_msg.markers[n_obs].header.stamp = now
+        self.pub_obstacles.publish(self.obstacles_array_msg)
 
     def update_wheel_cmd_vel_cb(self, msg: WheelVelCommand) -> None:
         self.wheel_vel_cmd = msg.velocity

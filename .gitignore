@@ -10,6 +10,10 @@ __pycache__/
 # C extensions
 *.so
 
+# npz and torch files
+*.npz
+*.pth
+
 # Distribution / packaging
 .Python
 build/
