@@ -133,6 +133,9 @@ def unpack_rosbag(rosbag_name, exp_number):
     goalylist = []
     goalthlist = []
 
+    thruster_time = []
+    thruster_outputs = []
+
     # create reader instance and open for reading
     with Reader(rosbag_name) as reader:
         for connection, timestamp, rawdata in reader.messages():
@@ -158,6 +161,11 @@ def unpack_rosbag(rosbag_name, exp_number):
                             track_thruster_start = True
                         metrics_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
                         totalgaslist.append(msg.total_gas_time - thruster_0)
+                    elif connection.topic == '/robot/commands/binary_thrust':
+                        msg = typestore.deserialize_cdr(rawdata, connection.msgtype)
+                        thruster_time.append(msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9 - t0)
+                        thruster_outputs.append(msg.switches)
+                        
                 except KeyError:
                     print("Err: Not ready to process these messages yet!")
             else:
@@ -174,10 +182,11 @@ def unpack_rosbag(rosbag_name, exp_number):
 
     return (pos_time, xlist, ylist, thlist, 
             goal_time, goalxlist, goalylist, goalthlist, 
-            metrics_time, totalgaslist)
+            metrics_time, totalgaslist,
+            thruster_time, thruster_outputs)
 
 def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
-    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
+    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist, thruster_time, thruster_outputs = unpacked_vals
     
     if (fig is None or axs is None):
         fig, axs = plt.subplots(4, 1, constrained_layout=True, sharex = True)
@@ -206,7 +215,7 @@ def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
 
     axs[3].plot(metrics_time, totalgaslist, COLORS[color_ind])
     axs[3].set_ylabel("Total Time Thrusters On [s]")
-    axs[3].grid(True, which='major', axis='y')
+    axs[3].grid(True, which='major', axis='y')  
     axs[3].set_xlabel("Time [s]")
 
     return fig, axs
@@ -214,7 +223,7 @@ def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
 def extract_performance_metrics(unpacked_vals, exp_number):
     FIRST_GOAL, RETURN_GOAL = define_experiment(exp_number)
 
-    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist = unpacked_vals
+    pos_time, xlist, ylist, thlist, goal_time, goalxlist, goalylist, goalthlist, metrics_time, totalgaslist, thruster_time, thruster_outputs = unpacked_vals
     xchange = goalxlist.index(RETURN_GOAL[0])
     ychange = goalylist.index(RETURN_GOAL[1])
     thchange = goalthlist.index(RETURN_GOAL[2])
@@ -300,13 +309,13 @@ def experiment_analysis(start, goal, sliced_data):
         settling_gas = None
 
     
-    # print("Position Rise Time:", posRiseTime)
-    # print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
-    # print("Position Settled Error:", posRMSSettledErr)
-    # print("Theta Rise Time:", thRiseTime)
-    # print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
-    # print("Theta Settled Error:", thRMSSettledErr)
-    # print("Settling Gas Usage:", settling_gas)
+    print("Position Rise Time:", posRiseTime)
+    print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
+    print("Position Settled Error:", posRMSSettledErr)
+    print("Theta Rise Time:", thRiseTime)
+    print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
+    print("Theta Settled Error:", thRMSSettledErr)
+    print("Settling Gas Usage:", settling_gas)
 
     return (posRiseTime, posSettlingTime, posMaxOvershoot, posRMSSettledErr, thRiseTime, thSettlingTime, thMaxOvershoot, thRMSSettledErr, settling_gas)
 
@@ -314,6 +323,8 @@ def experiment_analysis(start, goal, sliced_data):
 def main():
     average_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
     std_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
+    min_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
+    max_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
 
     for i in range(len(ROSBAG_NAMES)):
         print("====================== " + TITLES[i] + " ======================")
@@ -338,11 +349,16 @@ def main():
         for k in range(NUM_STATS):
             average_stats[i][k] = np.around(np.mean(stats[k]), 5)
             std_stats[i][k] = np.around(np.std(stats[k]), 5)
+            min_stats[i][k] = np.around(np.min(stats[k]), 5)
+            max_stats[i][k] = np.around(np.max(stats[k]), 5)
 
     print(STATS)
     for i in range(len(EXPERIMENT)):
-        print(average_stats[i])
-        print(std_stats[i])
+        print("====================== " + TITLES[i] + " ======================")
+        print("Avg:", average_stats[i])
+        print("StDev:", std_stats[i])
+        print("Min:", min_stats[i])
+        print("Max:", max_stats[i])
     plt.show()
 
 if __name__ == "__main__":
