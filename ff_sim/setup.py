@@ -23,6 +23,7 @@ setup(
         "console_scripts": [
             "simulator_node = ff_sim.simulator_node:main",
             "controller_metrics = ff_sim.controller_metrics:main",
+            "obstacles_node = ff_sim.obstacles_node:main"
         ],
     },
 )
