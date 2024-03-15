@@ -98,6 +98,9 @@ class FreeflyerModel:
         constraints += [s[:,0] == state_init]
         constraints += [s[:,k+1] == self.Ak @ (s[:,k] + self.B_imp @ a[:,k]) for k in range(n_time-1)]
         constraints += [(s[:,-1] + self.B_imp @ a[:,-1]) == state_final]
+        # Table extension
+        constraints += [s[:2,:] >= ff.start_region['xy_low'][:,None]]
+        constraints += [s[:2,:] <= ff.goal_region['xy_up'][:,None]]
         # Trust region and koz and action bounding box
         for k in range(0,n_time):
             # Trust region
