@@ -68,8 +68,10 @@ TITLES = ['PD Baseline Controller Turnaround', 'Optimization Controller Turnarou
 EXPERIMENT = [0, 0, 1, 1, 2, 2]
 COLORS = ['cornflowerblue', 'orangered', 'mediumseagreen']
 
-POS_THRESHOLD = 0.05 
-THETA_THRESHOLD = 0.1
+POS_THRESHOLD = 0.07 
+THETA_THRESHOLD = 0.2
+NUM_STATS = 7
+STATS = ["Pos Rise Time", "Post Settling Time", "Pos RMS Settled Err", "Theta Rise Time", "Theta Settling Time", "Theta RMS Settled Err", "Settling Gas Used"]
 
 def quat2euler(x, y, z, w):
     """
@@ -178,8 +180,8 @@ def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
     
     if (fig is None or axs is None):
         fig, axs = plt.subplots(4, 1, constrained_layout=True, sharex = True)
-        fig.set_figheight(12)
-        fig.set_figwidth(10)
+        fig.set_figheight(9)
+        fig.set_figwidth(7)
     # Artificially add extra goal command to data to make goal step function look right
     goal_time.append(pos_time[-1])
     goalxlist.append(goalxlist[-1])
@@ -187,26 +189,22 @@ def plot_experiment_results(unpacked_vals, color_ind, fig=None, axs=None):
     goalthlist.append(goalthlist[-1])
     
     axs[0].plot(pos_time, xlist, COLORS[color_ind])
-    axs[0].step(goal_time, goalxlist, COLORS[color_ind], where='post')
+    axs[0].plot(goal_time, goalxlist, COLORS[color_ind], linestyle='--', drawstyle='steps-post')
     axs[0].set_ylabel("X-Position [m]")
-    # axs[0].minorticks_on()
     axs[0].grid(True, which='major', axis='y')
 
     axs[1].plot(pos_time, ylist, COLORS[color_ind])
-    axs[1].step(goal_time, goalylist, COLORS[color_ind],where='post')
+    axs[1].plot(goal_time, goalylist, COLORS[color_ind], linestyle='--', drawstyle='steps-post')
     axs[1].set_ylabel("Y-Position [m]")
-    # axs[1].minorticks_on()
     axs[1].grid(True, which='major', axis='y')
 
     axs[2].plot(pos_time, thlist, COLORS[color_ind])
-    axs[2].step(goal_time, goalthlist, COLORS[color_ind], where='post')
+    axs[2].plot(goal_time, goalthlist, COLORS[color_ind], linestyle='--', drawstyle='steps-post')
     axs[2].set_ylabel("Orientation [rad]")
-    # axs[2].minorticks_on()
     axs[2].grid(True, which='major', axis='y')
 
     axs[3].plot(metrics_time, totalgaslist, COLORS[color_ind])
     axs[3].set_ylabel("Total Time Thrusters On [s]")
-    # axs[3].minorticks_on()
     axs[3].grid(True, which='major', axis='y')
     axs[3].set_xlabel("Time [s]")
 
@@ -221,19 +219,21 @@ def extract_performance_metrics(unpacked_vals, exp_number):
     thchange = goalthlist.index(RETURN_GOAL[2])
     goal_change_time = goal_time[max(xchange, ychange, thchange)]
 
-    # Process first phase (START->FIRST_GOAL)
+    # Divide data into two phases
     pos_index = np.where(np.array(pos_time) > goal_change_time)[0][0]
     metrics_index = np.where(np.array(metrics_time) > goal_change_time)[0][0]
+    
+    # Process first phase (START->FIRST_GOAL)    
     first_slice = (pos_time[:pos_index], xlist[:pos_index], ylist[:pos_index], thlist[:pos_index],
                    metrics_time[:metrics_index], totalgaslist[:metrics_index])
-    first_posRiseTime, first_posSettlingTime, first_thRiseTime, first_thSettlingTime = experiment_analysis(RETURN_GOAL, FIRST_GOAL, first_slice)
+    calcmetrics_1 = experiment_analysis(RETURN_GOAL, FIRST_GOAL, first_slice)
 
+    # Process second phase (FIRST_GOAL->START)    
     second_slice = (pos_time[pos_index:], xlist[pos_index:], ylist[pos_index:], thlist[pos_index:],
                    metrics_time[metrics_index:], totalgaslist[metrics_index:])
-    second_posRiseTime, second_posSettlingTime, second_thRiseTime, second_thSettlingTime = experiment_analysis(FIRST_GOAL, RETURN_GOAL, second_slice)
+    calcmetrics_2 = experiment_analysis(FIRST_GOAL, RETURN_GOAL, second_slice)
     
-
-    return (second_posRiseTime, second_posSettlingTime, second_thRiseTime, second_thSettlingTime)
+    return calcmetrics_1, calcmetrics_2
 
 def experiment_analysis(start, goal, sliced_data):
     pos_time, xlist, ylist, thlist, metrics_time, totalgaslist = sliced_data
@@ -241,38 +241,83 @@ def experiment_analysis(start, goal, sliced_data):
     pos_err = np.linalg.norm(position_matrix - np.array(goal[:2]), axis=1)
     th_err = np.abs(np.array(thlist) - goal[2])
 
+    pos_t0 = pos_time[0]
+    pos_time = [t - pos_t0 for t in pos_time]
+    metrics_t0 = metrics_time[0]
+    metrics_time = [t - metrics_t0 for t in metrics_time]
+
+    # Process position metrics
     posRiseTime = pos_time[np.where(pos_err < POS_THRESHOLD)[0][0]]
+    # print(pos_err[:5], np.where(pos_err < POS_THRESHOLD)[0][0])
     if np.any(pos_err > POS_THRESHOLD):
-        posSettlingTime = pos_time[np.where(pos_err > POS_THRESHOLD)[0][-1]] 
+        posSettledInd = np.where(pos_err > POS_THRESHOLD)[0][-1]
+        posSettlingTime = pos_time[posSettledInd] 
         if (posSettlingTime == pos_time[-1]):
+            print("Position Never settles!", position_matrix[-1,:], pos_err[-1])
             posSettlingTime = None
     else:
+        print("Position Never diverges!")
         posSettlingTime = None
 
+    if (posSettlingTime is None):
+        posRMSSettledErr = None
+        print("No valid settled error to look at")
+    else:
+        posRMSSettledErr = np.linalg.norm(pos_err[posSettledInd:]) / np.sqrt(pos_err.shape[0] - posSettledInd)
+        # print("Position Settled Error:", posRMSSettledErr)
+
+    # Process orientation metrics
     thRiseTime = pos_time[np.where(th_err < THETA_THRESHOLD)[0][0]]
     if np.any(th_err > THETA_THRESHOLD):
-        thSettlingTime = pos_time[np.where(th_err > THETA_THRESHOLD)[0][-1]] 
+        thSettledInd = np.where(th_err > THETA_THRESHOLD)[0][-1]
+        thSettlingTime = pos_time[thSettledInd] 
         if (thSettlingTime == pos_time[-1]):
+            print("Theta Never settles!", th_err[-1])
             thSettlingTime = None
     else:
-        posSettlingTime = None
+        print("Theta Never diverges!")
+        thSettlingTime = None
+
+    if (thSettlingTime is None):
+        thRMSSettledErr = None
+        print("No valid settled error to look at")
+    else:
+        thRMSSettledErr = np.linalg.norm(th_err[thSettledInd:]) / np.sqrt(th_err.shape[0] - thSettledInd)
+        # print("Theta Settled Error:", thRMSSettledErr)
+    
+    # Process gas usage metrics
+    settling_time_candidates = [t for t in [thSettlingTime, posSettlingTime] if t is not None]
+    settling_time = max(settling_time_candidates) if len(settling_time_candidates) != 0 else -1
+    if (settling_time != -1):
+        settling_gas = totalgaslist[np.where(np.array(metrics_time) > settling_time)[0][0]] - totalgaslist[0]
+    else:
+        print("No valid settling time to use!")
+        settling_gas = None
+
     
     print("Position Rise Time:", posRiseTime)
-    print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
-    print("Theta Rise Time:", thRiseTime)
-    print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
+    # print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
+    # print("Theta Rise Time:", thRiseTime)
+    # print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
+    # print("Settling Gas Usage:", settling_gas)
 
-    return posRiseTime, posSettlingTime, thRiseTime, thSettlingTime
+    return (posRiseTime, posSettlingTime, posRMSSettledErr, thRiseTime, thSettlingTime, thRMSSettledErr, settling_gas)
 
 
-def main():        
+def main():
+    average_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
     for i in range(len(ROSBAG_NAMES)):
         fig, axs = None, None
+        stats = [[] for i in range(NUM_STATS)]
         for j, ROSBAG_NAME in enumerate(ROSBAG_NAMES[i]):
             print("Working on " + ROSBAG_NAME)
             unpacked = unpack_rosbag(ROSBAG_NAME, EXPERIMENT[i])
-            metrics = extract_performance_metrics(unpacked, EXPERIMENT[i])
-            posRiseTime, posSettlingTime, thRiseTime, thSettlingTime = metrics
+            metrics_1, metrics_2 = extract_performance_metrics(unpacked, EXPERIMENT[i])
+            for k in range(NUM_STATS):
+                if (metrics_1[k] is not None):
+                    stats[k].append(metrics_1[k])
+                if (metrics_2[k] is not None):
+                    stats[k].append(metrics_2[k])
             fig, axs = plot_experiment_results(unpacked, j, fig, axs)
             # axs[0].vlines(posRiseTime, 0.4, 0.6) if posRiseTime is not None else print("hi")
             # axs[0].vlines(posSettlingTime, 0.4, 0.6) if posSettlingTime is not None else print("hi")
@@ -280,6 +325,12 @@ def main():
             # axs[2].vlines(thSettlingTime, -2,2) if thSettlingTime is not None else print("hi")
         fig.suptitle(TITLES[i])
         fig.legend(["Trial 1 Actual", "Trial 1 Goal", "Trial 2 Actual", "Trial 2 Goal","Trial 3 Actual", "Trial 3 Goal"])
+        for k in range(NUM_STATS):
+            average_stats[i][k] = np.mean(stats[k])
+
+    print(STATS)
+    for i in range(len(EXPERIMENT)):
+        print(average_stats[i])
     plt.show()
 
 if __name__ == "__main__":
