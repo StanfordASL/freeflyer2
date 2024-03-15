@@ -2,10 +2,10 @@ rosbag2_bagfile_information:
   version: 5
   storage_identifier: sqlite3
   duration:
-    nanoseconds: 135827280050
+    nanoseconds: 113088875961
   starting_time:
-    nanoseconds_since_epoch: 1710463563901979786
-  message_count: 18422
+    nanoseconds_since_epoch: 1710543450777376864
+  message_count: 15255
   topics_with_message_count:
     - topic_metadata:
         name: /robot/ctrl/state
@@ -18,27 +18,27 @@ rosbag2_bagfile_information:
         type: ff_msgs/msg/ThrusterCommand
         serialization_format: cdr
         offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
-      message_count: 1055
+      message_count: 840
     - topic_metadata:
         name: /robot/metrics/controller
         type: ff_msgs/msg/ControllerMetrics
         serialization_format: cdr
         offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
-      message_count: 1059
+      message_count: 835
     - topic_metadata:
         name: /vrpn_mocap/robot/pose
         type: geometry_msgs/msg/PoseStamped
         serialization_format: cdr
         offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
-      message_count: 16301
+      message_count: 13573
   compression_format: ""
   compression_mode: ""
   relative_file_paths:
-    - rosbag2_2024_03_14-17_46_03_0.db3
+    - rosbag2_2024_03_15-15_57_30_0.db3
   files:
-    - path: rosbag2_2024_03_14-17_46_03_0.db3
+    - path: rosbag2_2024_03_15-15_57_30_0.db3
       starting_time:
-        nanoseconds_since_epoch: 1710463563901979786
+        nanoseconds_since_epoch: 1710543450777376864
       duration:
-        nanoseconds: 135827280050
-      message_count: 18422
+        nanoseconds: 113088875961
+      message_count: 15255
