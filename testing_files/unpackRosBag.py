@@ -70,8 +70,9 @@ COLORS = ['cornflowerblue', 'orangered', 'mediumseagreen']
 
 POS_THRESHOLD = 0.07 
 THETA_THRESHOLD = 0.2
-NUM_STATS = 7
-STATS = ["Pos Rise Time", "Post Settling Time", "Pos RMS Settled Err", "Theta Rise Time", "Theta Settling Time", "Theta RMS Settled Err", "Settling Gas Used"]
+NUM_STATS = 9
+STATS = ["Pos Rise Time", "Post Settling Time", "Pos Max Overshoot", "Pos RMS Settled Err",
+         "Theta Rise Time", "Theta Settling Time", "Theta Max Overshoot", "Theta RMS Settled Err", "Settling Gas Used"]
 
 def quat2euler(x, y, z, w):
     """
@@ -247,7 +248,9 @@ def experiment_analysis(start, goal, sliced_data):
     metrics_time = [t - metrics_t0 for t in metrics_time]
 
     # Process position metrics
-    posRiseTime = pos_time[np.where(pos_err < POS_THRESHOLD)[0][0]]
+    posRiseInd = np.where(pos_err < POS_THRESHOLD)[0][0]
+    posRiseTime = pos_time[posRiseInd]
+    posMaxOvershoot = np.max(pos_err[posRiseInd:])
     # print(pos_err[:5], np.where(pos_err < POS_THRESHOLD)[0][0])
     if np.any(pos_err > POS_THRESHOLD):
         posSettledInd = np.where(pos_err > POS_THRESHOLD)[0][-1]
@@ -257,17 +260,19 @@ def experiment_analysis(start, goal, sliced_data):
             posSettlingTime = None
     else:
         print("Position Never diverges!")
-        posSettlingTime = None
+        posSettledInd = 0
+        posSettlingTime = pos_time[posSettledInd]
 
     if (posSettlingTime is None):
         posRMSSettledErr = None
         print("No valid settled error to look at")
     else:
         posRMSSettledErr = np.linalg.norm(pos_err[posSettledInd:]) / np.sqrt(pos_err.shape[0] - posSettledInd)
-        # print("Position Settled Error:", posRMSSettledErr)
 
     # Process orientation metrics
-    thRiseTime = pos_time[np.where(th_err < THETA_THRESHOLD)[0][0]]
+    thRiseInd = np.where(th_err < THETA_THRESHOLD)[0][0]
+    thRiseTime = pos_time[thRiseInd]
+    thMaxOvershoot = np.max(th_err[thRiseInd:])
     if np.any(th_err > THETA_THRESHOLD):
         thSettledInd = np.where(th_err > THETA_THRESHOLD)[0][-1]
         thSettlingTime = pos_time[thSettledInd] 
@@ -276,15 +281,15 @@ def experiment_analysis(start, goal, sliced_data):
             thSettlingTime = None
     else:
         print("Theta Never diverges!")
-        thSettlingTime = None
+        thSettlingTime = 0
 
     if (thSettlingTime is None):
         thRMSSettledErr = None
         print("No valid settled error to look at")
     else:
-        thRMSSettledErr = np.linalg.norm(th_err[thSettledInd:]) / np.sqrt(th_err.shape[0] - thSettledInd)
-        # print("Theta Settled Error:", thRMSSettledErr)
+        thRMSSettledErr = np.linalg.norm(th_err[thSettledInd:]) / np.sqrt(th_err.shape[0] - thSettledInd)  
     
+
     # Process gas usage metrics
     settling_time_candidates = [t for t in [thSettlingTime, posSettlingTime] if t is not None]
     settling_time = max(settling_time_candidates) if len(settling_time_candidates) != 0 else -1
@@ -295,18 +300,23 @@ def experiment_analysis(start, goal, sliced_data):
         settling_gas = None
 
     
-    print("Position Rise Time:", posRiseTime)
+    # print("Position Rise Time:", posRiseTime)
     # print("Position Settling Time:", posSettlingTime, "out of", pos_time[-1])
+    # print("Position Settled Error:", posRMSSettledErr)
     # print("Theta Rise Time:", thRiseTime)
     # print("Theta Settling Time:", thSettlingTime, "out of", pos_time[-1])
+    # print("Theta Settled Error:", thRMSSettledErr)
     # print("Settling Gas Usage:", settling_gas)
 
-    return (posRiseTime, posSettlingTime, posRMSSettledErr, thRiseTime, thSettlingTime, thRMSSettledErr, settling_gas)
+    return (posRiseTime, posSettlingTime, posMaxOvershoot, posRMSSettledErr, thRiseTime, thSettlingTime, thMaxOvershoot, thRMSSettledErr, settling_gas)
 
 
 def main():
     average_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
+    std_stats = [[0] * NUM_STATS for i in range(len(EXPERIMENT))]
+
     for i in range(len(ROSBAG_NAMES)):
+        print("====================== " + TITLES[i] + " ======================")
         fig, axs = None, None
         stats = [[] for i in range(NUM_STATS)]
         for j, ROSBAG_NAME in enumerate(ROSBAG_NAMES[i]):
@@ -326,11 +336,13 @@ def main():
         fig.suptitle(TITLES[i])
         fig.legend(["Trial 1 Actual", "Trial 1 Goal", "Trial 2 Actual", "Trial 2 Goal","Trial 3 Actual", "Trial 3 Goal"])
         for k in range(NUM_STATS):
-            average_stats[i][k] = np.mean(stats[k])
+            average_stats[i][k] = np.around(np.mean(stats[k]), 5)
+            std_stats[i][k] = np.around(np.std(stats[k]), 5)
 
     print(STATS)
     for i in range(len(EXPERIMENT)):
         print(average_stats[i])
+        print(std_stats[i])
     plt.show()
 
 if __name__ == "__main__":
