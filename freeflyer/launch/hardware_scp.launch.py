@@ -53,6 +53,12 @@ def generate_launch_description():
                 launch_arguments={"robot_name": robot_name}.items(),
             ),
             Node(
+                package="ff_sim",
+                executable=["obstacles_node"],
+                name="obstacles_node",
+                namespace=robot_name,
+            ),
+            Node(
                 package="ff_control",
                 executable=["scp_pd_ctrl_", impl, "_node"],
                 name="scp_pd_ctrl_node",
