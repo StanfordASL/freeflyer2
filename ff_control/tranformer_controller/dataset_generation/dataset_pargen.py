@@ -93,7 +93,7 @@ if __name__ == '__main__':
     i_unfeas = []
 
     # Pool creation --> Should automatically select the maximum number of processes
-    p = Pool(processes=16)
+    p = Pool(processes=24)
     for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data), itertools.repeat(other_args))), total=N_data)):
     #for i in np.arange(N_data):
     #    res = for_computation((i, other_args))

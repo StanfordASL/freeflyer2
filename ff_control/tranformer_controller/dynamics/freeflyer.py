@@ -291,28 +291,28 @@ def ocp_obstacle_avoidance(model:FreeflyerModel, state_ref, action_ref, state_in
 def compute_reward_to_go(actions):
     if len(actions.shape) == 2:
         actions = actions[None,:,:]
-    n_data, n_time = actions.shape[0], actions.shape[2]
+    n_data, n_time = actions.shape[0], actions.shape[1]
     rewards_to_go = np.empty(shape=(n_data, n_time), dtype=float)
     for n in range(n_data):
         for t in range(n_time):
-            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, :, t:], ord=1,  axis=0))
+            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, :, t:], ord=1,  axis=1))
         
     return rewards_to_go
 
-def compute_constraint_to_go(states, obs):
+def compute_constraint_to_go(states, obs_positions, obs_radii):
     if len(states.shape) == 2:
         states = states[None,:,:]
-    n_data, n_time = states.shape[0], states.shape[2]
+    n_data, n_time = states.shape[0], states.shape[1]
     constraint_to_go = np.empty(shape=(n_data, n_time), dtype=float)
     for n in range(n_data):
-        constr_koz_n, constr_koz_violation_n = check_koz_constraint(states[n, :, :], obs['position'], obs['radius'])
+        constr_koz_n, constr_koz_violation_n = check_koz_constraint(states[n, :, :], obs_positions, obs_radii)
         constraint_to_go[n,:] = np.array([np.sum(constr_koz_violation_n[:,t:]) for t in range(n_time)])
 
     return constraint_to_go
 
 def check_koz_constraint(states, obs_positions, obs_radii):
 
-    constr_koz = np.linalg.norm(states[None,:2,:] - obs_positions[:,:,None], axis=1) - obs_radii[:,None]
+    constr_koz = np.linalg.norm(states[None,:,:2] - obs_positions[:,None,:], axis=2) - obs_radii[:,None]
     constr_koz_violation = 1*(constr_koz <= 0)
 
     return constr_koz, constr_koz_violation
