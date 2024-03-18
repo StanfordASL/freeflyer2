@@ -13,6 +13,9 @@ __pycache__/
 # npz and torch files
 *.npz
 *.pth
+*.npy
+*.bin
+*.pkl
 
 # Distribution / packaging
 .Python

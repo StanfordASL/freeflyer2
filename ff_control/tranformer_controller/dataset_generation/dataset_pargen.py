@@ -18,9 +18,7 @@ def for_computation(input):
     ff_model = other_args['ff_model']
 
     # Randomic sample of initial and final conditions
-    # init_state, target_state = sample_init_target()
-    init_state = np.array([0.2,0.5,0,0,0,0])
-    target_state = np.array([3.2,2.,np.pi,0,0,0])
+    init_state, target_state = sample_init_target()
 
     # Output dictionary initialization
     out = {'feasible' : True,
@@ -41,22 +39,25 @@ def for_computation(input):
     if np.char.equal(feas_cvx_i,'optimal'):
         
         #  Solve scp with obstacles
-        traj_scp_i, J_scp_i, iter_scp_i, feas_scp_i, = ocp_obstacle_avoidance(ff_model, traj_cvx_i['states'], traj_cvx_i['actions_G'], init_state, target_state)
+        try:
+            traj_scp_i, J_scp_i, iter_scp_i, feas_scp_i, = ocp_obstacle_avoidance(ff_model, traj_cvx_i['states'], traj_cvx_i['actions_G'], init_state, target_state)
 
-        if np.char.equal(feas_scp_i,'optimal'):
-            # Save cvx and scp problems in the output dictionary
-            out['states_cvx'] = np.transpose(traj_cvx_i['states'][:,:-1])
-            out['actions_cvx'] = np.transpose(traj_cvx_i['actions_G'])
-            out['actions_t_cvx'] = np.transpose(traj_cvx_i['actions_t'])
-            
-            out['states_scp'] = np.transpose(traj_scp_i['states'][:,:-1])
-            out['actions_scp'] = np.transpose(traj_scp_i['actions_G'])
-            out['actions_t_scp'] = np.transpose(traj_scp_i['actions_t'])
+            if np.char.equal(feas_scp_i,'optimal'):
+                # Save cvx and scp problems in the output dictionary
+                out['states_cvx'] = np.transpose(traj_cvx_i['states'][:,:-1])
+                out['actions_cvx'] = np.transpose(traj_cvx_i['actions_G'])
+                out['actions_t_cvx'] = np.transpose(traj_cvx_i['actions_t'])
+                
+                out['states_scp'] = np.transpose(traj_scp_i['states'][:,:-1])
+                out['actions_scp'] = np.transpose(traj_scp_i['actions_G'])
+                out['actions_t_scp'] = np.transpose(traj_scp_i['actions_t'])
 
-            out['target_state'] = target_state
-            out['dtime'] = dt
-            out['time'] = np.linspace(0, T, S)[:-1]
-        else:
+                out['target_state'] = target_state
+                out['dtime'] = dt
+                out['time'] = np.linspace(0, T, S)[:-1]
+            else:
+                out['feasible'] = False
+        except:
             out['feasible'] = False
     else:
         out['feasible'] = False
@@ -115,7 +116,7 @@ if __name__ == '__main__':
         else:
             i_unfeas += [ i ]
         
-        if i % 40000 == 0:
+        if i % 50000 == 0:
             np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-scp' + str(i), states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp, i_unfeas = i_unfeas)
             np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-cvx' + str(i), states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx, i_unfeas = i_unfeas)
             np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, dtime = dtime, i_unfeas = i_unfeas)
@@ -135,6 +136,6 @@ if __name__ == '__main__':
         time = np.delete(time, i_unfeas, axis=0)
 
     #  Save dataset (local folder for the workstation)
-    np.savez_compressed(root_folder + '/dataset/dataset-quad-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
-    np.savez_compressed(root_folder + '/dataset/dataset-quad-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
-    np.savez_compressed(root_folder + '/dataset/dataset-quad-v05-param', target_state = target_state, time = time, dtime = dtime)
+    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
+    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
+    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-param', target_state = target_state, time = time, dtime = dtime)

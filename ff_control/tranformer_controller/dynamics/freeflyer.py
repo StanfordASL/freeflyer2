@@ -125,7 +125,7 @@ class FreeflyerModel:
 
         prob.solve(solver=cp.ECOS, verbose=False)
         if prob.status == 'infeasible':
-            print("[solve]: Problem infeasible.")
+            print("[solve]: Problem infeasible. [obstacle avoidance]:", obs_av)
             s_opt = None
             a_opt = None
             J = None
@@ -218,7 +218,7 @@ def ocp_no_obstacle_avoidance(model:FreeflyerModel, state_init, state_final):
     if feas_scp == 'infeasible':
         s_opt = None
         a_opt = None
-        a_t_opt = None
+        a_opt_t = None
         J = None
     else:
         s_opt = states_scp
@@ -270,7 +270,7 @@ def ocp_obstacle_avoidance(model:FreeflyerModel, state_ref, action_ref, state_in
     if feas_scp == 'infeasible':
         s_opt = None
         a_opt = None
-        a_t_opt = None
+        a_opt_t = None
         J = None
     else:
         s_opt = states_scp

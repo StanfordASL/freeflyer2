@@ -244,7 +244,7 @@ def import_dataset_for_DT_eval_vXX(mdp_constr):
     rtgs_scp = torch.load(data_dir_torch + '/torch_rtgs_scp.pth')
     ctgs_cvx = torch.load(data_dir_torch + '/torch_ctgs_cvx.pth')
     ctgs_scp = torch.load(data_dir_torch + '/torch_ctgs_scp.pth')
-    data_param = np.load(data_dir + '/dataset-quad-v05-param.npz')
+    data_param = np.load(data_dir + '/dataset-ff-v05-param.npz')
 
     print('Completed, DATA IS NOT SHUFFLED YET.\n')
 
