@@ -1,21 +1,16 @@
 import os
 import sys
-import argparse
-
 root_folder = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_folder)
-
 import numpy as np
 import copy
 
 import torch
-
 from transformers import DecisionTransformerConfig
 from accelerate import Accelerator
-
 from decision_transformer.art import AutonomousFreeflyerTransformer
 from dynamics.freeflyer import FreeflyerModel
-from optimization.ff_scenario import obs, safety_margin, robot_radius, dt, T
+from optimization.ff_scenario import obs, safety_margin, robot_radius, T, dt
 import time
 # select device based on availability of GPU
 verbose = False # set to True to get additional print statements
@@ -57,18 +52,18 @@ def get_only_DT_model(model_name, n_state, n_action):
     return model.eval()
 
 def state_init_final2sample(data_stats, state_init, state_final):
-    n_time = data_stats['states_mean'].shhape[0]
-    states_i = ((torch.tensor(np.repeat(state_init[None,:], 100, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6))[None,:,:]
-    actions_i = torch.zeros((100,3))[None,:,:]
-    rtgs_i = torch.zeros((100,))[None,:,None]
-    ctgs_i = torch.zeros((100,))[None,:,None]
-    goal_i = ((torch.tensor(np.repeat(state_final[None,:], 100, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6))[None,:,:]
+    n_time = data_stats['states_mean'].shape[0]
+    ix = torch.tensor([0])[None,:]
+    states_i = ((torch.tensor(np.repeat(state_init[None,:], 100, axis=0), device=device).float() - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6))[None,:,:]
+    actions_i = torch.zeros((100,3))[None,:,:].float()
+    rtgs_i = torch.zeros((100,))[None,:,None].float()
+    ctgs_i = torch.zeros((100,))[None,:,None].float()
+    goal_i = ((torch.tensor(np.repeat(state_final[None,:], 100, axis=0), device=device).float() - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6))[None,:,:]
     timesteps_i = (torch.tensor([[i for i in range(n_time)] for _ in ix]).view(n_time).long())[None,:]
     attention_mask_i = (torch.ones(1, n_time).view(n_time).long())[None,:]
-    dt = torch.tensor([dt]).float()[None,:]
-    time_sec = torch.arange(0,T+dt/2,dt).float()[None,:]
-    ix = torch.tensor([0])
-    return states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix
+    dt_i = torch.tensor([dt]).float()
+    time_sec_i = torch.arange(0,T+dt/2,dt).float()[None,None,:]
+    return states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt_i, time_sec_i, ix
 
 def ros_model_inference_dyn(model, data_stats, state_init, state_final, rtg_perc=1., ctg_perc=1., rtg=None, ctg_clipped=True):
     # Get dimensions and statistics from the dataset
