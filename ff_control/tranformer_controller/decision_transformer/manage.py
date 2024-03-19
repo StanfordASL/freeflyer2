@@ -614,7 +614,7 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     obs_pos, obs_rad = torch.tensor(np.copy(obs['position'])).to(device), torch.tensor(np.copy(obs['radius'])).to(device)
     obs_rad = (obs_rad + robot_radius)*safety_margin
     ff_model = FreeflyerModel()
-    Ak, B_imp = torch.tensor(ff_model.Ak).to(device), torch.tensor(ff_model.B_imp).to(device)
+    Ak, B_imp = torch.tensor(ff_model.Ak).to(device).float(), torch.tensor(ff_model.B_imp).to(device).float()
 
     # Retrieve decoded states and actions for different inference cases
     xypsi_dyn = torch.empty(size=(n_state, n_time), device=device).float()
@@ -865,8 +865,10 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
     #p3 = ax.scatter(xypsi_true[0,context2.shape[1]//9], xypsi_true[1,context2.shape[1]//9], xypsi_true[2,context2.shape[1]//9], marker = '*', linewidth=1.5, label='$t_{init}$')
     ax1.add_patch(Rectangle((0,0), table['xy_up'][0], table['xy_up'][1], fc=(0.5,0.5,0.5,0.2), ec='k', label='table', zorder=2.5))
     for n_obs in range(obs['radius'].shape[0]):
-        ax1.add_patch(Circle(obs['position'][n_obs,:], obs['radius'][n_obs], fc='r', label='obs', zorder=2.5))
-        ax1.add_patch(Circle(obs['position'][n_obs,:], obs['radius'][n_obs]+robot_radius, fc='r', alpha=0.2, zorder=2.5))
+        label_obs = 'obs' if n_obs == 0 else None
+        label_robot = 'robot radius' if n_obs == 0 else None
+        ax1.add_patch(Circle(obs['position'][n_obs,:], obs['radius'][n_obs], fc='r', label=label_obs, zorder=2.5))
+        ax1.add_patch(Circle(obs['position'][n_obs,:], obs['radius'][n_obs]+robot_radius, fc='r', alpha=0.2, label=label_robot, zorder=2.5))
     ax1.set_xlabel('X [m]', fontsize=10)
     ax1.set_ylabel('Y [m]', fontsize=10)
     ax1.grid(True)

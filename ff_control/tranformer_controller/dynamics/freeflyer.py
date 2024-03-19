@@ -17,18 +17,26 @@ class FreeflyerModel:
     N_ACTION = ff.N_ACTION
     N_CLUSTERS = ff.N_CLUSTERS
 
-    def __init__(self, verbose=False):
+    def __init__(self, param=None, verbose=False):
         # Initialization
         self.verbose = verbose
-        self.param = {
-            'mass' : ff.mass,
-            'J' : ff.inertia,
-            'radius' : ff.robot_radius,
-            'F_t_M' : ff.F_max_per_thruster,
-            'b_t' : ff.thrusters_lever_arm,
-            'Lambda' : ff.Lambda,
-            'Lambda_inv' : ff.Lambda_inv
-        }
+        if param is None:
+            self.param = {
+                'mass' : ff.mass,
+                'J' : ff.inertia,
+                'radius' : ff.robot_radius,
+                'F_t_M' : ff.F_max_per_thruster,
+                'b_t' : ff.thrusters_lever_arm,
+                'Lambda' : ff.Lambda,
+                'Lambda_inv' : ff.Lambda_inv
+            }
+        else:
+            if ((ff.mass == param['mass']) and (ff.inertia == param['J']) and (ff.robot_radius == param['radius']) and (ff.F_max_per_thruster == param['F_t_M'])
+                and (ff.thrusters_lever_arm == param['b_t']) and (ff.Lambda == param['Lambda']).all() and (ff.Lambda_inv == param['Lambda_inv']).all()):
+                self.param = copy.deepcopy(param)
+            else:
+                raise ValueError('The scenario parameter specified in ROS and in ff_scenario.py are not the same!!')
+        
         if self.verbose:
             print("Initializing freeflyer class.")
 
