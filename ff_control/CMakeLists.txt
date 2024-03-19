@@ -74,6 +74,7 @@ install(PROGRAMS
   scripts/pd_ctrl_py_node
   scripts/safety_filter
   scripts/scp_pd_ctrl_py_node
+  scripts/tto_scp_pd_ctrl_py_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

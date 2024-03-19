@@ -1,6 +1,6 @@
 import os
 import sys
-root_folder = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+root_folder = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(root_folder)
 import numpy as np
 import copy
@@ -8,9 +8,9 @@ import copy
 import torch
 from transformers import DecisionTransformerConfig
 from accelerate import Accelerator
-from decision_transformer.art import AutonomousFreeflyerTransformer
-from dynamics.freeflyer import FreeflyerModel
-from optimization.ff_scenario import obs, safety_margin, robot_radius, T, dt
+from ff_control.transformer_controller.art import AutonomousFreeflyerTransformer
+from ff_control.transformer_controller.freeflyer import FreeflyerModel
+from ff_control.transformer_controller.ff_scenario import obs, safety_margin, robot_radius, T, dt
 import time
 # select device based on availability of GPU
 verbose = False # set to True to get additional print statements
@@ -22,7 +22,7 @@ print(device)
         
 '''
 
-def get_only_DT_model(model_name, n_state, n_action):
+def get_DT_model(model_name, n_state, n_action):
     # DT model creation
     config = DecisionTransformerConfig(
         state_dim=n_state, 
@@ -47,9 +47,12 @@ def get_only_DT_model(model_name, n_state, n_action):
     # DT optimizer and accelerator
     accelerator = Accelerator(mixed_precision='no', gradient_accumulation_steps=8)
     model = accelerator.prepare(model)
-    accelerator.load_state(root_folder + '/decision_transformer/saved_files/checkpoints/' + model_name)
+    accelerator.load_state(root_folder+'/saved_files/checkpoints/' + model_name)
 
     return model.eval()
+
+def get_data_stats():
+    return np.load(root_folder+'/saved_files/data_stats.npz', allow_pickle=True)['data_stats'].item()
 
 def state_init_final2sample(data_stats, state_init, state_final):
     n_time = data_stats['states_mean'].shape[0]
