@@ -41,6 +41,7 @@ from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from ff_srvs.srv import ObsInfo
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
 from std_msgs.msg import Float32
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import ReentrantCallbackGroup
@@ -87,6 +88,7 @@ class TransformerBasedSCPController(LinearController):
         self.TTO_model.eval()
         self.data_stats = TTO_manager.get_data_stats()
         self.get_logger().info('Transformer model '+self.TRANSFORMER_MODEL+' imported, LET\'S FLY!!!')
+        self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
 
         # Goal State command
         self.state_callback_group = ReentrantCallbackGroup()
@@ -97,6 +99,8 @@ class TransformerBasedSCPController(LinearController):
         
         self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+        self.path_pub = self.create_publisher(Path, '/robot/path_marker', 10)
+        self.ws_pub = self.create_publisher(Path, '/robot/ws_marker', 10)
 
         # Control loop
         # feedback gain params
@@ -240,11 +244,13 @@ class TransformerBasedSCPController(LinearController):
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
+        self.ws_pub.publish(self.traj2path(states_ws_DT))
         
         # Solve SCP
         scp_time0 = time.time()
         traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
         scp_runtime = time.time() - scp_time0
+        self.path_pub.publish(self.traj2path(traj_scp_DT['states']))
 
         total_time = self.get_parameter('total_time').get_parameter_value().double_value
         self.trajectory_timer.cancel()
@@ -262,6 +268,7 @@ class TransformerBasedSCPController(LinearController):
             }
             self._trajectory_ready = True
     
+    ############################## Main Loops for trajectory tracking ##############################
     def control_loop(self) -> None:
         # state not yet ready
         if not self.state_is_ready():
@@ -290,7 +297,7 @@ class TransformerBasedSCPController(LinearController):
             self.goal_repeater_pub.publish(self._state_desired)
             self._desired_trajectory['timestep'] += 1
 
-    ############################### Helper Functions to unpack FreeFlyerState ###############################
+    ############################### Helper Functions to pack/unpack messages ###############################
     @staticmethod
     def state2vec(state: FreeFlyerState) -> np.ndarray:
         """
@@ -327,6 +334,29 @@ class TransformerBasedSCPController(LinearController):
         state.twist.wz = vec[5]
 
         return state
+    
+    def traj2path(self, traj:np.ndarray) -> Path:
+        '''
+        traj is a 6x101 np.ndarray
+        '''
+        now = self.get_clock().now().to_msg()
+        path_msg = Path()
+        path_msg.header.stamp = now
+        path_msg.header.frame_id = 'world'
+        for i in range(traj.shape[1]):
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = now
+            pose_msg.header.frame_id = 'world'
+            pose_msg.pose.position.x = traj[0,i]
+            pose_msg.pose.position.y = traj[1,i]
+            pose_msg.pose.position.z = 0.1
+            pose_msg.pose.orientation.x = 0.0
+            pose_msg.pose.orientation.y = 0.0
+            pose_msg.pose.orientation.z = np.sin(traj[2,i]/2)
+            pose_msg.pose.orientation.w = np.cos(traj[2,i]/2)
+            path_msg.poses.append(pose_msg)
+
+        return path_msg
     
     ############################### Helper Functions to access ROS parameters ###############################
     @property

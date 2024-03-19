@@ -45,22 +45,18 @@ def generate_launch_description():
             IncludeLaunchDescription(
                 PathJoinSubstitution(
                     [
-                        FindPackageShare("ff_sim"),
-                        "launch",
-                        "single.launch.py",
-                    ]
-                ),
-                launch_arguments={"robot_name": robot_name}.items(),
-            ),
-            IncludeLaunchDescription(
-                PathJoinSubstitution(
-                    [
                         FindPackageShare("ff_viz"),
                         "launch",
                         "ff_viz.launch.py",
                     ]
                 ),
                 launch_arguments={"robot_name": robot_name}.items(),
+            ),
+            Node(
+                package="ff_sim",
+                executable=["obstacles_node"],
+                name="obstacles_node",
+                namespace=robot_name,
             ),
             Node(
                 package="ff_control",
@@ -80,6 +76,17 @@ def generate_launch_description():
                 executable="moving_avg_estimator_node",
                 name="moving_avg_estimator_node",
                 namespace=robot_name,
+                parameters=[
+                    {
+                        "pose_channel": PathJoinSubstitution(
+                            [
+                                "mocap",
+                                robot_name,
+                                "pose",
+                            ]
+                        ),
+                    }
+                ],
             ),
         ]
     )
