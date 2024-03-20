@@ -167,7 +167,7 @@ class FreeFlyerSimulator(Node):
             [
                 ("sim_dt", 0.001),  # update period in [s]
                 ("discretization", "Euler"),  # discretization scheme from {"Euler", "RungeKutta"}
-                ("x_0", [0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
+                ("x_0", [0.22, 2.14, 1.53, 0.0, 0.0, 0.0]),#[0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
                 ("B_sim_contacts", True),  # if True, simulates contacts
             ],
         )

@@ -26,7 +26,7 @@
 import copy
 import rclpy
 import sys
-sys.path.append('/home/dcelestini/Tranformer/lib/python3.10/site-packages')
+sys.path.append('/home/freeflyerhub/Transformer/lib/python3.10/site-packages')
 import numpy as np
 import cvxpy as cp
 import typing as T
@@ -232,6 +232,7 @@ class TransformerBasedSCPController(LinearController):
             'Lambda_inv' : self.Lambda_inv
         }
         ffm = FreeflyerModel(param=param)
+        self.get_logger().info('Radius robot: '+str(ffm.param['radius']))
         
         # Solve Convex Problem
         traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final)
