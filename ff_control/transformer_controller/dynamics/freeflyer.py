@@ -70,6 +70,12 @@ class FreeflyerModel:
         state_dot = self.A @ state + self.B @ actions_G
         return state_dot
     
+    def f_imp(self, state, action_G):
+        if len(action_G) != self.N_ACTION:
+            raise TypeError('Use the action of in the global reference frame to work with the impulsive dynamics!')
+        state_new = self.Ak @ (state + self.B_imp @ action_G)
+        return state_new
+    
     ################## OPTIMIZATION METHODS ###############
     def initial_guess_line(self, state_init, state_final):
         tt = np.arange(0,ff.T + ff.dt/2, ff.dt)

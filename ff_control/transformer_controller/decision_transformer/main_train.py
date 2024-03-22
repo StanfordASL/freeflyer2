@@ -104,7 +104,7 @@ accelerator.print({"loss/eval": eval_loss, "loss/state": loss_state, "loss/actio
 
 eval_steps = 500
 samples_per_step = accelerator.state.num_processes * train_loader.batch_size
-torch.manual_seed(4)
+#torch.manual_seed(4)
 
 model.train()
 completed_steps = 0
@@ -113,6 +113,7 @@ log = {
     'loss_state':[],
     'loss_action':[]
 }
+'''log = np.load(root_folder + '/decision_transformer/saved_files/checkpoints/' + model_name_4_saving + '/log.npz', allow_pickle=True)['log'].item()'''
 for epoch in range(num_train_epochs):
     for step, batch in enumerate(train_dataloader, start=0):
         with accelerator.accumulate(model):

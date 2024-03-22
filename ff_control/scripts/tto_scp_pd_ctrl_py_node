@@ -44,7 +44,7 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from std_msgs.msg import Float32
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.node import ReentrantCallbackGroup
+from rclpy.node import MutuallyExclusiveCallbackGroup
 
 class TransformerBasedSCPController(LinearController):
     """
@@ -91,7 +91,7 @@ class TransformerBasedSCPController(LinearController):
         self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
 
         # Goal State command
-        self.state_callback_group = ReentrantCallbackGroup()
+        self.state_callback_group = MutuallyExclusiveCallbackGroup()
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
             'ctrl/state', self.state_setpoint_callback, 10, callback_group=self.state_callback_group)
         self.rviz_sp_sub = self.create_subscription(PoseStamped,
@@ -104,7 +104,7 @@ class TransformerBasedSCPController(LinearController):
 
         # Control loop
         # feedback gain params
-        self.timer_callback_group = ReentrantCallbackGroup()
+        self.control_callback_group = MutuallyExclusiveCallbackGroup()
         self.declare_parameter('gain_f', 2.0)
         self.declare_parameter('gain_df', 10.0)
         self.declare_parameter('gain_t', 0.2)
@@ -113,8 +113,8 @@ class TransformerBasedSCPController(LinearController):
         self.n_timesteps = ff_scenario.S
         self._trajectory_ready = False
         self.control_period = 0.1
-        self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.timer_callback_group)
-        self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop, callback_group=self.timer_callback_group)
+        self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.control_callback_group)
+        self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop, callback_group=self.state_callback_group)
     
     '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
         """
@@ -245,13 +245,13 @@ class TransformerBasedSCPController(LinearController):
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
-        self.ws_pub.publish(self.traj2path(states_ws_DT))
+        self.ws_pub.publish(self.traj2path(states_ws_DT, height=0.08))
         
         # Solve SCP
         scp_time0 = time.time()
         traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
         scp_runtime = time.time() - scp_time0
-        self.path_pub.publish(self.traj2path(traj_scp_DT['states']))
+        self.path_pub.publish(self.traj2path(traj_scp_DT['states'], height=0.1))
 
         total_time = self.get_parameter('total_time').get_parameter_value().double_value
         self.trajectory_timer.cancel()
@@ -336,7 +336,7 @@ class TransformerBasedSCPController(LinearController):
 
         return state
     
-    def traj2path(self, traj:np.ndarray) -> Path:
+    def traj2path(self, traj:np.ndarray, height) -> Path:
         '''
         traj is a 6x101 np.ndarray
         '''
@@ -350,7 +350,7 @@ class TransformerBasedSCPController(LinearController):
             pose_msg.header.frame_id = 'world'
             pose_msg.pose.position.x = traj[0,i]
             pose_msg.pose.position.y = traj[1,i]
-            pose_msg.pose.position.z = 0.1
+            pose_msg.pose.position.z = height
             pose_msg.pose.orientation.x = 0.0
             pose_msg.pose.orientation.y = 0.0
             pose_msg.pose.orientation.z = np.sin(traj[2,i]/2)
