@@ -114,13 +114,11 @@ class TransformerBasedSCPClosedLoopController(LinearController):
         self.n_timesteps = ff_scenario.S
         self._trajectory_ready = False
         self.control_period = 0.1
-        self.n_replan = 1
         self.optimization_period = ff_scenario.T/(self.n_timesteps - 1)
         self.latest_state = None
         self.latest_dv = None
         self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.exclusive_callback_group)
-        #self.trajectory_timer = self.create_timer(self.optimization_period, self.trajectory_loop, callback_group=self.exclusive_callback_group)
-        self.mpc_timer = self.create_timer(self.optimization_period*self.n_replan, self.mpc_loop, callback_group=self.exclusive_callback_group_rviz_trajectory_loop)
+        self.mpc_timer = self.create_timer(self.optimization_period, self.mpc_loop, callback_group=self.exclusive_callback_group_rviz_trajectory_loop)
     
     '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
         """
@@ -299,7 +297,6 @@ class TransformerBasedSCPClosedLoopController(LinearController):
             self.send_control(self._state_desired.state, K)
             
         else:
-            self.get_logger().info('NOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO')
             state_des = self.state2vec(self._state_desired.state)
             state_vector = self.state2vec(self.get_state())
             state_delta = state_des - state_vector
@@ -317,32 +314,38 @@ class TransformerBasedSCPClosedLoopController(LinearController):
 
     def mpc_loop(self) -> None:
         # If no trajectory has been computed yet, do nothing, else change periodically the _state_desired
-        if (self._trajectory_ready) and (self._desired_trajectory['timestep'] < self.n_timesteps-1):
-            self.get_logger().error('Current timesteps: ' + str(self._desired_trajectory['timestep']))
-            current_obs_art = self.get_observation()
-            tic = time.time()
-            ART_traj = self.aft_cl.warmstart(current_obs_art, self._desired_trajectory['timestep'], rtg0=self.rtg0, ctg0=0)
-            ARTMPC_traj, ARTMPC_scp_dict = self.aft_cl.solve_scp(current_obs_art, self._desired_trajectory['timestep'], ART_traj['state'], ART_traj['dv'])
-            time_elapsed = time.time() - tic
+        if (self._trajectory_ready):
+            if (self._desired_trajectory['timestep'] < self.n_timesteps-1):
+                self.get_logger().error('Current timesteps: ' + str(self._desired_trajectory['timestep']))
+                current_obs_art = self.get_observation()
+                tic = time.time()
+                ART_traj = self.aft_cl.warmstart(current_obs_art, self._desired_trajectory['timestep'], rtg0=self.rtg0, ctg0=0)
+                ARTMPC_traj, ARTMPC_scp_dict = self.aft_cl.solve_scp(current_obs_art, self._desired_trajectory['timestep'], ART_traj['state'], ART_traj['dv'])
+                time_elapsed = time.time() - tic
 
-            self.get_logger().error('Current computational time: ' + str(time_elapsed))
-            self.ws_pub.publish(self.traj2path(ART_traj['state'].astype(float), height=0.08))
-            self.path_pub.publish(self.traj2path(ARTMPC_traj['state'], height=0.1))
+                self.get_logger().error('Current computational time: ' + str(time_elapsed))
+                self.ws_pub.publish(self.traj2path(ART_traj['state'].astype(float), height=0.08))
+                self.path_pub.publish(self.traj2path(ARTMPC_traj['state'], height=0.1))
 
-            latest_state = ARTMPC_traj['state'][:,2] if (self._desired_trajectory['timestep'] < (self.n_timesteps-3)) else ARTMPC_traj['state'][:,-1] + self.ffm.B_imp @ ARTMPC_traj['dv'][:,-1]
-            self._desired_trajectory['state'] = np.hstack((self._desired_trajectory['state'], latest_state[:,None]))  ###########Append 2 stati al posto che 1 ed incrementa il timestep di 2
-            self.past_pub.publish(self.traj2path(self._desired_trajectory['state'], height=0.1))
-            self.latest_dv = ARTMPC_traj['dv'][:,0]
+                latest_state = ARTMPC_traj['state'][:,1] if (self._desired_trajectory['timestep'] < (self.n_timesteps-2)) else ARTMPC_traj['state'][:,-1] + self.ffm.B_imp @ ARTMPC_traj['dv'][:,-1]
+                self._desired_trajectory['state'] = np.hstack((self._desired_trajectory['state'], latest_state[:,None]))  ###########Append 2 stati al posto che 1 ed incrementa il timestep di 2
+                self.past_pub.publish(self.traj2path(self._desired_trajectory['state'], height=0.1))
+                self.latest_dv = ARTMPC_traj['dv'][:,0]
 
-            self.latest_state = latest_state
-            current_state_desired = FreeFlyerStateStamped()
-            current_state_desired.header.stamp = self.get_clock().now().to_msg()
-            current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['state'][:,self._desired_trajectory['timestep']]))
-            self._state_desired = copy.deepcopy(current_state_desired)
-            self.goal_repeater_pub.publish(self._state_desired)
-            self._desired_trajectory['timestep'] += 1
-        else:
-            self._trajectory_ready = False
+                self.latest_state = latest_state
+                current_state_desired = FreeFlyerStateStamped()
+                current_state_desired.header.stamp = self.get_clock().now().to_msg()
+                current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['state'][:,self._desired_trajectory['timestep']]))
+                self._state_desired = copy.deepcopy(current_state_desired)
+                self.goal_repeater_pub.publish(self._state_desired)
+                self._desired_trajectory['timestep'] += 1
+            else:
+                current_state_desired = FreeFlyerStateStamped()
+                current_state_desired.header.stamp = self.get_clock().now().to_msg()
+                current_state_desired.state = self.vec2state(self.state_final)
+                self._state_desired = copy.deepcopy(current_state_desired)
+                self.goal_repeater_pub.publish(self._state_desired)
+                self._trajectory_ready = False
     
     def trajectory_loop(self) -> None:
         if (self._trajectory_ready) and (self._desired_trajectory['state'].shape[1] > 0):
