@@ -44,7 +44,7 @@ goal_region = {
 }
 
 # Obstacle
-T = 40.0 # max final time horizon in sec
+T = 40.0#80.0 # max final time horizon in sec
 dt = T / n_time_rpod
 obs = {
     'position' : np.array([[1.0,  0.7],

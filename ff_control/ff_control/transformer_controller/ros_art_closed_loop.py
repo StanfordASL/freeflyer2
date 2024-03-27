@@ -10,7 +10,7 @@ import torch
 import cvxpy as cp
 import time
 import ff_control.transformer_controller.ros_manage as TTO_manager
-from ff_control.transformer_controller.freeflyer import FreeflyerModel
+from ff_control.transformer_controller.freeflyer import FreeflyerModel, check_koz_constraint
 import ff_control.transformer_controller.ff_scenario as ff
 import copy
 
@@ -536,7 +536,7 @@ class ROSAutonomousFreeflyerTransformerMPC():
         return s_opt, a_opt, J, prob.status
 
 
-class ConvexMPC():
+class ROSConvexMPC():
     '''
     Class to perform trajectory optimization in a closed-loop MPC fashion. The non-linear trajectory optimization problem is solved as an SCP problem
     warm-started using a convexified version of the true problem.
@@ -599,7 +599,7 @@ class ConvexMPC():
         trust_region = self.trust_region0
         beta_SCP = (self.trust_regionf/self.trust_region0)**(1/self.iter_max_SCP)
         runtime0_cvx = time.time()
-        for scp_iter in range(self.iter_max_SCP):
+        '''for scp_iter in range(self.iter_max_SCP):
             # Solve OCP (safe)
             try:
                 states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, ffm, trust_region, self.scp_mode, obs_av=False)
@@ -625,10 +625,13 @@ class ConvexMPC():
             else:
                 print(feas)
                 print('unfeasible scp') 
-                break
+                break'''
         runtime1_cvx = time.time()
         runtime_cvx = runtime1_cvx - runtime0_cvx
         # Keep only the next self.n_steps for the output
+        states = states_ref
+        actions = actions_ref
+        feas = 'optimal'
         CVX_trajectory = {
             'state' : (states.T)[:,:(t_cut - t_i)],
             'dv' : (actions.T)[:,:(t_cut - t_i)],
@@ -670,7 +673,7 @@ class ConvexMPC():
 
         # Makse sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
         states_ref = states_ref.T
-        state_end_ref = states_ref[-1,:]
+        state_end_ref = current_goal#states_ref[-1,:]#
         actions_ref = actions_ref.T
         J_vect = np.ones(shape=(self.iter_max_SCP,), dtype=float)*1e12
         
@@ -732,7 +735,10 @@ class ConvexMPC():
         n_time = state_ref.shape[1]
         obs = copy.deepcopy(ff.obs)
         obs['radius'] = (obs['radius'] + ff.robot_radius)*ff.safety_margin
-
+        '''dist0 = np.linalg.norm((state_ref.T)[None,:1,:2] - obs['positions'][:,None,:], axis=2) - obs['radius'][:,None]
+        if (dist0 <= 0).any():
+            obs['radius'] = obs['radius']/ff.safety_margin'''
+        
         s = cp.Variable((6, n_time))
         a = cp.Variable((3, n_time))
 
@@ -765,10 +771,10 @@ class ConvexMPC():
                 constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
             
             # Cost function
-            rho = 1.
+            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
             cost = cp.sum(cp.norm(a, 1, axis=0))
             if t_f < ff.n_time_rpod:
-                cost = cost + rho*cp.norm(s[:,-1] - state_end_ref, 2)
+                cost = cost + cp.norm(cp.multiply(rho,s[:,-1] - state_end_ref), 2)
 
         else:
             # CONSTRAINTS
@@ -796,7 +802,7 @@ class ConvexMPC():
                 constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
             
             # Compute Cost
-            rho = 1.
+            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
             cost = cp.sum(cp.norm(a, 1, axis=0))
             # Goal reaching penalizing term: if the end of the maneuver is already in the planning horizon aim for the goal
             if t_f == ff.n_time_rpod:
@@ -804,7 +810,7 @@ class ConvexMPC():
             
             # Otherwise follow the warmstarting reference
             else:
-                cost = cost + rho*cp.norm(s[:,-1] - state_end_ref, 2)
+                cost = cost + cp.norm(cp.multiply(rho,s[:,-1] - state_end_ref), 2)
         
         prob = cp.Problem(cp.Minimize(cost), constraints)
         

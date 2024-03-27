@@ -1,0 +1,466 @@
+#!/usr/bin/env python3
+
+# MIT License
+#
+# Copyright (c) 2023 Stanford Autonomous Systems Lab
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+import copy
+import rclpy
+import sys
+sys.path.append('/home/dcelestini/Tranformer/lib/python3.10/site-packages')
+import numpy as np
+import cvxpy as cp
+import typing as T
+import time
+
+from ff_control.tri_thruster_ctrl import TrinaryThrusterController
+from ff_control.linear_ctrl import LinearController
+from ff_control.transformer_controller.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance
+import ff_control.transformer_controller.ff_scenario as ff_scenario
+from ff_control.transformer_controller.ros_art_closed_loop import ROSConvexMPC
+from ff_msgs.msg import FreeFlyerState, FreeFlyerStateStamped, Wrench2D
+from ff_srvs.srv import ObsInfo
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+from std_msgs.msg import Float32
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
+
+class TransformerBasedSCPClosedLoopController(LinearController):
+    """
+    Class for a Transformer-cvxpi based optimization controller (based on linear_ctrl.py.
+
+    state definition:   [x, y, theta, vx, vy, wz]
+    control definition: [u0, u1, u2, u3] Trinary (-1, 0, 1) thruster representation of 8-thruster config
+
+    Note: the current implementation is not thread safe
+    """
+    STATE_DIM = 6
+    CONTROL_DIM = 3
+    TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg_art_cl_4'
+    TRANSFORMER_WS = 'dyn'
+
+    def __init__(self):
+        super().__init__('thrust_opt_control_node')
+        # State estimator
+        '''self.declare_parameter("state_channel", "est/state")
+        self._state_sub = self.create_subscription(
+            FreeFlyerStateStamped,
+            self.get_parameter("state_channel").get_parameter_value().string_value,
+            self._state_callback,
+            10,
+        )'''
+        self._state_ready = False
+        self._state_stamped = FreeFlyerStateStamped()
+        self._state_desired = FreeFlyerStateStamped()
+        self._params_ready = False
+        #self._deadband = np.array([0.05, 0.05, 0.05, 0.02, 0.02, 0.02])
+        #self._readjust_controller_bounds = np.array([0.5, 0.5])
+
+        # Obstale info service client
+        self.obs_info_cli = self.create_client(ObsInfo, 'obstacles_info')
+        while not self.obs_info_cli.wait_for_service(timeout_sec=1.):
+            self.get_logger().info('obstales_info server not available yet, waiting...')
+        self.get_obs_info_request()
+
+        # Goal State command
+        self.exclusive_callback_group_rviz_trajectory_loop = MutuallyExclusiveCallbackGroup()
+        self.exclusive_callback_group = MutuallyExclusiveCallbackGroup()
+        self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
+            'ctrl/state', self.state_setpoint_callback, 10, callback_group=self.exclusive_callback_group_rviz_trajectory_loop)
+        self.rviz_sp_sub = self.create_subscription(PoseStamped,
+            '/goal_pose', self.rviz_setpoint_callback, 10, callback_group=self.exclusive_callback_group_rviz_trajectory_loop)
+        
+        self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
+        self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
+        self.path_pub = self.create_publisher(Path, '/robot/path_marker', 10)
+        self.ws_pub = self.create_publisher(Path, '/robot/ws_marker', 10)
+        self.past_pub = self.create_publisher(Path, '/robot/past_marker', 10)
+
+        # Control loop
+        # feedback gain params
+        self.declare_parameter('gain_f', 2.0)
+        self.declare_parameter('gain_df', 10.0)
+        self.declare_parameter('gain_t', 0.2)
+        self.declare_parameter('gain_dt', 0.4)
+        self.declare_parameter('total_time', ff_scenario.T)
+        self.n_timesteps = ff_scenario.S
+        self._trajectory_ready = False
+        self.control_period = 0.1
+        self.optimization_period = ff_scenario.T/(self.n_timesteps - 1)
+        self.latest_state = None
+        self.latest_dv = None
+        self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.exclusive_callback_group)
+        self.mpc_timer = self.create_timer(self.optimization_period, self.mpc_loop, callback_group=self.exclusive_callback_group_rviz_trajectory_loop)
+    
+    '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
+        """
+        Send desirable target state for optimization-based control.
+
+        :param state_des: desired state
+        """
+        t = time.time()
+        # self.get_logger().info("Goal"+str(state_des) + "\n")
+        if not self._state_ready:
+            self.get_logger().warn("send_control ignored, current state not yet ready")
+            return
+
+        if not self._params_ready:
+            self.get_logger().warn("send_control ignored, parameters not yet ready")
+            return
+
+        self.goal_repeater_pub.publish(self._state_desired)
+
+        # convert desired state to vector form
+        if isinstance(state_des, FreeFlyerState):
+            state_des = self.state2vec(state_des)
+
+        if isinstance(curr_state, FreeFlyerState):
+            curr_state = self.state2vec(curr_state)
+
+        if np.all(np.abs(state_des - curr_state) < self._deadband):
+            self._u = np.zeros(4)
+        else:
+            if not self._close_controller:
+                pos_err = np.abs(state_des[:2] - curr_state[:2])
+                # state_err_vec = np.abs(np.append(pos_err, th_err))
+                if np.all(pos_err < self._readjust_controller_bounds):
+                    self.set_close_hyperparameters()
+            else:
+                pos_err = np.abs(state_des[:2] - curr_state[:2])
+                # state_err_vec = np.abs(np.append(pos_err, th_err))
+                if np.any(pos_err > self._readjust_controller_bounds):
+                    self.set_default_hyperparameters()
+
+
+            self.lbw[:len(curr_state)] = curr_state
+            self.ubw[:len(curr_state)] = curr_state
+            self.w0[0] = curr_state
+            
+            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
+            output = sol['x']
+            
+            cost = Float32()
+            cost.data = float(sol['f'])
+            self.opt_cost_pub.publish(cost)   
+
+            u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
+            cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
+            self._u = np.round(cont_thrust)
+
+            # Warm Start next run
+            self.w0 = self.get_next_warm_start(output)
+
+        self.set_tri_thrusters(self._u)
+        self.get_logger().info("Control Computation Time: " + str(time.time()-t))'''
+    
+    def get_obs_info_request(self):
+        future = self.obs_info_cli.call_async(ObsInfo.Request())
+        rclpy.spin_until_future_complete(self, future)
+        obs_info = future.result()
+        self.obstacles = {
+            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))),
+            'radius' : np.array(obs_info.cyl_rads)
+        }
+        if (self.obstacles['position'] == ff_scenario.obs['position'].T).all() and (self.obstacles['radius'] == ff_scenario.obs['radius']).all():
+            self.get_logger().info(str(self.obstacles))
+        else:
+            raise ValueError('The obstacles specified for the ROS simulation and in ff_scenario.py don\'t match!!!')
+
+    def get_state(self) -> T.Optional[FreeFlyerState]:
+        """Get the current latest state."""
+        if not self._state_ready:
+            self.get_logger().error("get_state failed: state not yet ready")
+            return None
+
+        return self._state_stamped.state
+
+    def get_observation(self) -> dict:
+        observation = {
+            'goal' : self.state_final.copy(),
+            'dv' : self.latest_dv,
+            'state' : self.state2vec(self.get_state())#self.latest_state if (self._desired_trajectory['timestep'] > 0) else self.state2vec(self.get_state())
+        }
+        return observation
+
+    def state_ready_callback(self) -> None:
+        # copy current position as goal position
+        self._state_desired.header.stamp = self.get_clock().now().to_msg()
+        self._state_desired.state = self.get_state()
+
+    def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
+        self._state_desired = copy.deepcopy(msg)
+
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
+        # Goal pose computation
+        state_desired = FreeFlyerStateStamped()
+        state_desired.header.stamp = msg.header.stamp
+        state_desired.state.pose.x = msg.pose.position.x
+        state_desired.state.pose.y = msg.pose.position.y
+        z = msg.pose.orientation.z
+        w = msg.pose.orientation.w
+        state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+        state_desired.state.twist.vx = 0.
+        state_desired.state.twist.vy = 0.
+        state_desired.state.twist.wz = 0.
+        state_init = self.state2vec(self.get_state())
+        self.state_final = self.state2vec(state_desired.state)
+
+        # Create Freeflyer model
+        param = {
+            'mass' : self.m,
+            'J' : self.Ixx,
+            'radius' : self.radius,
+            'F_t_M' : self.Fmax,
+            'b_t' : self.r,
+            'Lambda' : self.Lambda,
+            'Lambda_inv' : self.Lambda_inv
+        }
+        self.ffm = FreeflyerModel(param=param)
+        self.cvx_cl = ROSConvexMPC(10, scp_mode='soft')
+        self.get_logger().info('Radius robot: '+str(self.ffm.param['radius']))
+        
+        # Solve Convex Problem
+        traj_cvx, _, _, feas_cvx = ocp_no_obstacle_avoidance(self.ffm, state_init, self.state_final)
+        actions_ws_cvx = traj_cvx['actions_G']
+
+        '''DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
+                                 (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
+        actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
+        self.ws_pub.publish(self.traj2path(states_ws_DT))
+        
+        # Solve SCP
+        scp_time0 = time.time()
+        traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
+        scp_runtime = time.time() - scp_time0
+        self.path_pub.publish(self.traj2path(traj_scp_DT['states']))
+
+        self.get_logger().info('============== SCP iterations: '+str(iter_scp_DT))
+        self.get_logger().info('============== SCP status: '+str(feas_scp_DT))
+        self.get_logger().info('============== TTO computational time: '+str(DT_runtime)+' s')
+        self.get_logger().info('============== SCP computational time: '+str(scp_runtime)+' s')'''
+        if feas_cvx == 'infeasible':
+            self.get_logger().error("RELAXED PROBLEM failed in computing an optimal path! No action will be executed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        else:
+            # Use Transformer to infer the warm-starting trajectory
+            self.rtg0 = - np.sum(np.linalg.norm(actions_ws_cvx, ord=1, axis=0))
+            self._desired_trajectory = {
+                'timestep' : 0,
+                'state' : np.zeros((self.STATE_DIM, 0))
+            }
+            self._trajectory_ready = True
+    
+    ############################## Main Loops for trajectory tracking ##############################
+    def control_loop(self) -> None:
+        # state not yet ready
+        if not self.state_is_ready():
+            self.get_logger().error("control_loop not started: state not yet ready")
+            return
+
+        # build feedback gain matrix
+        gain_f = self.get_parameter('gain_f').get_parameter_value().double_value
+        gain_df = self.get_parameter('gain_df').get_parameter_value().double_value
+        gain_t = self.get_parameter('gain_t').get_parameter_value().double_value
+        gain_dt = self.get_parameter('gain_dt').get_parameter_value().double_value
+        K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+                    [0, gain_f, 0, 0, gain_df, 0],
+                    [0, 0, gain_t, 0, 0, gain_dt]])
+        if (not self._trajectory_ready) or (self.latest_dv is None):# or (1==1):
+            self.send_control(self._state_desired.state, K)
+            
+        else:
+            state_des = self.state2vec(self._state_desired.state)
+            state_vector = self.state2vec(self.get_state())
+            state_delta = state_des - state_vector
+            # wrap angle delta to [-pi, pi]
+            state_delta[2] = (state_delta[2] + np.pi) % (2 * np.pi) - np.pi
+
+            u = 0*np.sign(K @ state_delta) * np.array([self.Fmax*2, self.Fmax*2, self.Fmax*4*self.r])
+            dvs = copy.deepcopy(self.latest_dv)
+
+            wrench_world = Wrench2D()
+            wrench_world.fx = u[0] + dvs[0]*self.m/self.optimization_period
+            wrench_world.fy = u[1] + dvs[1]*self.m/self.optimization_period
+            wrench_world.tz = u[2] + dvs[2]*self.Ixx/self.optimization_period
+            self.set_world_wrench(wrench_world, state_vector[2])
+
+    def mpc_loop(self) -> None:
+        # If no trajectory has been computed yet, do nothing, else change periodically the _state_desired
+        if (self._trajectory_ready):
+            if (self._desired_trajectory['timestep'] < self.n_timesteps-1):
+                self.get_logger().error('Current timesteps: ' + str(self._desired_trajectory['timestep']))
+                current_obs_art = self.get_observation()
+                tic = time.time()
+                CVX_traj = self.cvx_cl.warmstart(current_obs_art, self._desired_trajectory['timestep'])
+                CVXMPC_traj, CVXMPC_scp_dict = self.cvx_cl.solve_scp(current_obs_art, self._desired_trajectory['timestep'], CVX_traj['state'], CVX_traj['dv'])
+                time_elapsed = time.time() - tic
+                self.get_logger().error('Current observation: ' + str(current_obs_art['goal']))
+                self.get_logger().error('Current computational time: ' + str(time_elapsed))
+                self.ws_pub.publish(self.traj2path(CVX_traj['state'].astype(float), height=0.08))
+                self.path_pub.publish(self.traj2path(CVXMPC_traj['state'], height=0.1))
+
+                latest_state = CVXMPC_traj['state'][:,1] if (self._desired_trajectory['timestep'] < (self.n_timesteps-2)) else CVXMPC_traj['state'][:,-1] + self.ffm.B_imp @ CVXMPC_traj['dv'][:,-1]
+                self._desired_trajectory['state'] = np.hstack((self._desired_trajectory['state'], latest_state[:,None]))  ###########Append 2 stati al posto che 1 ed incrementa il timestep di 2
+                self.past_pub.publish(self.traj2path(self._desired_trajectory['state'], height=0.1))
+                self.latest_dv = CVXMPC_traj['dv'][:,0]
+
+                self.latest_state = latest_state
+                current_state_desired = FreeFlyerStateStamped()
+                current_state_desired.header.stamp = self.get_clock().now().to_msg()
+                current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['state'][:,self._desired_trajectory['timestep']]))
+                self._state_desired = copy.deepcopy(current_state_desired)
+                self.goal_repeater_pub.publish(self._state_desired)
+                self._desired_trajectory['timestep'] += 1
+            else:
+                current_state_desired = FreeFlyerStateStamped()
+                current_state_desired.header.stamp = self.get_clock().now().to_msg()
+                current_state_desired.state = self.vec2state(self.state_final)
+                self._state_desired = copy.deepcopy(current_state_desired)
+                self.goal_repeater_pub.publish(self._state_desired)
+                self._trajectory_ready = False
+
+    ############################### Helper Functions to pack/unpack messages ###############################
+    @staticmethod
+    def state2vec(state: FreeFlyerState) -> np.ndarray:
+        """
+        Convert state message to state vector.
+
+        :param state: state message
+        :return: state vector
+        """
+        return np.array(
+            [
+                state.pose.x,
+                state.pose.y,
+                state.pose.theta,
+                state.twist.vx,
+                state.twist.vy,
+                state.twist.wz,
+            ]
+        )
+
+    @staticmethod
+    def vec2state(vec: np.ndarray) -> FreeFlyerState:
+        """
+        Convert state vector to state message.
+
+        :param vec: state vector
+        :return: state message
+        """
+        state = FreeFlyerState()
+        state.pose.x = vec[0]
+        state.pose.y = vec[1]
+        state.pose.theta = vec[2]
+        state.twist.vx = vec[3]
+        state.twist.vy = vec[4]
+        state.twist.wz = vec[5]
+
+        return state
+    
+    def traj2path(self, traj:np.ndarray, height) -> Path:
+        '''
+        traj is a 6x101 np.ndarray
+        '''
+        now = self.get_clock().now().to_msg()
+        path_msg = Path()
+        path_msg.header.stamp = now
+        path_msg.header.frame_id = 'world'
+        for i in range(traj.shape[1]):
+            pose_msg = PoseStamped()
+            pose_msg.header.stamp = now
+            pose_msg.header.frame_id = 'world'
+            pose_msg.pose.position.x = traj[0,i]
+            pose_msg.pose.position.y = traj[1,i]
+            pose_msg.pose.position.z = height
+            pose_msg.pose.orientation.x = 0.0
+            pose_msg.pose.orientation.y = 0.0
+            pose_msg.pose.orientation.z = np.sin(traj[2,i]/2)
+            pose_msg.pose.orientation.w = np.cos(traj[2,i]/2)
+            path_msg.poses.append(pose_msg)
+
+        return path_msg
+    
+    ############################### Helper Functions to access ROS parameters ###############################
+    @property
+    def r(self):
+        return self.p.actuators["thrusters_lever_arm"]
+
+    @property
+    def Lambda(self):
+        return np.array([[     0,       1,       0,      1],
+                         [     1,       0,       1,      0],
+                         [self.r, -self.r, -self.r, self.r]])
+
+    @property
+    def Lambda_inv(self):
+        return np.array([[  0, 0.5,  1/(4*self.r)],
+                         [0.5,   0, -1/(4*self.r)],
+                         [  0, 0.5, -1/(4*self.r)],
+                         [0.5,   0,  1/(4*self.r)]])
+
+    @property
+    def radius(self):
+        return self.p.dynamics["radius"]
+    
+    @property
+    def Fmax(self):
+        return self.p.actuators["F_max_per_thruster"]
+
+    @property
+    def m(self):
+        return self.p.dynamics["mass"]
+    
+    @property
+    def Ixx(self):
+        return self.p.dynamics["inertia"]
+    
+    def state_is_ready(self) -> bool:
+        """
+        Check if state is ready.
+
+        :return: True if state is ready, False otherwise
+        """
+        return self._state_ready
+
+    def _state_callback(self, msg: FreeFlyerStateStamped) -> None:
+        """
+        Get called when the first current state measurement comes in.
+        """
+        self._state_stamped = copy.deepcopy(msg)
+
+        if not self._state_ready:
+            self._state_ready = True
+            self.state_ready_callback()
+
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    opt_ctrl = TransformerBasedSCPClosedLoopController()
+    MTexec = MultiThreadedExecutor()
+    rclpy.spin(opt_ctrl, executor=MTexec)
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
