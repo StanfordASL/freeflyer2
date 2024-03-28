@@ -61,6 +61,16 @@ obs = {
 n_obs = obs['position'].shape[0]
 safety_margin = 1.1
 
+# PID Controller
+control_period = 0.1
+gain_f = 2.0*0
+gain_df = 10.0*2
+gain_t = 0.2*0
+gain_dt = 0.4*2
+K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+              [0, gain_f, 0, 0, gain_df, 0],
+              [0, 0, gain_t, 0, 0, gain_dt]])
+
 # Optimization interface
 iter_max_SCP = 20
 trust_region0 = 10.

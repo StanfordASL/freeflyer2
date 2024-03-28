@@ -76,6 +76,21 @@ class FreeflyerModel:
         state_new = self.Ak @ (state + self.B_imp @ action_G)
         return state_new
     
+    def f_PID(self, state, state_desired):
+        control_step_x_opt_step = int(np.round(ff.dt/ff.control_period))
+        states = np.zeros((self.N_STATE, control_step_x_opt_step+1))
+        states[:,0] = state.copy()
+        for i in range(control_step_x_opt_step):
+            state_delta = state_desired - states[:,i]
+            # wrap angle delta to [-pi, pi]
+            state_delta[2] = (state_delta[2] + np.pi) % (2 * np.pi) - np.pi
+
+            u = np.minimum(np.maximum(self.param['Lambda_inv'] @ (self.R_BG(states[2,i]) @ (ff.K @ state_delta)), -self.param['F_t_M']), self.param['F_t_M'])
+            #u = self.param['F_t_M']*np.sign(self.param['Lambda_inv'] @ (self.R_BG(states[2,i]) @ (ff.K @ state_delta)))
+            states[:,i+1] = states[:,i] + (self.A @ states[:,i] + self.B @ (self.R_GB(states[2,i]) @ (self.param['Lambda'] @ u)))*ff.control_period
+        
+        return states[:,-1].copy()
+    
     ################## OPTIMIZATION METHODS ###############
     def initial_guess_line(self, state_init, state_final):
         tt = np.arange(0,ff.T + ff.dt/2, ff.dt)

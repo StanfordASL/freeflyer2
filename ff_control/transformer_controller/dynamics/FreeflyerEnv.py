@@ -16,11 +16,12 @@ from dynamics.freeflyer import FreeflyerModel, sample_init_target
 class FreeflyerEnv():
 
     ########## CONSTRUCTOR ##########
-    def __init__(self):    
+    def __init__(self, PID=False):    
         
         # Import the correct RPOD from the catalogue
         self.__get_ff_scenario()
-
+        self.PID = PID
+ 
         # Initialize history vectors
         self.__initialize_history()
 
@@ -103,12 +104,13 @@ class FreeflyerEnv():
         self.pred_history = []
 
     ########## PROPAGATION METHODS ##########
-    def step(self, action, goal=None):
+    def step(self, action=None, goal=None, state_desired=None):
         '''
         Function to compute one step forward in the environment and return the corresponding observation and reward.
         Inputs:
             - actions: np.array with shape (3,) containing the action to execute at the current timestep
             - goal : np.array with shape (6,) containing the current goal (if None -> maintain the current)
+            - state_desired : step used for the feedback control term
         '''
 
         # Check that the current timestep
@@ -129,7 +131,10 @@ class FreeflyerEnv():
                 self.__load_goal(goal)
 
             # Propagate the dynamics
-            self.__propagate_dynamics()
+            if self.PID:
+                self.__propagate_dynamics_with_PID(state_desired)
+            else:
+                self.__propagate_dynamics()
            
             # Get the reward and load it into the history vector
             current_reward = self.__get_reward()
@@ -164,6 +169,27 @@ class FreeflyerEnv():
             
             # Propagate the quadrotor state
             new_state = self.ff_model.f_imp(self.state[:, -1], self.dv[:, -1])
+            
+            # Update
+            self.__load_state(new_state)
+        
+        else:
+            raise RuntimeError('Trying to propagate dyanmics with state at time index', time_state, ', action at time index', time_action, 'and time at time index', time_step)
+    
+    def __propagate_dynamics_with_PID(self, state_desired):
+        '''
+        Function that computes the propagation of the dynamics associated to the freeflyers environment for the timestep required. If the timestep is the last one, the final position of the maneuver is computed.
+        Dynamics are propagated using a PID controller for trajectory tracking.
+        '''
+        # Check the correct length of the timeseries
+        time_step = self.time.shape[0]
+        time_state = self.state.shape[1]
+        time_action = self.dv.shape[1]
+
+        if (time_state == time_action) and (time_state == time_step):
+            
+            # Propagate the quadrotor state
+            new_state = self.ff_model.f_PID(self.state[:, -1], state_desired)
             
             # Update
             self.__load_state(new_state)
