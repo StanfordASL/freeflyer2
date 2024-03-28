@@ -10,7 +10,7 @@ import torch
 import cvxpy as cp
 import time
 import ff_control.transformer_controller.ros_manage as TTO_manager
-from ff_control.transformer_controller.freeflyer import FreeflyerModel
+from ff_control.transformer_controller.freeflyer import FreeflyerModel, check_koz_constraint
 import ff_control.transformer_controller.ff_scenario as ff
 import copy
 
@@ -467,7 +467,7 @@ class ROSAutonomousFreeflyerTransformerMPC():
                 b_soc_k = -state_ref[:,k]
                 constraints += [cp.SOC(trust_region, s[:,k] + b_soc_k)]
                 # keep-out-zone
-                if k > 0:
+                if k > 5:
                     for n_obs in range(len(obs['radius'])):
                         c_koz_k = np.transpose(state_ref[:2,k] - obs['position'][n_obs,:]).dot(np.eye(2)/((obs['radius'][n_obs])**2))
                         b_koz_k = np.sqrt(c_koz_k.dot(state_ref[:2,k] - obs['position'][n_obs,:]))
@@ -498,7 +498,7 @@ class ROSAutonomousFreeflyerTransformerMPC():
                 b_soc_k = -state_ref[:,k]
                 constraints += [cp.SOC(trust_region, s[:,k] + b_soc_k)]
                 # keep-out-zone
-                if k > 0:
+                if k > 5:
                     for n_obs in range(len(obs['radius'])):
                         c_koz_k = np.transpose(state_ref[:2,k] - obs['position'][n_obs,:]).dot(np.eye(2)/((obs['radius'][n_obs])**2))
                         b_koz_k = np.sqrt(c_koz_k.dot(state_ref[:2,k] - obs['position'][n_obs,:]))
@@ -523,6 +523,300 @@ class ROSAutonomousFreeflyerTransformerMPC():
         prob = cp.Problem(cp.Minimize(cost), constraints)
 
         prob.solve(solver=cp.ECOS, verbose=False)
+        if prob.status == 'infeasible':
+            print("[solve]: Problem infeasible.")
+            s_opt = None
+            a_opt = None
+            J = None
+        else:
+            s_opt = s.value.T
+            a_opt = a.value.T
+            J = prob.value
+
+        return s_opt, a_opt, J, prob.status
+
+
+class ROSConvexMPC():
+    '''
+    Class to perform trajectory optimization in a closed-loop MPC fashion. The non-linear trajectory optimization problem is solved as an SCP problem
+    warm-started using a convexified version of the true problem.
+
+    Inputs:
+        - n_steps : the number of steps used for the horizon of the MPC
+        - scp_mode : ('hard'/'soft') string to select whether to consider the waypoint constraints as hard or soft in the scp.
+    
+    Public methods:
+        - warmstart : compute the warm-start for the trajectory over the planning horizon using the convexified version of the problem;
+        - solve_scp : uses the SCP to optimize the trajectory over the planning horizon starting from the warm-starting trajectory.
+    '''
+    # Problem dimensions
+    N_STATE = ff.N_STATE
+    N_ACTION = ff.N_ACTION
+    # SCP data
+    iter_max_SCP = ff.iter_max_SCP # [-]
+    trust_region0 = ff.trust_region0 # [m]
+    trust_regionf = ff.trust_regionf # [m]
+    J_tol = ff.J_tol # [N]
+
+    ########## CONSTRUCTOR ##########
+    def __init__(self, n_steps, scp_mode='hard'):
+
+        # Save the number of steps to use for MPC
+        self.n_steps = n_steps
+        self.scp_mode = scp_mode
+    
+    ########## CLOSED-LOOP METHODS ##########
+    def warmstart(self, current_obs, timestep):
+        '''
+        Function to use the covexified optimization problem to predict the trajectory for the next self.n_steps, starting from the current environment.
+
+        Inputs:
+            - current_obs: dictionary containing the current observation taken from the current environment, used to initialize the prediction and the context
+            - timestep : index of the current timestep for the trajectory
+               
+        Outputs:
+            - CVX_trajectory: dictionary contatining the predicted state and action trajectory over the next self.n_steps
+        '''
+        # Extract current information from the current_env
+        t_i = timestep
+        t_f = ff.n_time_rpod
+        t_cut = min(t_i + self.n_steps, ff.n_time_rpod)
+        n_time_remaining = t_f - t_i
+        T_rem = np.round(n_time_remaining*ff.dt,1)
+        # Extract real state from environment observation
+        current_state = current_obs['state']
+        current_goal = current_obs['goal']
+        ffm = FreeflyerModel()
+
+        # Line warmstart from the quadrotor model -> Make sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
+        states_ref = (current_state + ((current_goal - current_state)/T_rem)*np.arange(0,T_rem,ff.dt)[:,None])
+        state_end_ref = None
+        actions_ref = np.zeros((n_time_remaining,3))
+        J_vect = np.ones(shape=(self.iter_max_SCP,), dtype=float)*1e12
+
+        # Initial condition for the scp
+        DELTA_J = 10
+        trust_region = self.trust_region0
+        beta_SCP = (self.trust_regionf/self.trust_region0)**(1/self.iter_max_SCP)
+        runtime0_cvx = time.time()
+        '''for scp_iter in range(self.iter_max_SCP):
+            # Solve OCP (safe)
+            try:
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, ffm, trust_region, self.scp_mode, obs_av=False)
+            except:
+                states = None
+                actions = None
+                feas = 'infeasible'
+            
+            if not np.char.equal(feas,'infeasible'):
+                J_vect[scp_iter] = cost
+                # compute error
+                trust_error = np.max(np.linalg.norm(states - states_ref, axis=0))
+                if scp_iter > 0:
+                    DELTA_J = cost_prev - cost
+
+                # Update iterations
+                states_ref = states
+                actions_ref = actions
+                cost_prev = cost
+                trust_region = beta_SCP*trust_region
+                if scp_iter >= 1 and (trust_error <= self.trust_regionf or abs(DELTA_J) < self.J_tol):
+                    break
+            else:
+                print(feas)
+                print('unfeasible scp') 
+                break'''
+        runtime1_cvx = time.time()
+        runtime_cvx = runtime1_cvx - runtime0_cvx
+        # Keep only the next self.n_steps for the output
+        states = states_ref
+        actions = actions_ref
+        feas = 'optimal'
+        CVX_trajectory = {
+            'state' : (states.T)[:,:(t_cut - t_i)],
+            'dv' : (actions.T)[:,:(t_cut - t_i)],
+            'time' : np.arange(t_i, t_cut)*ff.dt,
+        }
+        cvx_dict = {
+            'feas' : feas,
+            'runtime_scp' : runtime_cvx
+        }
+
+        return CVX_trajectory
+    
+    def solve_scp(self, current_obs, timestep, states_ref, actions_ref):
+        '''
+        Function to solve the scp optimization problem of MPC linearizing non-linear constraints with the reference trajectory provided in input.
+        
+        Inputs:
+            - current_obs: dictionary containing the current observation taken from the current environment, used to initialize the prediction and the context
+            - timestep : index of the current timestep for the trajectory
+            - states_ref : (6xself.n_steps) state trajectory over the next self.n_steps time instants to be used for linearization
+            - actions_ref : (3xself.n_steps) action trajectory over the next self.n_steps time instants to be used for linearization
+               
+        Outputs:
+            - SCPMPC_trajectory : dictionary contatining the predicted state and action trajectory over the next self.n_steps
+            - scp_dict : dictionary containing useful information on the scp solution:
+                         feas : feasibility flag ('optimal'/'optimal_inaccurate'/'infeasible')
+                         iter_SCP : number of scp iterations required to achieve convergence
+                         J_vect : history of the cost along the scp iterations
+                         runtime_scp : computational time required to solve the scp problem
+        '''
+        # Initial state and constraints extraction from the current environment
+        t_i = timestep
+        t_f = min(t_i + self.n_steps, ff.n_time_rpod)
+        n_time = t_f - t_i
+        # Extract real state from environment observation
+        current_state = current_obs['state']
+        current_goal = current_obs['goal']
+        ffm = FreeflyerModel()
+
+        # Makse sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
+        states_ref = states_ref.T
+        state_end_ref = current_goal#states_ref[-1,:]#
+        actions_ref = actions_ref.T
+        J_vect = np.ones(shape=(self.iter_max_SCP,), dtype=float)*1e12
+        
+        # Initial condition for the scp
+        DELTA_J = 10
+        trust_region = self.trust_region0
+        beta_SCP = (self.trust_regionf/self.trust_region0)**(1/self.iter_max_SCP)
+        runtime0_scp = time.time()
+        for scp_iter in range(self.iter_max_SCP):
+            '''print("scp_iter =", scp_iter)'''
+            # Solve OCP (safe)
+            try:
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, ffm, trust_region, self.scp_mode)
+            except:
+                states = None
+                actions = None
+                feas = 'infeasible'
+            
+            if not np.char.equal(feas,'infeasible'):
+                J_vect[scp_iter] = cost
+                # compute error
+                trust_error = np.max(np.linalg.norm(states - states_ref, axis=0))
+                if scp_iter > 0:
+                    DELTA_J = cost_prev - cost
+
+                # Update iterations
+                states_ref = states
+                actions_ref = actions
+                cost_prev = cost
+                trust_region = beta_SCP*trust_region
+                if scp_iter >= 1 and (trust_error <= self.trust_regionf and abs(DELTA_J) < self.J_tol):
+                    break
+            else:
+                print(feas)
+                print('unfeasible scp') 
+                break
+        runtime1_scp = time.time()
+        runtime_scp = runtime1_scp - runtime0_scp
+
+        SCPMPC_trajectory = {
+            'state' : states.T if not np.char.equal(feas,'infeasible') else None,
+            'dv' : actions.T if not np.char.equal(feas,'infeasible') else None
+        }
+        scp_dict = {
+            'feas' : feas,
+            'iter_scp' : scp_iter,
+            'J_vect' : J_vect,
+            'runtime_scp' : runtime_scp
+        }
+
+        return SCPMPC_trajectory, scp_dict
+
+    ########## STATIC METHODS ##########
+    @staticmethod
+    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, ffm:FreeflyerModel, trust_region, scp_mode, obs_av=True):
+        # IMPORTANT: state_ref and action_ref are the references and must be of shape (n_steps,n_state) and (n_steps,n_actions)
+        # Setup SQP problem
+        state_ref, action_ref = state_ref.T, action_ref.T
+        n_time = state_ref.shape[1]
+        obs = copy.deepcopy(ff.obs)
+        obs['radius'] = (obs['radius'] + ff.robot_radius)*ff.safety_margin
+        '''dist0 = np.linalg.norm((state_ref.T)[None,:1,:2] - obs['positions'][:,None,:], axis=2) - obs['radius'][:,None]
+        if (dist0 <= 0).any():
+            obs['radius'] = obs['radius']/ff.safety_margin'''
+        
+        s = cp.Variable((6, n_time))
+        a = cp.Variable((3, n_time))
+
+        if scp_mode == 'hard':
+            # CONSTRAINTS
+            constraints = []
+
+            # Initial, dynamics and final state
+            constraints += [s[:,0] == state_init]
+            constraints += [s[:,k+1] == ffm.Ak @ (s[:,k] + ffm.B_imp @ a[:,k]) for k in range(n_time-1)]
+            if t_f == ff.n_time_rpod:
+                constraints += [(s[:,-1] + ffm.B_imp @ a[:,-1]) == state_final]
+            # Table extension
+            constraints += [s[:2,:] >= ff.start_region['xy_low'][:,None]]
+            constraints += [s[:2,:] <= ff.goal_region['xy_up'][:,None]]
+            # Trust region and koz and action bounding box
+            for k in range(0,n_time):
+                # Trust region
+                b_soc_k = -state_ref[:,k]
+                constraints += [cp.SOC(trust_region, s[:,k] + b_soc_k)]
+                # keep-out-zone
+                if (k > 5) and (obs_av):
+                    for n_obs in range(len(obs['radius'])):
+                        c_koz_k = np.transpose(state_ref[:2,k] - obs['position'][n_obs,:]).dot(np.eye(2)/((obs['radius'][n_obs])**2))
+                        b_koz_k = np.sqrt(c_koz_k.dot(state_ref[:2,k] - obs['position'][n_obs,:]))
+                        constraints += [c_koz_k @ (s[:2,k] - obs['position'][n_obs,:]) >= b_koz_k]
+                # action bounding box
+                A_bb_k, B_bb_k = ffm.action_bounding_box_lin(state_ref[2,k], action_ref[:,k])
+                constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] >= -ffm.Dv_t_M]
+                constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
+            
+            # Cost function
+            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
+            cost = cp.sum(cp.norm(a, 1, axis=0))
+            if t_f < ff.n_time_rpod:
+                cost = cost + cp.norm(cp.multiply(rho,s[:,-1] - state_end_ref), 2)
+
+        else:
+            # CONSTRAINTS
+            constraints = []
+            # Initial, dynamics and final state
+            constraints += [s[:,0] == state_init]
+            constraints += [s[:,k+1] == ffm.Ak @ (s[:,k] + ffm.B_imp @ a[:,k]) for k in range(n_time-1)]
+            # Table extension
+            constraints += [s[:2,:] >= ff.start_region['xy_low'][:,None]]
+            constraints += [s[:2,:] <= ff.goal_region['xy_up'][:,None]]
+            # Trust region and koz and action bounding box
+            for k in range(0,n_time):
+                # Trust region
+                b_soc_k = -state_ref[:,k]
+                constraints += [cp.SOC(trust_region, s[:,k] + b_soc_k)]
+                # keep-out-zone
+                if (k > 5) and (obs_av):
+                    for n_obs in range(len(obs['radius'])):
+                        c_koz_k = np.transpose(state_ref[:2,k] - obs['position'][n_obs,:]).dot(np.eye(2)/((obs['radius'][n_obs])**2))
+                        b_koz_k = np.sqrt(c_koz_k.dot(state_ref[:2,k] - obs['position'][n_obs,:]))
+                        constraints += [c_koz_k @ (s[:2,k] - obs['position'][n_obs,:]) >= b_koz_k]
+                # action bounding box
+                A_bb_k, B_bb_k = ffm.action_bounding_box_lin(state_ref[2,k], action_ref[:,k])
+                constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] >= -ffm.Dv_t_M]
+                constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
+            
+            # Compute Cost
+            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
+            cost = cp.sum(cp.norm(a, 1, axis=0))
+            # Goal reaching penalizing term: if the end of the maneuver is already in the planning horizon aim for the goal
+            if t_f == ff.n_time_rpod:
+                cost = cost + 9.9*cp.norm((s[:,-1] + ffm.B_imp @ a[:,-1]) - state_final, 2)
+            
+            # Otherwise follow the warmstarting reference
+            else:
+                cost = cost + cp.norm(cp.multiply(rho,s[:,-1] - state_end_ref), 2)
+        
+        prob = cp.Problem(cp.Minimize(cost), constraints)
+        
+        # SolveOSQP problem
+        prob.solve(solver=cp.ECOS, verbose=False)
+
         if prob.status == 'infeasible':
             print("[solve]: Problem infeasible.")
             s_opt = None

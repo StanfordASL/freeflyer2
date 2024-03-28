@@ -5,7 +5,6 @@ root_folder = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__
 sys.path.append(root_folder)
 
 import numpy as np
-import jax.numpy as jnp
 
 # Problem dimensions
 N_STATE = 6
