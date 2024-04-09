@@ -198,7 +198,7 @@ def sample_init_target(sample_time=False):
     while not valid:
         state_target = np.random.uniform(low=[ff.goal_region['xy_low'][0], ff.goal_region['xy_low'][1], -np.pi, 0, 0, 0],
                                      high=[ff.goal_region['xy_up'][0], ff.goal_region['xy_up'][1], np.pi, 0, 0, 0])
-        valid = ((np.linalg.norm(state_target[:2] - ff.obs['position'],axis=1) - (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin) > 0).all()
+        valid = ((np.linalg.norm(state_target[:2] - ff.obs['position'],axis=1) - (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin) > 0).all() & ((np.linalg.norm(state_target[:2] - state_init[:2]) - ff.min_init_dist) > 0)
     
     # Eventually sample final time
     if sample_time:
