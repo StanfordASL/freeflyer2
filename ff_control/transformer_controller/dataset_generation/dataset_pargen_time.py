@@ -5,7 +5,7 @@ root_folder = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__
 sys.path.append(root_folder)
 
 from dynamics.freeflyer_time import FreeflyerModel, sample_init_target, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance
-from optimization.ff_scenario_time import N_STATE, N_ACTION, N_CLUSTERS, dt
+from optimization.ff_scenario_time import N_STATE, N_ACTION, N_CLUSTERS, dt, dataset_scenario
 import numpy as np
 from multiprocessing import Pool, set_start_method
 import itertools
@@ -121,9 +121,9 @@ if __name__ == '__main__':
             i_unfeas += [ i ]
         
         if i % 50000 == 0:
-            np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-scp' + str(i), states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp, i_unfeas = i_unfeas)
-            np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-cvx' + str(i), states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx, i_unfeas = i_unfeas)
-            np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, final_time=final_time, dtime = dtime, i_unfeas = i_unfeas)
+            np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-scp' + str(i), states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp, i_unfeas = i_unfeas)
+            np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-cvx' + str(i), states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx, i_unfeas = i_unfeas)
+            np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, final_time=final_time, dtime = dtime, i_unfeas = i_unfeas)
 
     # Remove unfeasible data points
     if i_unfeas:
@@ -141,6 +141,6 @@ if __name__ == '__main__':
         time = np.delete(time, i_unfeas, axis=0)
 
     #  Save dataset (local folder for the workstation)
-    np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
-    np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
-    np.savez_compressed(root_folder + '/dataset/time/dataset-ff-v05-param', target_state = target_state, time = time, final_time=final_time, dtime = dtime)
+    np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
+    np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
+    np.savez_compressed(root_folder + '/dataset/' + dataset_scenario + '/dataset-ff-v05-param', target_state = target_state, time = time, final_time=final_time, dtime = dtime)

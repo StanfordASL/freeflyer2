@@ -102,6 +102,9 @@ class FreeflyerModel:
     def ocp_scp(self, state_ref, action_ref, state_init, state_final, obs, trust_region, obs_av=True):
         # Setup SCP problem
         n_time = action_ref.shape[1]
+        psi_period = np.array([0, -2*np.pi, 2*np.pi])
+        psi_dist = np.abs(state_init[2] - (state_final[2] + psi_period))
+        state_final[2] = state_final[2] + psi_period[np.argmin(psi_dist)]
         s = cp.Variable((self.N_STATE,n_time))
         a = cp.Variable((self.N_ACTION,n_time))
 
@@ -202,7 +205,7 @@ def sample_init_target(sample_time=False):
     
     # Eventually sample final time
     if sample_time:
-        final_time = np.random.uniform(low=ff.final_time['low'], high=ff.final_time['up'])
+        final_time = np.random.choice(ff.final_time_choices)
         return state_init, state_target, final_time
     else:
         return state_init, state_target

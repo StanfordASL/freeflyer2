@@ -30,27 +30,40 @@ Lambda_inv = np.array([[  0, 0.5,  1/(4*thrusters_lever_arm)],
                        [0.5,   0,  1/(4*thrusters_lever_arm)]])
 
 # Table, start and goal regions dimensions
+dataset_scenario = 'time_whole_table' #'time'
 table = {
     'xy_low' : np.array([0.,0.]),
     'xy_up' : np.array([3.5, 2.5])
 }
-start_region = {
-    'xy_low' : table['xy_low'] + robot_radius,
-    'xy_up' : np.array([0.5, 2.5]) - robot_radius#np.array([3.5, 2.5]) - robot_radius#
-}
-goal_region = {
-    'xy_low' : np.array([3.0, 0.]) + robot_radius,#np.array([0., 0.]) + robot_radius,#
-    'xy_up' : table['xy_up'] - robot_radius
-}
+if dataset_scenario == 'time_whole_table':
+    start_region = {
+        'xy_low' : table['xy_low'] + robot_radius,
+        'xy_up' : np.array([3.5, 2.5]) - robot_radius
+    }
+    goal_region = {
+        'xy_low' : np.array([0., 0.]) + robot_radius,
+        'xy_up' : table['xy_up'] - robot_radius
+    }
+elif dataset_scenario == 'time':
+    start_region = {
+        'xy_low' : table['xy_low'] + robot_radius,
+        'xy_up' : np.array([0.5, 2.5]) - robot_radius
+    }
+    goal_region = {
+        'xy_low' : np.array([3.0, 0.]) + robot_radius,
+        'xy_up' : table['xy_up'] - robot_radius
+    }
+else:
+    raise NameError('dataset_scenario not recognized!')
+min_init_dist = 0.5
 
 # Time discretization and bounds
 dt = 0.5
-final_time = {
-    'low' : 10.0,
-    'up' : 100.0
-}
+T_min = 10.0 if dataset_scenario == 'time_whole_table' else 20.0
+T_max = 100.0
+final_time_choices = np.arange(T_min, T_max+dt/2, dt)
 '''T = 40.0 # max final time horizon in sec'''
-n_time_max = final_time['up']/dt
+n_time_max = T_max/dt
 
 # Obstacle
 obs = {
@@ -60,10 +73,6 @@ obs = {
                            [2.5, 1.75]]),
     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
 }
-'''obs = {
-    'position' : np.array([[2.5, +0.5]]),
-    'radius' : np.array([1.])
-}'''
 n_obs = obs['position'].shape[0]
 safety_margin = 1.1
 
