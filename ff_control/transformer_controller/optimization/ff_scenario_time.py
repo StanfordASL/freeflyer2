@@ -63,7 +63,7 @@ T_min = 10.0 if dataset_scenario == 'time_whole_table' else 20.0
 T_max = 100.0
 final_time_choices = np.arange(T_min, T_max+dt/2, dt)
 '''T = 40.0 # max final time horizon in sec'''
-n_time_max = T_max/dt
+n_time_max = int(T_max/dt)
 
 # Obstacle
 obs = {

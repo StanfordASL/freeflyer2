@@ -324,7 +324,7 @@ def compute_reward_to_go(actions):
     rewards_to_go = np.empty(shape=(n_data, n_time), dtype=float)
     for n in range(n_data):
         for t in range(n_time):
-            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, :, t:], ord=1,  axis=1))
+            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, t:, :], ord=1,  axis=1))
         
     return rewards_to_go
 
