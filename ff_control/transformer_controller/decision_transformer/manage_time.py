@@ -348,7 +348,7 @@ def get_DT_model(model_name, train_loader, eval_loader):
         max_ep_len=100,
         vocab_size=1,
         action_tanh=False,
-        n_positions=1024,
+        n_positions=2048,
         n_layer=6,
         n_head=6,
         n_inner=None,
