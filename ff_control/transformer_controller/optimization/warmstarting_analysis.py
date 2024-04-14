@@ -84,7 +84,7 @@ def for_computation(input_iterable):
         traj_cvx, _, _, feas_cvx = ocp_no_obstacle_avoidance(ff_model, state_init, state_final)
         runtime1_cvx = time.time()
         runtime_cvx = runtime1_cvx-runtime0_cvx
-        states_ws_cvx, actions_ws_cvx = traj_cvx['states'], traj_cvx['actions_G']
+        states_cvx, actions_cvx = traj_cvx['states'], traj_cvx['actions_G']
     except:
         states_cvx = None
         actions_cvx = None
