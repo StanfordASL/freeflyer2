@@ -3,7 +3,8 @@
 
 
 #include <Eigen/Dense>
- 
+#include "ff_estimate/base_mocap_estimator.hpp"
+
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using ff_msgs::msg::FreeFlyerState;
@@ -15,26 +16,62 @@ using namespace std;
 class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
 
     public:
-        Eigen::Matrix<double, 6, 6> Q = Eigen::Matrix<6,6>::Identity(6, 6);
-        Eigen::Matrix<double, 3, 3> R {
-			{2.4445e-3,    0     ,     0    },
-			{    0    , 1.2527e-3,     0    },
-			{    0    ,    0     , 4.0482e-3},
-		};
-        double MAX_DT = 1e-3;
-
+	using Qmatrix = Eigen::Matrix<double, 6, 6>;
+	using Rmatrix Eigen::Matrix3d;
+	
         ConstVelKalmanFilterNode() : ff::BaseMocapEstimator("const_vel_kalman_filter_node") {
             this->declare_parameter("min_dt", 0.005);
+		P.setIdentity();
+		Q =  (Qmatrix() << 1e-5, 0, 0, 0, 0, 0,  //Process Noise Covariance Matrix
+				  0, 1e-5, 0, 0, 0, 0,
+	          		  0, 0, 1e-5, 0, 0, 0,
+			 	  0, 0, 0, 1e-3, 0, 0,
+				  0, 0, 0, 0, 1e-3, 0,
+				  0, 0, 0, 0, 0, 1e-3
+		).finished();
+
+		R = (Rmatrix() <<    2.4445e-3,   0.0    ,   0.0    ,   0.0   ,   0.0    ,   0.0    ,  
+	        			0.0   , 1.2527e-3,   0.0    ,   0.0   ,   0.0    ,   0.0    ,
+	        			0.0   ,   0.0    , 4.0482e-3,   0.0   ,   0.0    ,   0.0    ,
+					0.0   ,   0.0    ,   0.0    ,   0.0   ,   0.0    ,   0.0    ,
+					0.0   ,   0.0    ,   0.0    ,   0.0   ,   0.0    ,   0.0    ,
+					0.0   ,   0.0    ,   0.0    ,   0.0   ,   0.0    ,   0.0    
+		    ).finished();
+		
+		flag = 0;
         }
 
         void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override {
 
+	FreeFlyerState state{};
+	//initial declaration cycle
+	if (flag == 0) {
+		
+		Eigen::Vector3d pose = Eigen::Map<Eigen::Vector3d>(pose_stamped.pose, 3);
+		x.block<3, 1>(0,0) = pose;
+		flag++;
+	} else {
+		Eigen::Vector3d pose = Eigen::Map<Eigen::Vector3d>(pose_stamped.pose, 3);
+		prev_.header = pose_stamped.header;
+		const rclcpp::Time now = pose_stamped.header.stamp;
+            	const rclcpp::Time last = prev_.header.stamp;
+           	double dt = (now - last).seconds();
+		process_update(dt);
+		measurement_update(pose);
+		state.pose.x = x.block<1, 1>(0,0);
+		state.pose.y = x.block<1, 1>(1,0);
+		state.pose.theta = x.block<1, 1>(2,0);
+		SendStateEstimate(state);
+		
+	}
          //R = Eigen::Matrix<3,3>::Identity(3, 3) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
         
-        FreeFlyerState state{};
-        Pose2D pose2d{};
+        
 
-        state.pose = pose_stamped.pose;
+	
+	/* In order to use new state prediction, velocity must be discovered, and because there is constant vel
+ 	   We can do (current state  - previous state)/ change in time
+     	
         if (prev_state_ready_) {
             const rclcpp::Time now = pose_stamped.header.stamp;
             const rclcpp::Time last = prev_.header.stamp;
@@ -43,6 +80,28 @@ class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
             if (dt < (this->get_parameter("min_dt").as_double())) {
                 return;
             }
+			
+	    double vx = (pose_stamped.pose.x - prev_.state.pose.x) / dt;
+	    double vy = (pose_stamped.pose.y - prev_.state.pose.y) / dt;
+			
+			// wrap angle delta to [-pi, pi]
+      	    double dtheta = std::remainder(pose_stamped.pose.theta - prev_.state.pose.theta, 2 * M_PI);
+      	    double wz = dtheta / dt;
+			
+	        //estimated velocities for naive state estimation
+	        Eigen::Vector3d vel(vx, vy, wz);
+
+	        //get position vector from pose_stamped where vector is pose
+	        //not sure if this is how to get the positions into an Eigen vector
+	        Eigen::Vector3d pose = Eigen::Map<Eigen::Vector3d>(pose_stamped.pose, 3);
+
+			//combine position vector and velocity vector for initial state vector
+			Eigen::Matrix<double, 6, 1> x  = Eigen::Matrix<double, 6, 1>::Zero(6, 1);
+			x.block<3, 1>(3,0) = vel;
+			x.block<3, 1>(0,0) = pose;
+
+		
+				
 
         } else {
             prev_state_ready_ = true;
@@ -50,142 +109,115 @@ class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
 
         prev_.state = state;
         prev_.header = pose_stamped.header;
-
-        SendStateEstimate(state);
+	*/
+        //SendStateEstimate(state);
     }
 
-
-        ConstantVelKF(Eigen::VectorXd x0, Eigen::MatrixXd P0, int dim = 3, int angle_idx = 2)
-            : x(x0), P(P0), dim(dim), angle_idx(angle_idx) {
-            Q = Eigen::Matrix<6,6>::Identity(2 * dim, 2 * dim);
-            R = Eigen::MatrixXd::Identity(dim, dim) * 2.4445e-3, 1.2527e-3, 4.0482e-3;
-            MAX_DT = 1e-3;
-        }
 
         void process_update(double dt) {
             if (dt <= 0.) {
                 return;
             }
-
+	    /*A matrix used for prediction of next state matrix -- just for factoring in naive estimation into the 
+     		next position state matrix
+	    	Format: { 
+      		{ 1 0 0 d 0 0}
+	 	{ 0 1 0 0 d 0}
+    		{ 0 0 1 0 0 d}
+       		{ 0 0 0 1 0 0}
+		{ 0 0 0 0 1 0}
+   		{ 0 0 0 0 0 1}
+     			}
+			where d = dt 
+     		*/
             Eigen::Matrix<double, 6, 6> A = Eigen::Matrix<double, 6, 6>::Identity(6, 6);
-            A.block<3, 3>(0, 3) = Eigen::Matrix<double, 6, 6>::Identity(3, 3) * dt;
+            A.block<3, 3>(0, 3).setIdentity() * dt;
 
+	//[6 x 6] * [6 x 1] = [6 x 1]
             x = A * x;
+	//  P = [6 x 6] * [6 x 6] * [6 x 6] + [6 x 6]
             P = A * P * A.transpose() + Q * dt;
         }
 
         void measurement_update(Eigen::VectorXd z) {
-            Eigen::MatrixXd H = Eigen::MatrixXd::Zero(dim, 2 * dim);
-            H.block(0, 0, dim, dim) = Eigen::MatrixXd::Identity(dim, dim);
-
-            Eigen::MatrixXd S = H * P * H.transpose() + R;
-            Eigen::MatrixXd K = P * H.transpose() * S.inverse();
-            Eigen::VectorXd y = z - H * x;
-            y(angle_idx) = wrap_angle(y(angle_idx));
-
-            x += K * y;
-            P -= K * H * P;
+	    /*H matrix 
+	    	Format:{ 
+      			{ 1 0 0 0 0 0}
+	 		{ 0 1 0 0 0 0}
+    			{ 0 0 1 0 0 0}
+     			}
+     		*/
+            Eigen::Matrix<double, 3, 6> H = Eigen::Matrix<double, 3, 6>::Zero(3, 6);
+            H.block<3, 3>(0, 0).setIdentity();
+	    /* S is divisor for Kalman Gain separated to be able to use inverse function
+     	       H    *    P    *  H.inv     +    R
+	    [3 x 6] * [6 x 6] * [6 x 3]  + [3 x 3]
+     	         [3 x 6] * [6 x 3]       + [3 x 3]
+	       	      [3 x 3]      +       [3 x 3]
+	    S = 	        [3 x 3]
+     		*/
+            Eigen::Matrix3d S = (H * P) * H.transpose() + R;
+	    /* K is kalman gain 
+	       K =   P     *   H.inv   /     S    
+		  [6 x 6]  *  [6 x 3]  /  [3 x 3]
+ 	                [6 x 3]        /  [3 x 3]
+	       K =              [6 x 3]
+ 		*/
+            Eigen::Matrix3d K = P * H.transpose() * S.inverse();
+		/* y = [3 x 1] - [3 x 6] * [6 x 1]
+  			[3 x 1] - [3 x 1]
+	    z.block<1,1>(1,0) = wrap_angle(z.block<1,1>(1,0));
+            Eigen::Matrix<double, 6, 1> y = z - H * x;
+            y.block<1,1>(1,0) = wrap_angle(y.block<1,1>(1,0));
+		/* x = [6 x 1] + [6 x 3] * ([3 x 1])
+  			[6 x 1] + [6 x 3] *([3 x 1])
+     			[6 x 1] + [6 x 1]
+  		*/
+	    //New State x
+            x = x + K * y;
+		
+		/* P = ([6 x 6] - [6 x 6] * [6 x 6]) * [6 x 6]
+			     [6 x 6] * [6 x 6]
+		   P =            [6 x 6]
+		*/
+	//I is identity matrix <6 , 6> 
+	Eigen::Matrix<double, 6, 6> I = Eigen::Matrix<double, 6, 6>::Identity(6, 6);
+	/*
+ 		P = [(6 x 6) - (6 x 3) * (3 x 6)] * (6 x 6)
+  	*/
+            P = (I - K * H) * P;
         }
 
         double wrap_angle(double theta) {
             return atan2(sin(theta), cos(theta));
         }
+private:
+		Eigen::Matrix<double, 6, 1> x = Eigen::Matrix<double, 6, 1>::Zero(6, 1);
 
-    private:
-        Eigen::VectorXd x;
-        Eigen::MatrixXd P;
-        int dim;
-        int angle_idx;
-};
+		/*Find out state variance-covariance matrix = P-- using identity matrix for now
+   			6 x 6 because of three states and three velocities for each of those states
+			P Format: 
+   				1  0  0  0  0  0 
+       				0  1  0  0  0  0
+				0  0  1  0  0  0
+    				0  0  0  1  0  0
+				0  0  0  0  1  0
+    				0  0  0  0  0  1
+   			*/
+		Eigen::Matrix<double, 6, 6> P = Eigen::Matrix<double, 6, 6>::Identity(6, 6);
+
+		//6 x 6 accounts for velocity, so even though we aren't fed in velocity we can calculate it and already have a variance for it
+        	const Eigen::Matrix<double, 6, 6> Q; 
+
+		// R is Measurement Covariance Matrix. Can be thought of as observation error
+        	const Eigen::Matrix<double, 3, 3> R;
+			
+		
+       		//double MAX_DT = 1e-3;
+
+		int flag;
 
 
-#include "ff_estimate/base_mocap_estimator.hpp"
-
-class ConstVelKalmanFilterNode : public ff::BaseMocapEstimator {
-    public:
-        ConstVelKalmanFilterNode() : ff::BaseMocapEstimator("const_vel_kalman_filter_node") {
-            this->declare_parameter("min_dt", 0.005);
-            this->target_pose = Pose2D;
-        }
-
-    void EstimatewithPose2D(const Pose2DStamped & pose_stamped) override {
-        FreeFlyerState state{};
-        Pose2D pose2d{};
-
-        state.pose = pose_stamped.pose;
-        if (prev_state_ready_) {
-            const rclcpp::Time now = pose_stamped.header.stamp;
-            const rclcpp::Time last = prev_.header.stamp;
-            double dt = (now - last).seconds();
-
-            if (dt < (this->get_parameter("min_dt").as_double())) {
-                return;
-            }
-
-            target_pose.pose.x = pose2d.pose.position.x;
-            target_pose.pose.y = pose2d.pose.position.y;
-            target_pose.pose.theta = pose2d.pose.position.theta;
-
-            state.header = est_state.header
-            state.state.twist = pose_stamped.state.twist;
-            state.state.pose.x = this.target_pose.x;
-            state.state.pose.y = this.target_pose.y;
-            state.state.pose.theta = this.target_pose.theta;
-        } else {
-            prev_state_ready_ = true;
-        }
-
-        prev_.state = state;
-        prev_.header = pose_stamped.header;
-
-        SendStateEstimate(state);
-    }
-
-    private:
-        geometry_msgs::msg::TwistStamped;
-        geometry_msgs::msg::Pose2DStamped;
-        ff_msgs::msg::FreeFlyerStateStamped prev_;
-        bool prev_state_ready_ = false;
-        geometry_msgs::msg::Pose2D;
-
-        /* void target_loop() {
-            if (!target_pose_.has_value()) {
-                return;
-            }
-
-            auto target = std::make_shared<geometry_msgs::msg::TwistStamped>();
-            target->header.stamp = now();
-            target->twist.linear.x = target_pose_->x;
-            target->twist.linear.y = target_pose_->y - 0.5;
-            target->twist.angular.z = target_pose_->theta;
-
-            target_pub_->publish(target);
-        }
-
-        void est_callback(const geometry_msgs::msg::Pose2DStamped::SharedPtr cv_pose) {
-            if (!target_pose_.has_value()) {
-                return;
-            }
-
-            auto state = std::make_shared<geometry_msgs::msg::TwistStamped>();
-            state->header = cv_pose->header;
-            state->twist = cv_pose->pose;
-            state->twist.linear.x += target_pose_->x;
-            state->twist.linear.y += target_pose_->y;
-            state->twist.angular.z += target_pose_->theta;
-
-            state_pub_->publish(state);
-        }
-
-        void target_callback(const geometry_msgs::msg::PoseStamped::SharedPtr target_pose) {
-            if (!target_pose_.has_value()) {
-                target_pose_ = geometry_msgs::msg::Pose2D();
-            }
-
-            target_pose_->x = target_pose->pose.position.x;
-            target_pose_->y = target_pose->pose.position.y;
-            target_pose_->theta = M_PI / 2.0;
-        } */
 };
 
 int main(int argc, char ** argv) {
