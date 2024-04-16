@@ -601,7 +601,7 @@ class AutonomousFreeflyerTransformerMPC():
         # Problem formulation
         prob = cp.Problem(cp.Minimize(cost), constraints)
 
-        prob.solve(solver=cp.ECOS, verbose=False)
+        prob.solve(solver=cp.MOSEK, verbose=False)
         if prob.status == 'infeasible':
             print("[solve]: Problem infeasible.")
             s_opt = None
@@ -887,7 +887,7 @@ class ConvexMPC():
         prob = cp.Problem(cp.Minimize(cost), constraints)
         
         # SolveOSQP problem
-        prob.solve(solver=cp.ECOS, verbose=False)
+        prob.solve(solver=cp.MOSEK, verbose=False)
 
         if prob.status == 'infeasible':
             print("[solve]: Problem infeasible.")
@@ -925,11 +925,12 @@ class MyopicConvexMPC():
     J_tol = ff.J_tol # [N]
 
     ########## CONSTRUCTOR ##########
-    def __init__(self, n_steps, scp_mode='hard'):
+    def __init__(self, n_steps, scp_mode='hard', rho=np.array([1.,1.,1.,7.,7.,7.])):
 
         # Save the number of steps to use for MPC
         self.n_steps = n_steps
         self.scp_mode = scp_mode
+        self.rho = rho
     
     ########## CLOSED-LOOP METHODS ##########
     def warmstart(self, current_obs, current_env:FreeflyerEnv):
@@ -967,7 +968,7 @@ class MyopicConvexMPC():
         for scp_iter in range(self.iter_max_SCP):
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, obs_av=False)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, obs_av=False, rho=self.rho)
             except:
                 states = None
                 actions = None
@@ -1048,7 +1049,7 @@ class MyopicConvexMPC():
             '''print("scp_iter =", scp_iter)'''
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, rho=self.rho)
             except:
                 states = None
                 actions = None
@@ -1090,7 +1091,7 @@ class MyopicConvexMPC():
 
     ########## STATIC METHODS ##########
     @staticmethod
-    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, trust_region, scp_mode, obs_av=True):
+    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, trust_region, scp_mode, obs_av=True, rho=None):
         # IMPORTANT: state_ref and action_ref are the references and must be of shape (n_steps,n_state) and (n_steps,n_actions)
         # Setup SQP problem
         state_ref, action_ref = state_ref.T, action_ref.T
@@ -1134,7 +1135,7 @@ class MyopicConvexMPC():
                 constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
             
             # Cost function
-            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
+            #rho = np.array([1.,1.,1.,7.,7.,7.])
             cost = cp.sum(cp.norm(a, 1, axis=0))
             if t_f < env.n_time_rpod:
                 cost = cost + cp.norm(cp.multiply(rho,s[:,-1] - state_end_ref), 2)
@@ -1165,7 +1166,7 @@ class MyopicConvexMPC():
                 constraints += [A_bb_k*(s[2,k] - state_ref[2,k]) + B_bb_k@a[:,k] <= ffm.Dv_t_M]
             
             # Compute Cost
-            rho = 0.35*np.array([1.,1.,1.,50.,50.,50.])
+            #rho = np.array([1.,1.,1.,7.,7.,7.])
             cost = cp.sum(cp.norm(a, 1, axis=0))
             # Goal reaching penalizing term: if the end of the maneuver is already in the planning horizon aim for the goal
             if t_f == ff.n_time_rpod:
@@ -1178,7 +1179,7 @@ class MyopicConvexMPC():
         prob = cp.Problem(cp.Minimize(cost), constraints)
         
         # SolveOSQP problem
-        prob.solve(solver=cp.ECOS, verbose=False)
+        prob.solve(solver=cp.MOSEK, verbose=False)
 
         if prob.status == 'infeasible':
             print("[solve]: Problem infeasible.")
