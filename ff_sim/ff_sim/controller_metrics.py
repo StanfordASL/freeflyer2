@@ -90,7 +90,7 @@ class ControllerMetricsPublisher(Node):
         self.prev_thruster_sum = np.sum(thrusters)
 
         self.steps += 1
-        if not self.rolled_up: # Ensure valid duty cycles at the beginning
+        if not self.rolled_up:  # Ensure valid duty cycles at the beginning
             self.time_hist.append(dt)
             for i in range(8):
                 self.thrust_hist[i].append(thrusters[i])
@@ -99,7 +99,7 @@ class ControllerMetricsPublisher(Node):
                 )
             if self.steps >= self.duty_cycle_window:
                 self.rolled_up = True
-        else: # Once queue is filled up, can just treat this as a list that's constantly being updawted
+        else:  # Once queue is filled up, can just treat this as a list that's constantly being updawted
             self.time_hist.pop(0)
             self.time_hist.append(dt)
             for i in range(8):

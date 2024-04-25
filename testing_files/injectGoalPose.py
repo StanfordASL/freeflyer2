@@ -32,8 +32,14 @@ import rclpy
 import math
 import sys
 
-goal_positions = [[0.5,0.5,-math.pi/2], [0.5,0.5,math.pi/2], [1.0,1.0,math.pi/2], [2.0,1.5,math.pi/2]]
-goal_velos = [[0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0], [0.0,0.0,0.0]]
+goal_positions = [
+    [0.5, 0.5, -math.pi / 2],
+    [0.5, 0.5, math.pi / 2],
+    [1.0, 1.0, math.pi / 2],
+    [2.0, 1.5, math.pi / 2],
+]
+goal_velos = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+
 
 class GoalPublisherNode(Node):
     def __init__(self, index):
@@ -54,9 +60,10 @@ class GoalPublisherNode(Node):
         goal_pose.state.pose.theta = pos[2]
         goal_pose.state.twist.vx = velo[0]
         goal_pose.state.twist.vy = velo[1]
-        goal_pose.state.twist.wz = velo[2]           
+        goal_pose.state.twist.wz = velo[2]
 
         self.pub_goal.publish(goal_pose)
+
 
 def main():
     index = int(sys.argv[1])
@@ -66,6 +73,6 @@ def main():
     rclpy.spin(publisher)
     rclpy.shutdown()
 
+
 if __name__ == "__main__":
     main()
-    
