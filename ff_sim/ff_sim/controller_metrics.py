@@ -52,12 +52,12 @@ from ff_params import RobotParams
 class ControllerMetricsPublisher(Node):
     """
     Class to listen to free flyer commands and calculate metrics
-    Calculates two key metrics: 
+    Calculates two key metrics:
     1. total_gas_time: Measures total time that thrusters are on (summed over each thruster). Provides
         a proxy for total gas expenditure over time
     2. running_duty_cycles: Measures average duty cycle for each thruster over a time window specified by
-        self.duty_cycle_window. 
-    
+        self.duty_cycle_window.
+
     """
 
     def __init__(self):
