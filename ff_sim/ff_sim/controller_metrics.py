@@ -50,7 +50,15 @@ from ff_params import RobotParams
 
 
 class ControllerMetricsPublisher(Node):
-    """Class to listen to free flyer commands and calculate metrics"""
+    """
+    Class to listen to free flyer commands and calculate metrics
+    Calculates two key metrics: 
+    1. total_gas_time: Measures total time that thrusters are on (summed over each thruster). Provides
+        a proxy for total gas expenditure over time
+    2. running_duty_cycles: Measures average duty cycle for each thruster over a time window specified by
+        self.duty_cycle_window. 
+    
+    """
 
     def __init__(self):
         super().__init__("ff_ctrl_metrics")
@@ -75,7 +83,7 @@ class ControllerMetricsPublisher(Node):
         )
 
     def process_new_wheel_cmd(self, msg: WheelVelCommand) -> None:
-        """Doesn't process wheel command"""
+        """Placeholder for now"""
         pass
 
     def process_new_binary_thrust_cmd(self, msg: ThrusterCommand) -> None:
@@ -85,10 +93,12 @@ class ControllerMetricsPublisher(Node):
         dtnsec = now.nanosec - self.curr_time.nanosec
         dt = dtsec + dtnsec / 1e9
 
+        # Perform Euler integration for how long each thruster was on
         thrusters = np.array(msg.switches, dtype=float)
         self.running_total_gas += self.prev_thruster_sum * dt
         self.prev_thruster_sum = np.sum(thrusters)
 
+        # Calculate rolling average of duty cycle for each thruster
         self.steps += 1
         if not self.rolled_up:  # Ensure valid duty cycles at the beginning
             self.time_hist.append(dt)
