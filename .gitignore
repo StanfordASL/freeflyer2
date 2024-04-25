@@ -133,3 +133,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Data from Free-Flyer low-level MPC characterization experiments (Andrew Wang, 2024)
+testing_files/experiment_data
