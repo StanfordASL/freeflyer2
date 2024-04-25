@@ -201,7 +201,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     def init_solver(self):
         # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
-        lbx = [-4., -4., -np.pi, -0.5, -0.5, -0.5]
+        lbx = [0., 0., -np.pi, -0.5, -0.5, -0.5]
         ubx = [4., 4., np.pi, 0.5, 0.5, 0.5]
         lbu = [-self.Fmax] * 4 
         ubu = [self.Fmax] * 4 
