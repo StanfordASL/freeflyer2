@@ -403,10 +403,6 @@ class FreeFlyerSimulator(Node):
             print("[FreeFlyerSimulator::compute_dynamics_dt]: Unknown Discretization Scheme.")
 
         # Wrap theta to [-pi, pi]
-
-        # x_next[2] = ((x_next[2] % (2 * np.pi)) + 2 * np.pi) % (2 * np.pi)
-        # if x_next[2] > np.pi:
-        #     x_next[2] -= 2 * np.pi
         x_next[2] = (x_next[2] + np.pi) % (2 * np.pi) - np.pi
 
         return x_next
