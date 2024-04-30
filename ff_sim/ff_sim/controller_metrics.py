@@ -62,7 +62,7 @@ class ControllerMetricsPublisher(Node):
 
     def __init__(self):
         super().__init__("ff_ctrl_metrics")
-        self.curr_time = self.get_clock().now().to_msg()
+        self.curr_time = self.get_clock().now()
         self.steps = 0
         self.running_total_gas = 0
         self.prev_thruster_sum = 0
@@ -88,10 +88,8 @@ class ControllerMetricsPublisher(Node):
 
     def process_new_binary_thrust_cmd(self, msg: ThrusterCommand) -> None:
         """Process binary thrusters"""
-        now = self.get_clock().now().to_msg()
-        dtsec = now.sec - self.curr_time.sec
-        dtnsec = now.nanosec - self.curr_time.nanosec
-        dt = dtsec + dtnsec / 1e9
+        now = self.get_clock().now()
+        dt = (now - self.curr_time).nanoseconds / 1e9
 
         # Perform Euler integration for how long each thruster was on
         thrusters = np.array(msg.switches, dtype=float)
