@@ -38,10 +38,10 @@ class TrinaryThrusterController(LowLevelController):
         "trinary" thruster, which can either take value -1 (1 on 2 off), 0 (both off), or 1 (1 off 2 on)
         This reduces the search space for the optimization, and implicitly removes consideration of the
         undesirable case where both thrusters are on (0 net force or moment, only wasted fuel)
-        tri_swtiches[0] = Thruster Pair [1,2]
-        tri_swtiches[1] = Thruster Pair [3,4]
-        tri_swtiches[2] = Thruster Pair [5,6]
-        tri_swtiches[3] = Thruster Pair [7,0]
+        tri_switches[0] = Thruster Pair [1,2]
+        tri_switches[1] = Thruster Pair [3,4]
+        tri_switches[2] = Thruster Pair [5,6]
+        tri_switches[3] = Thruster Pair [7,0]
 
         
         Thrusters Configuration

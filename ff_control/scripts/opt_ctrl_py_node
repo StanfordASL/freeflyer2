@@ -25,14 +25,13 @@
 
 import copy
 import rclpy
-
 import numpy as np
 from casadi import *
 import typing as T
 import matplotlib.pyplot as plt
 import time
-
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
+from ff_control.utils import state2vec
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
@@ -121,10 +120,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # convert desired state to vector form
         if isinstance(state_des, FreeFlyerState):
-            state_des = self.state2vec(state_des)
+            state_des = state2vec(state_des)
 
         if isinstance(curr_state, FreeFlyerState):
-            curr_state = self.state2vec(curr_state)
+            curr_state = state2vec(curr_state)
 
         if np.all(np.abs(state_des - curr_state) < self._deadband):
             self._u = np.zeros(4)
@@ -355,44 +354,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         w0 += [DM(x[-1])]
 
         return w0
-
-    ############################### Helper Functions to unpack FreeFlyerState ###############################
-    @staticmethod
-    def state2vec(state: FreeFlyerState) -> np.ndarray:
-        """
-        Convert state message to state vector.
-
-        :param state: state message
-        :return: state vector
-        """
-        return np.array(
-            [
-                state.pose.x,
-                state.pose.y,
-                state.pose.theta,
-                state.twist.vx,
-                state.twist.vy,
-                state.twist.wz,
-            ]
-        )
-
-    @staticmethod
-    def vec2state(vec: np.ndarray) -> FreeFlyerState:
-        """
-        Convert state vector to state message.
-
-        :param vec: state vector
-        :return: state message
-        """
-        state = FreeFlyerState()
-        state.pose.x = vec[0]
-        state.pose.y = vec[1]
-        state.pose.theta = vec[2]
-        state.twist.vx = vec[3]
-        state.twist.vy = vec[4]
-        state.twist.wz = vec[5]
-
-        return state
 
     ############################### Helper Functions to access ROS parameters ###############################
 
