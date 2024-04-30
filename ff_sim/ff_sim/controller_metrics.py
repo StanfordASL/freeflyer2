@@ -62,7 +62,7 @@ class ControllerMetricsPublisher(Node):
 
     def __init__(self):
         super().__init__("ff_ctrl_metrics")
-        self.curr_time = self.get_clock().now().to_msg()
+        self.curr_time = self.get_clock().now()
         self.steps = 0
         self.running_total_gas = 0
         self.prev_thruster_sum = 0
