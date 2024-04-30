@@ -327,12 +327,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             sum += x[i]**2
         return sum
 
-    def normabs(self, x):
-        sum = 0
-        for i in range(x.shape[0]):
-            sum += fabs(x[i])
-        return sum
-
     def unpack_wopt(self, w_opt):
         w_opt = w_opt.full().flatten()
         u0_opt = w_opt[6::10]
