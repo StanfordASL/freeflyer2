@@ -322,6 +322,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return Fx, Fy, M
 
     def normsq(self, x):
+        """ norm square operation for casadi variables. """
         sum = 0
         for i in range(x.shape[0]):
             sum += x[i]**2
