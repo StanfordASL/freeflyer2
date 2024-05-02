@@ -67,8 +67,8 @@ class ControllerMetricsPublisher(Node):
         self.running_total_gas = 0
         self.prev_thruster_sum = 0
         self.duty_cycle_window = 6
-        self.thrust_hist = [Queue(maxsize = self.duty_cycle_window) for i in range(8)]
-        self.time_hist = Queue(maxsize = self.duty_cycle_window)
+        self.thrust_hist = [Queue(maxsize=self.duty_cycle_window) for i in range(8)]
+        self.time_hist = Queue(maxsize=self.duty_cycle_window)
         self.thrust_duty_cycles = [0] * 8
         self.total_time_window = 0
 
@@ -98,24 +98,36 @@ class ControllerMetricsPublisher(Node):
 
         # Calculate rolling average of duty cycle for each thruster
         if not self.time_hist.full():  # Build up full queue valid duty cycles at the beginning
+            # Update time variables
             self.time_hist.put_nowait(dt)
+            prev_time_window = self.total_time_window
+            self.total_time_window += dt
+            # Update rolling thrust averages
             for i in range(8):
                 self.thrust_hist[i].put_nowait(thrusters[i])
-                weighted_avg_thrust = self.thrust_duty_cycles[i]*self.total_time_window + thrusters[i]*dt
-                self.total_time_window += dt
+                weighted_avg_thrust = (
+                    self.thrust_duty_cycles[i] * prev_time_window + thrusters[i] * dt
+                )
                 self.thrust_duty_cycles[i] = weighted_avg_thrust / self.total_time_window
         else:  # Once queue is filled up, we need to pop a value off and append the new one, and update running averages
+            # Update time variables
             dt_0 = self.time_hist.get_nowait()
             self.time_hist.put_nowait(dt)
+            prev_time_window = self.total_time_window
+            self.total_time_window = self.total_time_window - dt_0 + dt
+            # Update rolling thrust averages
             for i in range(8):
                 thrust_0 = self.thrust_hist[i].get_nowait()
                 self.thrust_hist[i].put_nowait(thrusters[i])
-                weighted_avg_thrust = self.thrust_duty_cycles[i]*self.total_time_window - thrust_0*dt_0 + thrusters[i]*dt 
-                self.total_time_window = self.total_time_window - dt_0 + dt
+                weighted_avg_thrust = (
+                    self.thrust_duty_cycles[i] * prev_time_window
+                    - thrust_0 * dt_0
+                    + thrusters[i] * dt
+                )
                 self.thrust_duty_cycles[i] = weighted_avg_thrust / self.total_time_window
 
         metrics = ControllerMetrics()
-        metrics.header.stamp = now
+        metrics.header.stamp = now.to_msg()
         metrics.total_gas_time = self.running_total_gas
         metrics.running_duty_cycles = self.thrust_duty_cycles
         self.pub_controller_metrics.publish(metrics)
