@@ -37,6 +37,7 @@ import typing as T
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from queue import Queue
 
 from ff_msgs.msg import (
     FreeFlyerStateStamped,
@@ -45,7 +46,6 @@ from ff_msgs.msg import (
     ThrusterCommand,
     ControllerMetrics,
 )
-
 from ff_params import RobotParams
 
 
@@ -66,11 +66,11 @@ class ControllerMetricsPublisher(Node):
         self.steps = 0
         self.running_total_gas = 0
         self.prev_thruster_sum = 0
-        self.thrust_hist = [[] for i in range(8)]
-        self.time_hist = []
-        self.thrust_duty_cycles = [0] * 8
         self.duty_cycle_window = 6
-        self.rolled_up = False
+        self.thrust_hist = [Queue(maxsize = self.duty_cycle_window) for i in range(8)]
+        self.time_hist = Queue(maxsize = self.duty_cycle_window)
+        self.thrust_duty_cycles = [0] * 8
+        self.total_time_window = 0
 
         self.sub_wheel_cmd_vel = self.create_subscription(
             WheelVelCommand, "commands/velocity", self.process_new_wheel_cmd, 10
@@ -97,25 +97,22 @@ class ControllerMetricsPublisher(Node):
         self.prev_thruster_sum = np.sum(thrusters)
 
         # Calculate rolling average of duty cycle for each thruster
-        self.steps += 1
-        if not self.rolled_up:  # Ensure valid duty cycles at the beginning
-            self.time_hist.append(dt)
+        if not self.time_hist.full():  # Build up full queue valid duty cycles at the beginning
+            self.time_hist.put_nowait(dt)
             for i in range(8):
-                self.thrust_hist[i].append(thrusters[i])
-                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i], self.time_hist) / np.sum(
-                    self.time_hist
-                )
-            if self.steps >= self.duty_cycle_window:
-                self.rolled_up = True
-        else:  # Once queue is filled up, can just treat this as a list that's constantly being updawted
-            self.time_hist.pop(0)
-            self.time_hist.append(dt)
+                self.thrust_hist[i].put_nowait(thrusters[i])
+                weighted_avg_thrust = self.thrust_duty_cycles[i]*self.total_time_window + thrusters[i]*dt
+                self.total_time_window += dt
+                self.thrust_duty_cycles[i] = weighted_avg_thrust / self.total_time_window
+        else:  # Once queue is filled up, we need to pop a value off and append the new one, and update running averages
+            dt_0 = self.time_hist.get_nowait()
+            self.time_hist.put_nowait(dt)
             for i in range(8):
-                self.thrust_hist[i].pop(0)
-                self.thrust_hist[i].append(thrusters[i])
-                self.thrust_duty_cycles[i] = np.dot(self.thrust_hist[i], self.time_hist) / np.sum(
-                    self.time_hist
-                )
+                thrust_0 = self.thrust_hist[i].get_nowait()
+                self.thrust_hist[i].put_nowait(thrusters[i])
+                weighted_avg_thrust = self.thrust_duty_cycles[i]*self.total_time_window - thrust_0*dt_0 + thrusters[i]*dt 
+                self.total_time_window = self.total_time_window - dt_0 + dt
+                self.thrust_duty_cycles[i] = weighted_avg_thrust / self.total_time_window
 
         metrics = ControllerMetrics()
         metrics.header.stamp = now
