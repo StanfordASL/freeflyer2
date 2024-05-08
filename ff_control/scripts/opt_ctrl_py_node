@@ -232,7 +232,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
-        self.get_logger().info("Time: {}, Timesteps: {}".format(self.T,N))
         DT = self.T/N/M
         f = Function('f', [x, u, goal], [xdot, L])    # Define function to take in current state/input and output xdot and cost
         X0 = MX.sym('X0', 6)                
@@ -338,8 +337,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
     def get_next_warm_start(self, w_opt):
         output = w_opt.full().flatten()     
-        x = [output[i:6+i] for i in range(w_opt.size()[0]//10+1)]
-        u = [output[6+i:10+i] for i in range(w_opt.size()[0]//10)]
+        x = [output[10*i:6+10*i] for i in range(w_opt.size()[0]//10+1)]
+        u = [output[6+10*i:10+10*i] for i in range(w_opt.size()[0]//10)]
 
         w0 = [DM(x[1])]
         for i in range(len(u)-1):
