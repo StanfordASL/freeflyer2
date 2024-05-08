@@ -44,7 +44,7 @@ def generate_launch_description():
                         "rgb_camera.profile": "640x360x30",
                         "rgb_camera.enable_auto_exposure": False,
                         "rgb_camera.enable_auto_white_balance": False,
-                        "rgb_camera.white_balance": 3800.0
+                        "rgb_camera.white_balance": 3800.0,
                         "enable_infra1": False,
                         "enable_infra2": False,
                     }
