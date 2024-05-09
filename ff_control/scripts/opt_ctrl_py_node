@@ -64,8 +64,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
-        self._deadband = np.array([0.03, 0.03, 0.05, 0.001, 0.001, 0.02])
-        self._readjust_controller_bounds = np.array([0.4, 0.4])
+        self._deadband = np.array([0.01, 0.01, 0.05, 0.005, 0.005, 0.02])
+        self._readjust_controller_bounds = np.array([0.1, 0.1])#np.array([0.4, 0.4])
         self._def_controller = True
 
         # Goal State command
@@ -92,19 +92,22 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # self.declare_parameter('close_opt_gain_kinput', 5.5)
         # self.declare_parameter('close_opt_gain_kvelo', 125.0)
 
-        self.declare_parameter('def_opt_horizon_secs', 10)
-        self.declare_parameter('def_opt_freq', 5.0)
+        self.declare_parameter('def_opt_horizon_secs', 8)
+        self.declare_parameter('def_opt_freq', 6.0)
         self.declare_parameter('def_opt_gain_kth', 1.0)
         self.declare_parameter('def_opt_gain_kpos', 2.5)
-        self.declare_parameter('def_opt_gain_kinput', 20.0)
-        self.declare_parameter('def_opt_gain_kvelo', 40.0)
+        self.declare_parameter('def_opt_gain_kinput', 25.0)
+        self.declare_parameter('def_opt_gain_kvelo', 350.0)
+        self.declare_parameter('def_opt_gain_komega', 10.0)
 
-        self.declare_parameter('close_opt_horizon_secs', 3)
-        self.declare_parameter('close_opt_freq', 15.0)
-        self.declare_parameter('close_opt_gain_kth', 5.5)
-        self.declare_parameter('close_opt_gain_kpos', 90.0)
-        self.declare_parameter('close_opt_gain_kinput', 5.5)
-        self.declare_parameter('close_opt_gain_kvelo', 125.0)
+        self.declare_parameter('close_opt_horizon_secs', 2.5)
+        self.declare_parameter('close_opt_freq', 20.0)
+        self.declare_parameter('close_opt_gain_kth', 12.5)
+        self.declare_parameter('close_opt_gain_kpos', 350.0)
+        self.declare_parameter('close_opt_gain_kinput', 120.0)
+        self.declare_parameter('close_opt_gain_kvelo', 1000.0)
+        self.declare_parameter('close_opt_gain_komega', 10.0)
+
 
         # To start, Frequency based on default control frequency in the optimizer (3Hz)
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
@@ -241,7 +244,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        M / self.Ixx)
 
         # Stepwise Cost
-        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:5]-x[3:5])
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(sumsqr(goal[0:2]-x[0:2])) + self.k_input*(sumsqr(u)) + \
+              self.k_velo*sumsqr(goal[3:5]-x[3:5]) + self.k_omega*sumsqr(goal[5]-x[5])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
@@ -313,7 +317,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(1-cos(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
+        J = J + 300*self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + 300*self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
+              200*self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + 200*self.k_omega*sumsqr(Xk_end[5]-goal[5])
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -321,12 +326,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Create an NLP solver
         nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
-        opts = {'ipopt': {'max_iter':2000,
-                          'print_level':0,
-                          'acceptable_tol':1e-8,
-                          'acceptable_obj_change_tol':1e-6},
-                'print_time': 0}
-        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob, opts); # Solve relaxed problem
+        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
         return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     ############################### Helper Functions for Opt ###############################
@@ -336,13 +336,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         Fy = -u[1] + u[3] 
         M = self.r * (u[0]+u[1]+u[2]+u[3])
         return Fx, Fy, M
-
-    def normsq(self, x):
-        """ norm square operation for casadi variables. """
-        sum = 0
-        for i in range(x.shape[0]):
-            sum += x[i]**2
-        return sum
 
     def unpack_wopt(self, w_opt):
         w_opt = w_opt.full().flatten()
@@ -355,6 +348,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def get_next_warm_start(self, w_opt):
         output = w_opt.full().flatten()     
         x = [output[10*i:6+10*i] for i in range(w_opt.size()[0]//10+1)]
+        # self.get_logger().info(str(x))
         u = [output[6+10*i:10+10*i] for i in range(w_opt.size()[0]//10)]
 
         w0 = [DM(x[1])]
@@ -411,6 +405,13 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             return self.get_parameter('def_opt_gain_kvelo').value
         else:
             return self.get_parameter('close_opt_gain_kvelo').value
+        
+    @property
+    def k_omega(self):
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_komega').value
+        else:
+            return self.get_parameter('close_opt_gain_komega').value
 
 
     @property
