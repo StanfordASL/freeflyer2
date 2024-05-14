@@ -53,18 +53,11 @@ def generate_test_description():
         ),
         launch_arguments={"robot_name": ROBOT_NAME}.items(),
     )
-    pd_ctrl_node = Node(
+    opt_ctrl_node = Node(
         package="ff_control",
-        executable=["pd_ctrl_", impl, "_node"],
-        name="pd_ctrl_node",
+        executable=["opt_ctrl_", impl, "_node"],
+        name="opt_ctrl_node",
         namespace=ROBOT_NAME,
-    )
-    pwm_ctrl_node = Node(
-        package="ff_control",
-        executable=["pwm_ctrl_cpp_node"],
-        name="pwm_ctrl_node",
-        namespace=ROBOT_NAME,
-        condition=IfCondition(PythonExpression(["'", impl, "'", " == 'py'"])),
     )
     estimator = Node(
         package="ff_estimate",
@@ -75,17 +68,16 @@ def generate_test_description():
 
     return LaunchDescription(
         [
-            DeclareLaunchArgument("impl", default_value="cpp", choices=["cpp", "py"]),
+            DeclareLaunchArgument("impl", default_value="py", choices=["cpp", "py"]),
             sim_launch,
-            pd_ctrl_node,
-            pwm_ctrl_node,
+            opt_ctrl_node,
             estimator,
             ReadyToTest(),
         ]
     )
 
 
-class TestPDControlNode(unittest.TestCase):
+class TestOptControlNode(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         rclpy.init()
@@ -95,7 +87,7 @@ class TestPDControlNode(unittest.TestCase):
         rclpy.shutdown()
 
     def setUp(self):
-        self.node = rclpy.create_node("test_pd_ctrl_node")
+        self.node = rclpy.create_node("test_opt_ctrl_node")
 
     def tearDown(self):
         self.node.destroy_node()
@@ -125,11 +117,11 @@ class TestPDControlNode(unittest.TestCase):
             node_flag = False
             while time.time() < end_time and not node_flag:
                 node_flag = (
-                    "pd_ctrl_node" in self.node.get_node_names()
+                    "opt_ctrl_node" in self.node.get_node_names()
                     and "simulator_node" in self.node.get_node_names()
                 )
                 time.sleep(0.1)
-            assert node_flag, "pd_ctrl_node or simulator_node launch failure"
+            assert node_flag, "opt_ctrl_node or simulator_node launch failure"
 
             # wait for node to initialize
             time.sleep(3.0)
@@ -143,7 +135,7 @@ class TestPDControlNode(unittest.TestCase):
             pub.publish(target_state)
 
             # wait for 15 seconds and check results
-            end_time = time.time() + 15.0
+            end_time = time.time() + 25.0
             while time.time() < end_time:
                 rclpy.spin_once(self.node, timeout_sec=0.1)
 
