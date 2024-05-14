@@ -1,6 +1,6 @@
 // MIT License
 //
-// Copyright (c) 2024 Stanford Autonomous Systems Lab
+// Copyright (c) 2023 Stanford Autonomous Systems Lab
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,12 +21,13 @@
 // SOFTWARE.
 
 
+#include <chrono>
 #include <memory>
-#include <vector>
+
 #include <rclcpp/rclcpp.hpp>
 
-#include "ff_drivers/gpio.hpp"
-#include "ff_msgs/msg/thruster_command.hpp"
+#include "ff_drivers/pwm.hpp"
+#include "ff_msgs/msg/thruster_pwm_command.hpp"
 
 #define NUM_THRUSTERS 8
 
@@ -44,36 +45,47 @@ static constexpr int THRUSTER_PINS[NUM_THRUSTERS] = {
 };
 
 
-using ff_msgs::msg::ThrusterCommand;
+using namespace std::chrono_literals;
+using ff_msgs::msg::ThrusterPWMCommand;
 
-class ThrusterNode : public rclcpp::Node
+class ThrusterNode : public ff::PWMManager
 {
 public:
   ThrusterNode()
-  : rclcpp::Node("thruster_node")
+  : ff::PWMManager("thruster_driver_node")
   {
-    // initialize all GPIO
+    // add all PWMs
     for (size_t i = 0; i < NUM_THRUSTERS; ++i) {
-      gpios_.push_back(std::make_unique<ff::GPIO>(THRUSTER_PINS[i]));
+      this->AddSoftPWM(THRUSTER_PINS[i]);
     }
 
+    // set period (default to 10Hz)
+    double period = this->declare_parameter("period", .1);
+    this->SetPeriodAll(period * 1s);
+    // update period on the fly
+    sub_params_ = std::make_shared<rclcpp::ParameterEventHandler>(this);
+    cb_period_ = sub_params_->add_parameter_callback(
+      "period",
+      [this](const rclcpp::Parameter & p) {SetPeriodAll(p.as_double() * 1s);});
+
+    // start all PWMs
+    this->EnableAll();
+
     // listen to commands
-    sub_thruster_ = this->create_subscription<ThrusterCommand>(
-      "commands/binary_thrust",
-      10,
-      [this](const ThrusterCommand::SharedPtr msg) {ThrusterCommandCallback(msg);});
+    sub_duty_cycle_ = this->create_subscription<ThrusterPWMCommand>(
+      "commands/duty_cycle",
+      10, [this](const ThrusterPWMCommand::SharedPtr msg) {DutyCycleCallback(msg);});
   }
 
 private:
-  std::vector<std::unique_ptr<ff::GPIO>> gpios_;
-  rclcpp::Subscription<ThrusterCommand>::SharedPtr sub_thruster_;
+  std::shared_ptr<rclcpp::ParameterEventHandler> sub_params_;
+  std::shared_ptr<rclcpp::ParameterCallbackHandle> cb_period_;
+  rclcpp::Subscription<ThrusterPWMCommand>::SharedPtr sub_duty_cycle_;
 
-  void ThrusterCommandCallback(const ThrusterCommand::SharedPtr msg)
+  void DutyCycleCallback(const ThrusterPWMCommand::SharedPtr msg)
   {
     for (size_t i = 0; i < NUM_THRUSTERS; ++i) {
-      if (gpios_[i]->GetState() != msg->switches[i]) {
-        gpios_[i]->SetState(msg->switches[i]);
-      }
+      this->SetDutyCycle(i, msg->duty_cycles[i]);
     }
   }
 };

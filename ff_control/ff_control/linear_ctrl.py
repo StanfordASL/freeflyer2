@@ -28,6 +28,7 @@ from ff_control.wrench_ctrl import WrenchController
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from ff_msgs.msg import Wrench2D
+from ff_control.utils import state2vec
 
 import numpy as np
 
@@ -88,9 +89,9 @@ class LinearController(WrenchController):
 
         # convert desired state to vector form
         if isinstance(state_des, FreeFlyerState):
-            state_des = self.state2vec(state_des)
+            state_des = state2vec(state_des)
 
-        state_vector = self.state2vec(self.get_state())
+        state_vector = state2vec(self.get_state())
         state_delta = state_des - state_vector
         # wrap angle delta to [-pi, pi]
         state_delta[2] = (state_delta[2] + np.pi) % (2 * np.pi) - np.pi
@@ -110,43 +111,6 @@ class LinearController(WrenchController):
         Sub-classes should override this function
         """
         pass
-
-    @staticmethod
-    def state2vec(state: FreeFlyerState) -> np.ndarray:
-        """
-        Convert state message to state vector.
-
-        :param state: state message
-        :return: state vector
-        """
-        return np.array(
-            [
-                state.pose.x,
-                state.pose.y,
-                state.pose.theta,
-                state.twist.vx,
-                state.twist.vy,
-                state.twist.wz,
-            ]
-        )
-
-    @staticmethod
-    def vec2state(vec: np.ndarray) -> FreeFlyerState:
-        """
-        Convert state vector to state message.
-
-        :param vec: state vector
-        :return: state message
-        """
-        state = FreeFlyerState()
-        state.pose.x = vec[0]
-        state.pose.y = vec[1]
-        state.pose.theta = vec[2]
-        state.twist.vx = vec[3]
-        state.twist.vy = vec[4]
-        state.twist.wz = vec[5]
-
-        return state
 
     def state_is_ready(self) -> bool:
         """

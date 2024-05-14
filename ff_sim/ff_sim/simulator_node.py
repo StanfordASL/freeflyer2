@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2023 Stanford Autonomous Systems Lab
+# Copyright (c) 2024 Stanford Autonomous Systems Lab
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -374,9 +374,7 @@ class FreeFlyerSimulator(Node):
         f[0:2] = v
         f[2] = thetadot
         thetaddot = (M - F[1] * p0[0] + F[0] * p0[1]) / J
-        f[3:5] = np.matmul(
-            R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0))
-        )
+        f[3:5] = np.matmul(R, (F / m - (thetaddot * np.array([-p0[1], p0[0]]) - thetadot**2 * p0)))
         f[5] = thetaddot
 
         # add constant force due to table tilt
@@ -403,6 +401,9 @@ class FreeFlyerSimulator(Node):
 
         else:
             print("[FreeFlyerSimulator::compute_dynamics_dt]: Unknown Discretization Scheme.")
+
+        # Wrap theta to [-pi, pi]
+        x_next[2] = (x_next[2] + np.pi) % (2 * np.pi) - np.pi
 
         return x_next
 
