@@ -23,6 +23,7 @@ def for_computation(input_iterable):
     current_idx = input_iterable[0]
     input_dict = input_iterable[1]
     model = input_dict['model']
+    model_dag = input_dict['model_dag']
     test_loader = input_dict['test_loader']
     transformer_ws = input_dict['transformer_ws']
     mdp_constr = input_dict['mdp_constr']
@@ -31,20 +32,22 @@ def for_computation(input_iterable):
     # Output dictionary initialization
     out = {'feasible_cvx' : True,
            'feasible_scp_cvx' : True,
-           #'feasible_scp_line' : True,
+           'feasible_scp_dag' : True,
            'feasible_DT' : True,
            'J_vect_scp_cvx': [],
-           #'J_vect_line_scp' : [],
+           'J_vect_scp_dag' : [],
            'J_vect_scp_DT': [],
            'J_cvx' : [],
            'J_DT' : [],
+           'J_dag' : [],
            'iter_scp_cvx': [],
-           #'iter_scp_line' : [],
+           'iter_scp_dag' : [],
            'iter_scp_DT': [],
            'runtime_cvx': [],
            'runtime_DT': [],
+           'runtime_dag' : [],
            'runtime_scp_cvx': [],
-           #'runtime_scp_line' : [],
+           'runtime_scp_dag' : [],
            'runtime_scp_DT': [],
            'ctgs0_cvx': [],
            'cvx_problem' : False,
@@ -116,23 +119,8 @@ def for_computation(input_iterable):
             out['runtime_scp_cvx'] = runtime_scp_cvx
         else:
             out['feasible_scp_cvx'] = False
-        
-        '''# Solve SCP with line as warm starting
-        runtime0_scp_line = time.time()
-        states_scp_line, actions_scp_line, J_vect_scp_line, feas_scp_line, iter_scp_line = ocp_obstacle_avoidance_line_ws(quad_model, state_init, state_final, initial_guess='line')
-        runtime1_scp_line = time.time()
-        runtime_scp_line = runtime1_scp_line - runtime0_scp_line
-        
-        if np.char.equal(feas_scp_line,'optimal'):
-            # Save scp_cvx data in the output dictionary
-            out['J_vect_scp_line'] = J_vect_scp_line
-            out['iter_scp_line'] = iter_scp_line
-            out['runtime_scp_line'] = runtime_scp_line
-        else:
-            out['feasible_scp_line'] = False'''
     else:
         out['feasible_scp_cvx'] = False
-        #out['feasible_scp_line'] = False
         out['feasible_cvx'] = False
 
     ####### Warmstart Transformer
@@ -166,27 +154,62 @@ def for_computation(input_iterable):
         out['iter_scp_DT'] = iter_scp_DT
         out['runtime_scp_DT'] = runtime_scp_DT
     else:
-        out['feasible_DT'] = False   
+        out['feasible_DT'] = False
+
+    rtg_0 = -J_cvx
+    # Import the Transformer_dag
+    if np.char.equal(feas_cvx,'optimal') and mdp_constr:
+        if transformer_ws == 'dyn':
+            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+        elif transformer_ws == 'ol':
+            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+    else:
+        if transformer_ws == 'dyn':
+            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)
+        elif transformer_ws == 'ol':
+            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)    
+    out['J_dag'] = np.sum(la.norm(DT_dag_trajectory['dv_' + transformer_ws], ord=1, axis=0))
+    states_ws_DT_dag = np.hstack((DT_dag_trajectory['xypsi_' + transformer_ws], state_final.reshape(-1,1))) # set warm start
+    actions_ws_DT_dag = DT_dag_trajectory['dv_' + transformer_ws] # set warm start
+    # Save DT in the output dictionary
+    out['runtime_dag'] = runtime_DT_dag
+
+    # Solve SCP
+    runtime0_scp_dag = time.time()
+    traj_scp_dag, J_vect_scp_dag, iter_scp_dag, feas_scp_dag = ocp_obstacle_avoidance(ff_model, states_ws_DT_dag, actions_ws_DT_dag, state_init, state_final)
+    runtime1_scp_dag = time.time()
+    runtime_scp_dag = runtime1_scp_dag - runtime0_scp_dag
+    
+    if np.char.equal(feas_scp_dag,'optimal'):
+        # Save scp_DT in the output dictionary
+        out['J_vect_scp_dag'] = J_vect_scp_dag
+        out['iter_scp_dag'] = iter_scp_dag
+        out['runtime_scp_dag'] = runtime_scp_dag
+    else:
+        out['feasible_scp_dag'] = False  
 
     return out
 
 if __name__ == '__main__':
 
     transformer_ws = 'dyn' # 'dyn'/'ol'
-    transformer_model_name = 'checkpoint_ff_ctgrtg'
+    transformer_model_name = 'checkpoint_ff_ctgrtg_art'
+    transformer_model_name_dag = 'checkpoint_ff_ctgrtg_art_cl_9'
+    import_config = DT_manager.transformer_import_config(transformer_model_name)
     set_start_method('spawn')
-    num_processes = 16
+    num_processes = 20
 
     # Get the datasets and loaders from the torch data
-    import_config = DT_manager.transformer_import_config(transformer_model_name)
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], timestep_norm=import_config['timestep_norm'])
     train_loader, eval_loader, test_loader = dataloaders
     model = DT_manager.get_DT_model(transformer_model_name, train_loader, eval_loader)
+    model_dag = DT_manager.get_DT_model(transformer_model_name_dag, train_loader, eval_loader)
 
     # Parallel for inputs
     N_data_test = test_loader.dataset.n_data
     other_args = {
         'model' : model,
+        'model_dag' : model_dag,
         'test_loader' : test_loader,
         'transformer_ws' : transformer_ws,
         'mdp_constr' : import_config['mdp_constr'],
@@ -195,17 +218,19 @@ if __name__ == '__main__':
     print('Sample_init_final =', other_args['sample_init_final'])
 
     J_vect_scp_cvx = np.empty(shape=(N_data_test, iter_max_SCP), dtype=float)
-    #J_vect_scp_line = np.empty(shape=(N_data_test, iter_max_SCP), dtype=float)
+    J_vect_scp_dag = np.empty(shape=(N_data_test, iter_max_SCP), dtype=float)
     J_vect_scp_DT = np.empty(shape=(N_data_test, iter_max_SCP), dtype=float)
     J_cvx = np.empty(shape=(N_data_test, ), dtype=float)
     J_DT = np.empty(shape=(N_data_test, ), dtype=float)
+    J_dag = np.empty(shape=(N_data_test, ), dtype=float)
     iter_scp_cvx = np.empty(shape=(N_data_test, ), dtype=float)
-    #iter_scp_line = np.empty(shape=(N_data_test, ), dtype=float) 
+    iter_scp_dag = np.empty(shape=(N_data_test, ), dtype=float) 
     iter_scp_DT = np.empty(shape=(N_data_test, ), dtype=float) 
     runtime_cvx = np.empty(shape=(N_data_test, ), dtype=float) 
-    runtime_DT = np.empty(shape=(N_data_test, ), dtype=float) 
+    runtime_DT = np.empty(shape=(N_data_test, ), dtype=float)
+    runtime_dag = np.empty(shape=(N_data_test, ), dtype=float)  
     runtime_scp_cvx = np.empty(shape=(N_data_test, ), dtype=float) 
-    #runtime_scp_line = np.empty(shape=(N_data_test, ), dtype=float) 
+    runtime_scp_dag = np.empty(shape=(N_data_test, ), dtype=float) 
     runtime_scp_DT = np.empty(shape=(N_data_test, ), dtype=float) 
     ctgs0_cvx = np.empty(shape=(N_data_test, ), dtype=float)
     cvx_problem = np.full(shape=(N_data_test, ), fill_value=False)
@@ -215,7 +240,7 @@ if __name__ == '__main__':
 
     i_unfeas_cvx = []
     i_unfeas_scp_cvx = []
-    #i_unfeas_scp_line = []
+    i_unfeas_scp_dag = []
     i_unfeas_DT = []
 
     # Pool creation --> Should automatically select the maximum number of processes
@@ -241,13 +266,6 @@ if __name__ == '__main__':
             runtime_scp_cvx[i] = res['runtime_scp_cvx']
         else:
             i_unfeas_scp_cvx += [ i ]
-        
-        '''if res['feasible_scp_line']:
-            J_vect_scp_line[i,:] = res['J_vect_scp_line']
-            iter_scp_line[i] = res['iter_scp_line']
-            runtime_scp_line[i] = res['runtime_scp_line']
-        else:
-            i_unfeas_scp_line += [ i ]'''
 
         if res['feasible_DT']:
             J_DT[i] = res['J_DT']
@@ -258,21 +276,32 @@ if __name__ == '__main__':
         else:
             i_unfeas_DT += [ i ]
         
+        if res['feasible_scp_dag']:
+            J_dag[i] = res['J_dag']
+            J_vect_scp_dag[i,:] = res['J_vect_scp_dag']
+            iter_scp_dag[i] = res['iter_scp_dag']
+            runtime_dag[i] = res['runtime_dag']
+            runtime_scp_dag[i] = res['runtime_scp_dag']
+        else:
+            i_unfeas_scp_dag += [ i ]
+        
         if i % 5000 == 0:
             #  Save dataset (local folder for the workstation)
-            np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_' + transformer_ws + str(i),
+            np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_vs_dag_' + transformer_ws + '_test'+ str(i),
                                 J_vect_scp_cvx = J_vect_scp_cvx,
-                                #J_vect_scp_line = J_vect_scp_line,
+                                J_vect_scp_dag = J_vect_scp_dag,
                                 J_vect_scp_DT = J_vect_scp_DT,
                                 J_cvx = J_cvx,
                                 J_DT = J_DT,
+                                J_dag = J_dag,
                                 iter_scp_cvx = iter_scp_cvx,
-                                #iter_scp_line = iter_scp_line,
+                                iter_scp_dag = iter_scp_dag,
                                 iter_scp_DT = iter_scp_DT,
                                 runtime_cvx = runtime_cvx,
                                 runtime_DT = runtime_DT,
+                                runtime_dag = runtime_dag,
                                 runtime_scp_cvx = runtime_scp_cvx,
-                                #runtime_scp_line = runtime_scp_line,
+                                runtime_scp_dag = runtime_scp_dag,
                                 runtime_scp_DT = runtime_scp_DT,
                                 ctgs0_cvx = ctgs0_cvx, 
                                 cvx_problem = cvx_problem,
@@ -281,25 +310,27 @@ if __name__ == '__main__':
                                 state_final = state_final,
                                 i_unfeas_cvx = i_unfeas_cvx,
                                 i_unfeas_scp_cvx = i_unfeas_scp_cvx,
-                                #i_unfeas_scp_line = i_unfeas_scp_line,
+                                i_unfeas_scp_dag = i_unfeas_scp_dag,
                                 i_unfeas_DT = i_unfeas_DT
                                 )
 
     
     #  Save dataset (local folder for the workstation)
-    np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_' + transformer_ws,
+    np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_vs_dag_' + transformer_ws + '_test',
                         J_vect_scp_cvx = J_vect_scp_cvx,
-                        #J_vect_scp_line = J_vect_scp_line,
+                        J_vect_scp_dag = J_vect_scp_dag,
                         J_vect_scp_DT = J_vect_scp_DT,
                         J_cvx = J_cvx,
                         J_DT = J_DT,
+                        J_dag = J_dag,
                         iter_scp_cvx = iter_scp_cvx,
-                        #iter_scp_line = iter_scp_line,
+                        iter_scp_dag = iter_scp_dag,
                         iter_scp_DT = iter_scp_DT,
                         runtime_cvx = runtime_cvx,
                         runtime_DT = runtime_DT,
+                        runtime_dag = runtime_dag,
                         runtime_scp_cvx = runtime_scp_cvx,
-                        #runtime_scp_line = runtime_scp_line,
+                        runtime_scp_dag = runtime_scp_dag,
                         runtime_scp_DT = runtime_scp_DT,
                         ctgs0_cvx = ctgs0_cvx, 
                         cvx_problem = cvx_problem,
@@ -308,6 +339,6 @@ if __name__ == '__main__':
                         state_final = state_final,
                         i_unfeas_cvx = i_unfeas_cvx,
                         i_unfeas_scp_cvx = i_unfeas_scp_cvx,
-                        #i_unfeas_scp_line = i_unfeas_scp_line,
+                        i_unfeas_scp_dag = i_unfeas_scp_dag,
                         i_unfeas_DT = i_unfeas_DT
                         )
