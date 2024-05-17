@@ -14,6 +14,7 @@ N_CLUSTERS = 4
 # time problem constants
 '''S = 101 # number of control switches
 n_time_rpod = S-1'''
+chunksize = 100 #None
 
 # constants
 mass = 16.0
@@ -30,7 +31,7 @@ Lambda_inv = np.array([[  0, 0.5,  1/(4*thrusters_lever_arm)],
                        [0.5,   0,  1/(4*thrusters_lever_arm)]])
 
 # Table, start and goal regions dimensions
-dataset_scenario = 'time_whole_table' #'time'
+dataset_scenario = 'time' #'time_whole_table' #
 table = {
     'xy_low' : np.array([0.,0.]),
     'xy_up' : np.array([3.5, 2.5])

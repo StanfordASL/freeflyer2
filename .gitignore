@@ -16,6 +16,7 @@ __pycache__/
 *.npy
 *.bin
 *.pkl
+*.safetensor
 
 # Distribution / packaging
 .Python

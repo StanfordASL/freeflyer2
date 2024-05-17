@@ -10,10 +10,12 @@ from decision_transformer.art import AutonomousFreeflyerTransformer_pred_time
 import torch
 import decision_transformer.manage_time as TTO_manager
 from decision_transformer.manage_time import device
+from optimization.ff_scenario_time import chunksize
 
-model_name_4_saving = 'checkpoint_ff_time_ctgrtg'
+model_name_4_saving = 'checkpoint_ff_time_chunk' +str(chunksize) + '_ctgrtg'
 model_config = TTO_manager.transformer_import_config(model_name_4_saving)
-datasets, dataloaders = TTO_manager.get_train_val_test_data(mdp_constr=model_config['mdp_constr'], dataset_scenario=model_config['dataset_scenario'], timestep_norm=model_config['timestep_norm'])
+datasets, dataloaders = TTO_manager.get_train_val_test_data(mdp_constr=model_config['mdp_constr'], dataset_scenario=model_config['dataset_scenario'],
+                                                            timestep_norm=model_config['timestep_norm'], chunksize=model_config['chunksize'])
 train_loader, eval_loader, test_loader = dataloaders
 n_state = train_loader.dataset.n_state
 n_data = train_loader.dataset.n_data
