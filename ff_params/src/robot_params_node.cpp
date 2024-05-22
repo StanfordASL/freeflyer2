@@ -51,7 +51,7 @@ public:
     // actuators
     this->declare_parameters<double>(
       "actuators", {
-      {"F_max_per_thruster", 0.25},       // max force per thruster, in [N]
+      {"F_max_per_thruster", 0.2},       // max force per thruster, in [N]
       {"thrusters_lever_arm", 0.11461},  // lever arm, in [m]
       {"F_body_max", 0.4},        // body frame force max, in [N]
       {"M_body_max", 0.05},       // body frame moment / torque max, in [Nm]
