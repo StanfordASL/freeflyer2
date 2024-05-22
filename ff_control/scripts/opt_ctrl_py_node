@@ -64,8 +64,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
-        self._deadband = np.array([0.03, 0.03, 0.05, 0.001, 0.001, 0.02])
-        self._readjust_controller_bounds = np.array([0.2, 0.2])#np.array([0.4, 0.4])
+        self._deadband = np.array([0.01, 0.01, 0.05, 0.001, 0.001, 0.02])
+        self._readjust_controller_bounds = np.array([0.1, 0.1])#np.array([0.4, 0.4])
         self._def_controller = True
 
         # Goal State command
@@ -92,19 +92,19 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # self.declare_parameter('close_opt_gain_kinput', 5.5)
         # self.declare_parameter('close_opt_gain_kvelo', 125.0)
 
-        self.declare_parameter('def_opt_horizon_secs', 10)
-        self.declare_parameter('def_opt_freq', 5.0)
-        self.declare_parameter('def_opt_gain_kth', 10.0)
-        self.declare_parameter('def_opt_gain_kpos', 1.5)
-        self.declare_parameter('def_opt_gain_kinput', 40.0)
-        self.declare_parameter('def_opt_gain_kvelo', 60.0)
+        self.declare_parameter('def_opt_horizon_secs', 8)
+        self.declare_parameter('def_opt_freq', 6.0)
+        self.declare_parameter('def_opt_gain_kth', 80.0)
+        self.declare_parameter('def_opt_gain_kpos', 5.5)
+        self.declare_parameter('def_opt_gain_kinput', 80.0)
+        self.declare_parameter('def_opt_gain_kvelo', 40.0)
 
         self.declare_parameter('close_opt_horizon_secs', 0.4)
         self.declare_parameter('close_opt_freq', 20.0)
-        self.declare_parameter('close_opt_gain_kth', 5.5)
+        self.declare_parameter('close_opt_gain_kth', 40.5)
         self.declare_parameter('close_opt_gain_kpos', 70.0)
-        self.declare_parameter('close_opt_gain_kinput', 200.0)
-        self.declare_parameter('close_opt_gain_kvelo', 125.0)
+        self.declare_parameter('close_opt_gain_kinput', 80.0)
+        self.declare_parameter('close_opt_gain_kvelo', 120.0)
 
 
         # To start, Frequency based on default control frequency in the optimizer (3Hz)
@@ -346,7 +346,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def get_next_warm_start(self, w_opt):
         output = w_opt.full().flatten()     
         x = [output[10*i:6+10*i] for i in range(w_opt.size()[0]//10+1)]
-        self.get_logger().info(str(x))
+        # self.get_logger().info(str(x))
         u = [output[6+10*i:10+10*i] for i in range(w_opt.size()[0]//10)]
 
         w0 = [DM(x[1])]
