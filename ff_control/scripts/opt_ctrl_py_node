@@ -120,7 +120,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         :param state_des: desired state
         """
-        eps = 1e-4
         t = time.time()
         # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
@@ -214,7 +213,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.send_control(self.get_state(), self._state_desired.state)
 
     def init_solver(self):
-        eps=1e-2
         # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
         lbx = [0., 0., -np.pi, -0.5, -0.5, -0.5]
         ubx = [4., 2., np.pi, 0.5, 0.5, 0.5]
@@ -244,7 +242,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        M / self.Ixx)
 
         # Stepwise Cost
-        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(sumsqr(goal[0:2]-x[0:2]+eps)) + self.k_input*(sumsqr(u+eps)) + self.k_velo*sumsqr(goal[3:5]-x[3:5]+eps)
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(sumsqr(goal[0:2]-x[0:2])) + self.k_input*(sumsqr(u)) + self.k_velo*sumsqr(goal[3:5]-x[3:5])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
