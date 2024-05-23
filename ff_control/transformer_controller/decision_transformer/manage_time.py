@@ -121,6 +121,7 @@ class RpodDataset(Dataset):
         timesteps = torch.tensor([[i for i in range(self.chunksize)] for _ in ix]).view(self.chunksize).long().unsqueeze(0)
         attention_mask = torch.ones(1, self.chunksize).view(self.chunksize).long().unsqueeze(0)
 
+        time_discr = torch.tensor(time_discr)
         time_sec = torch.tensor(self.data['data_param']['time_sec'][ix].reshape((1, self.chunksize))).unsqueeze(0)
 
         if self.target == False:
@@ -171,6 +172,9 @@ def transformer_import_config(model_name):
             config['dataset_scenario'] = dataset_scenario
     else:
         raise NameError('No transformer model with name', model_name, 'found!')
+    
+    if ('chunk' in model_name) and (config['chunksize'] is None):
+        raise NameError('Transformer model for scenario with time chunks, but "chunksize" in ff_scenario_time.py is \"' + str(config['chunksize']) + '\"')
     
     return config
 
@@ -397,17 +401,20 @@ def get_DT_model(model_name, train_loader, eval_loader):
 
     return model.eval()
 
-def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1., ctg_perc=1., rtg=None, ttg=None, use_dynamics=True, ctg_clipped=True):
+def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1., ctg_perc=1., rtg=None, ttg=None, use_dynamics=True, ctg_clipped=True, chunksize=None):
     # Get dimensions and statistics from the dataset
     n_state = test_loader.dataset.n_state
     n_time = test_loader.dataset.max_len
     n_action = test_loader.dataset.n_action
     data_stats = test_loader.dataset.data_stats
+    if chunksize is None:
+        chunksize = n_time
 
     # Unnormalize the data sample and compute orbital period
     if test_loader.dataset.mdp_constr:
         states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
         ctgs_i = ctgs_i.view(1, n_time, 1)
+        ttgs_i = ttgs_i.view(1, n_time, 1)
     else:
         states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
     states_i_unnorm = (states_i * data_stats['states_std']) + data_stats['states_mean']
@@ -491,62 +498,66 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
         dv_true[:, t] = [action_true_t[i].item() for i in range(n_action)]
         ttgs_true[:, t] = ttg_true_t[0].item()
 
+        # Time interval to consider
+        start_t = max(t - chunksize + 1, 0)
+        end_t = t + 1
+
         ##### Open-loop inference
         # Compute time pred for open-loop model
         if (ttg is None) and (test_loader.dataset.mdp_constr):
             with torch.no_grad():
                 _, _, ttg_preds_ol = model(
-                    states=states_ol.to(device),
-                    actions=actions_ol.to(device),
-                    goal=goal_ol.to(device),
-                    returns_to_go=rtgs_ol.to(device),
-                    constraints_to_go=ctgs_ol.to(device),
-                    times_to_go=ttgs_ol.to(device),
-                    timesteps=timesteps_ol.to(device),
-                    attention_mask=attention_mask_ol.to(device),
+                    states=states_ol[:,start_t:end_t].to(device),
+                    actions=actions_ol[:,start_t:end_t].to(device),
+                    goal=goal_ol[:,start_t:end_t].to(device),
+                    returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
+                    constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
+                    times_to_go=ttgs_ol[:,start_t:end_t].to(device),
+                    timesteps=timesteps_ol[:,:chunksize].to(device),
+                    attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                     return_dict=False
                 )
-            ttg_ol_t = ttg_preds_ol[0,t].cpu()
-            ttgs_ol[:,-1,:] = ttg_preds_ol[0,t][None,None,:].float()
+            ttg_ol_t = ttg_preds_ol[0,-1].cpu() ######## camabiare indice per ttg_preds_ol e analoghi
+            ttgs_ol[:,-1,:] = ttg_preds_ol[0,-1][None,None,:].float()
             ttg_ol_t_unnorm = (ttg_ol_t.to(device) * (data_stats['ttgs_std'][t].to(device)+1e-6)) + data_stats['ttgs_mean'][t].to(device)
             ttgs_pred_ol[:, t] = ttg_ol_t_unnorm.item()
 
         # Compute action pred for open-loop model
         with torch.no_grad():
             _, action_preds_ol, _ = model(
-                states=states_ol.to(device),
-                actions=actions_ol.to(device),
-                goal=goal_ol.to(device),
-                returns_to_go=rtgs_ol.to(device),
-                constraints_to_go=ctgs_ol.to(device),
-                times_to_go=ttgs_ol.to(device),
-                timesteps=timesteps_ol.to(device),
-                attention_mask=attention_mask_ol.to(device),
+                states=states_ol[:,start_t:end_t].to(device),
+                actions=actions_ol[:,start_t:end_t].to(device),
+                goal=goal_ol[:,start_t:end_t].to(device),
+                returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
+                constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
+                times_to_go=ttgs_ol[:,start_t:end_t].to(device),
+                timesteps=timesteps_ol[:,:chunksize].to(device),
+                attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
-        action_ol_t = action_preds_ol[0,t].cpu()
-        actions_ol[:,-1,:] = action_preds_ol[0,t][None,None,:].float()
+        action_ol_t = action_preds_ol[0,-1].cpu() ######## camabiare indice per ttg_preds_ol e analoghi
+        actions_ol[:,-1,:] = action_preds_ol[0,-1][None,None,:].float()
         action_ol_t_unnorm = (action_ol_t.to(device) * (data_stats['actions_std'][t].to(device)+1e-6)) + data_stats['actions_mean'][t].to(device)
         dv_ol[:, t] = [action_ol_t_unnorm[i].item() for i in range(n_action)]
 
         with torch.no_grad():
             state_preds_ol, _, _ = model(
-                states=states_ol.to(device),
-                actions=actions_ol.to(device),
-                goal=goal_ol.to(device),
-                returns_to_go=rtgs_ol.to(device),
-                constraints_to_go=ctgs_ol.to(device),
-                times_to_go=ttgs_ol.to(device),
-                timesteps=timesteps_ol.to(device),
-                attention_mask=attention_mask_ol.to(device),
+                states=states_ol[:,start_t:end_t].to(device),
+                actions=actions_ol[:,start_t:end_t].to(device),
+                goal=goal_ol[:,start_t:end_t].to(device),
+                returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
+                constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
+                times_to_go=ttgs_ol[:,start_t:end_t].to(device),
+                timesteps=timesteps_ol[:,:chunksize].to(device),
+                attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
-        state_ol_t = state_preds_ol[0,t].cpu()
+        state_ol_t = state_preds_ol[0,-1].cpu()
 
         # Open-loop propagation of state variable
         if t != n_time-1:
             # State
-            states_ol = torch.cat((states_ol, torch.tensor(state_preds_ol[:, t][None,:,:]).to(device)), dim=1).float()
+            states_ol = torch.cat((states_ol, torch.tensor(state_preds_ol[:, -1][None,:,:]).to(device)), dim=1).float()
             state_ol_t_unnorm = (state_ol_t.to(device) * (data_stats['states_std'][t+1].to(device)+1e-6)) + data_stats['states_mean'][t+1].to(device)
             xypsi_ol[:, t+1] = [state_ol_t_unnorm[i].item() for i in range(n_state)]
 
@@ -581,36 +592,36 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
             if (ttg is None) and (test_loader.dataset.mdp_constr):
                 with torch.no_grad():
                     _, _, ttg_preds_dyn = model(
-                        states=states_dyn.to(device),
-                        actions=actions_dyn.to(device),
-                        goal=goal_dyn.to(device),
-                        returns_to_go=rtgs_dyn.to(device),
-                        constraints_to_go=ctgs_dyn.to(device),
-                        times_to_go=ttgs_dyn.to(device),
-                        timesteps=timesteps_dyn.to(device),
-                        attention_mask=attention_mask_dyn.to(device),
+                        states=states_dyn[:,start_t:end_t].to(device),
+                        actions=actions_dyn[:,start_t:end_t].to(device),
+                        goal=goal_dyn[:,start_t:end_t].to(device),
+                        returns_to_go=rtgs_dyn[:,start_t:end_t].to(device),
+                        constraints_to_go=ctgs_dyn[:,start_t:end_t].to(device),
+                        times_to_go=ttgs_dyn[:,start_t:end_t].to(device),
+                        timesteps=timesteps_dyn[:,:chunksize].to(device),
+                        attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                         return_dict=False
                     )
-                ttg_dyn_t = ttg_preds_dyn[0,t].cpu()
-                ttgs_dyn[:,-1,:] = ttg_preds_dyn[0,t][None,None,:].float()
+                ttg_dyn_t = ttg_preds_dyn[0,-1].cpu()
+                ttgs_dyn[:,-1,:] = ttg_preds_dyn[0,-1][None,None,:].float()
                 ttg_dyn_t_unnorm = (ttg_dyn_t.to(device) * (data_stats['ttgs_std'][t].to(device)+1e-6)) + data_stats['ttgs_mean'][t].to(device)
                 ttgs_pred_dyn[:, t] = ttg_dyn_t_unnorm.item()
 
             # Compute action pred for dynamics model
             with torch.no_grad():
                 _, action_preds_dyn, _ = model(
-                    states=states_dyn.to(device),
-                    actions=actions_dyn.to(device),
-                    goal=goal_dyn.to(device),
-                    returns_to_go=rtgs_dyn.to(device),
-                    constraints_to_go=ctgs_dyn.to(device),
-                    times_to_go=ttgs_dyn.to(device),
-                    timesteps=timesteps_dyn.to(device),
-                    attention_mask=attention_mask_dyn.to(device),
+                    states=states_dyn[:,start_t:end_t].to(device),
+                    actions=actions_dyn[:,start_t:end_t].to(device),
+                    goal=goal_dyn[:,start_t:end_t].to(device),
+                    returns_to_go=rtgs_dyn[:,start_t:end_t].to(device),
+                    constraints_to_go=ctgs_dyn[:,start_t:end_t].to(device),
+                    times_to_go=ttgs_dyn[:,start_t:end_t].to(device),
+                    timesteps=timesteps_dyn[:,:chunksize].to(device),
+                    attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                     return_dict=False
                 )
-            action_dyn_t = action_preds_dyn[0,t].cpu()
-            actions_dyn[:,-1,:] = action_preds_dyn[0,t][None,None,:].float()
+            action_dyn_t = action_preds_dyn[0,-1].cpu()
+            actions_dyn[:,-1,:] = action_preds_dyn[0,-1][None,None,:].float()
             action_dyn_t_unnorm = (action_dyn_t.to(device) * (data_stats['actions_std'][t].to(device)+1e-6)) + data_stats['actions_mean'][t].to(device)
             dv_dyn[:, t] = [action_dyn_t_unnorm[i].item() for i in range(n_action)]
 
@@ -653,9 +664,9 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
         'dv_true' : dv_true,
         'dv_dyn' : dv_dyn,
         'dv_ol' : dv_ol,
-        'ttgs_true' : ttgs_i,
-        'ttgs_ol' : ttgs_ol,
-        'ttgs_dyn' : ttgs_dyn,
+        'ttgs_true' : ttgs_true,
+        'ttgs_ol' : ttgs_pred_ol,
+        'ttgs_dyn' : ttgs_pred_dyn,
         'time' : time_sec
     }
 
@@ -1053,9 +1064,9 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
 
     # time to go
     plt.figure()
-    plt.plot(time_sec[0], ttgs_true[0].cpu(), 'k-', label='true')
-    plt.plot(time_sec[0], ttgs_ol[0].cpu(), 'b-', label='pred o.l.')
-    plt.plot(time_sec[0], ttgs_dyn[0].cpu(), 'g-', label='pred dyn')
+    plt.plot(time_sec[0], ttgs_true[0], 'k-', label='true')
+    plt.plot(time_sec[0], ttgs_ol[0], 'b-', label='pred o.l.')
+    plt.plot(time_sec[0], ttgs_dyn[0], 'g-', label='pred dyn')
     plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
     plt.ylabel('Time-to-go [s]', fontsize=10)
     plt.grid(True)
