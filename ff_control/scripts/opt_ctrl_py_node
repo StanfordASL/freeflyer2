@@ -64,7 +64,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
-        self._deadband = np.array([0.01, 0.01, 0.05, 0.001, 0.001, 0.02])
+        self._deadband = np.array([0.01, 0.01, 0.05, 0.005, 0.005, 0.02])
         self._readjust_controller_bounds = np.array([0.1, 0.1])#np.array([0.4, 0.4])
         self._def_controller = True
 
@@ -97,14 +97,14 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('def_opt_gain_kth', 60.0)
         self.declare_parameter('def_opt_gain_kpos', 5.5)
         self.declare_parameter('def_opt_gain_kinput', 80.0)
-        self.declare_parameter('def_opt_gain_kvelo', 70.0)
+        self.declare_parameter('def_opt_gain_kvelo', 110.0)
 
         self.declare_parameter('close_opt_horizon_secs', 0.4)
         self.declare_parameter('close_opt_freq', 20.0)
-        self.declare_parameter('close_opt_gain_kth', 20.5)
-        self.declare_parameter('close_opt_gain_kpos', 80.0)
-        self.declare_parameter('close_opt_gain_kinput', 130.0)
-        self.declare_parameter('close_opt_gain_kvelo', 40.0)
+        self.declare_parameter('close_opt_gain_kth', 40.5)
+        self.declare_parameter('close_opt_gain_kpos', 120.0)
+        self.declare_parameter('close_opt_gain_kinput', 120.0)
+        self.declare_parameter('close_opt_gain_kvelo', 150.0)
 
 
         # To start, Frequency based on default control frequency in the optimizer (3Hz)
