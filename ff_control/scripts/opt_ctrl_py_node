@@ -94,17 +94,17 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         self.declare_parameter('def_opt_horizon_secs', 8)
         self.declare_parameter('def_opt_freq', 6.0)
-        self.declare_parameter('def_opt_gain_kth', 80.0)
+        self.declare_parameter('def_opt_gain_kth', 60.0)
         self.declare_parameter('def_opt_gain_kpos', 5.5)
         self.declare_parameter('def_opt_gain_kinput', 80.0)
-        self.declare_parameter('def_opt_gain_kvelo', 40.0)
+        self.declare_parameter('def_opt_gain_kvelo', 70.0)
 
         self.declare_parameter('close_opt_horizon_secs', 0.4)
         self.declare_parameter('close_opt_freq', 20.0)
-        self.declare_parameter('close_opt_gain_kth', 40.5)
-        self.declare_parameter('close_opt_gain_kpos', 70.0)
-        self.declare_parameter('close_opt_gain_kinput', 80.0)
-        self.declare_parameter('close_opt_gain_kvelo', 120.0)
+        self.declare_parameter('close_opt_gain_kth', 20.5)
+        self.declare_parameter('close_opt_gain_kpos', 80.0)
+        self.declare_parameter('close_opt_gain_kinput', 130.0)
+        self.declare_parameter('close_opt_gain_kvelo', 40.0)
 
 
         # To start, Frequency based on default control frequency in the optimizer (3Hz)
