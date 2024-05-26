@@ -268,10 +268,8 @@ if __name__ == '__main__':
         i_unfeas_DT = []
 
         # Pool creation --> Should automatically select the maximum number of processes
-        #p = Pool(processes=num_processes)
-        #for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
-        for i in range(N_data_test):
-            res = for_computation((i, other_args))
+        p = Pool(processes=num_processes)
+        for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
 
             # Save the input in the dataset
             test_dataset_ix[i] = res['test_dataset_ix']
@@ -338,7 +336,8 @@ if __name__ == '__main__':
                                     i_unfeas_cvx = i_unfeas_cvx,
                                     i_unfeas_scp_cvx = i_unfeas_scp_cvx,
                                     i_unfeas_scp_dag = i_unfeas_scp_dag,
-                                    i_unfeas_DT = i_unfeas_DT
+                                    i_unfeas_DT = i_unfeas_DT,
+                                    final_time = ttg_com,
                                     )
 
         
@@ -367,5 +366,6 @@ if __name__ == '__main__':
                             i_unfeas_cvx = i_unfeas_cvx,
                             i_unfeas_scp_cvx = i_unfeas_scp_cvx,
                             i_unfeas_scp_dag = i_unfeas_scp_dag,
-                            i_unfeas_DT = i_unfeas_DT
+                            i_unfeas_DT = i_unfeas_DT,
+                            final_time = ttg_com
                             )
