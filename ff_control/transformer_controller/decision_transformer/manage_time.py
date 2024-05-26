@@ -173,8 +173,10 @@ def transformer_import_config(model_name):
     else:
         raise NameError('No transformer model with name', model_name, 'found!')
     
-    if ('chunk' in model_name) and (config['chunksize'] is None):
+    if ('chunk' in model_name and (not('None' in model_name))) and (config['chunksize'] is None):
         raise NameError('Transformer model for scenario with time chunks, but "chunksize" in ff_scenario_time.py is \"' + str(config['chunksize']) + '\"')
+    elif ((not ('chunk' in model_name)) or ('chunkNone' in model_name)) and (not(config['chunksize'] is None)):
+        raise NameError('Transformer model for scenario without time chunks, but "chunksize" in ff_scenario_time.py is \"' + str(config['chunksize']) + '\"')
     
     return config
 
