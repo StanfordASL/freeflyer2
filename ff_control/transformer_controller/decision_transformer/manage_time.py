@@ -365,7 +365,6 @@ def normalize(data, timestep_norm):
 
     return data_norm, data_mean, data_std
 
-#####################################################################################################################################################################################
 def get_DT_model(model_name, train_loader, eval_loader):
     # DT model creation
     config = DecisionTransformerConfig(
@@ -513,7 +512,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                     returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
                     constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
                     times_to_go=ttgs_ol[:,start_t:end_t].to(device),
-                    timesteps=timesteps_ol[:,:chunksize].to(device),
+                    timesteps=timesteps_ol[:,:np.minimum(end_t,chunksize)].to(device),
                     attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                     return_dict=False
                 )
@@ -531,7 +530,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                 returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
                 constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
                 times_to_go=ttgs_ol[:,start_t:end_t].to(device),
-                timesteps=timesteps_ol[:,:chunksize].to(device),
+                timesteps=timesteps_ol[:,:np.minimum(end_t,chunksize)].to(device),
                 attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
@@ -548,7 +547,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                 returns_to_go=rtgs_ol[:,start_t:end_t].to(device),
                 constraints_to_go=ctgs_ol[:,start_t:end_t].to(device),
                 times_to_go=ttgs_ol[:,start_t:end_t].to(device),
-                timesteps=timesteps_ol[:,:chunksize].to(device),
+                timesteps=timesteps_ol[:,:np.minimum(end_t,chunksize)].to(device),
                 attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
@@ -568,7 +567,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
             # Constraints violation
             _, viol_ol = check_koz_constraint(xypsi_ol[:,:t+2].T, obs_pos, obs_rad)
             if len(viol_ol.shape) == 2:
-                viol_to_detract_ol = viol_ol[:,-1].sum()
+                viol_to_detract_ol = (viol_ol[:,-1].sum() if (not ctg_clipped) else 0)
             else:
                 viol_to_detract_ol = (viol_ol[-1] if (not ctg_clipped) else 0)
             ctgs_ol = torch.cat((ctgs_ol, ctgs_ol[0, -1].view(1, 1, 1) - viol_to_detract_ol), dim=1)
@@ -598,7 +597,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                         returns_to_go=rtgs_dyn[:,start_t:end_t].to(device),
                         constraints_to_go=ctgs_dyn[:,start_t:end_t].to(device),
                         times_to_go=ttgs_dyn[:,start_t:end_t].to(device),
-                        timesteps=timesteps_dyn[:,:chunksize].to(device),
+                        timesteps=timesteps_dyn[:,:np.minimum(end_t,chunksize)].to(device),
                         attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                         return_dict=False
                     )
@@ -616,7 +615,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                     returns_to_go=rtgs_dyn[:,start_t:end_t].to(device),
                     constraints_to_go=ctgs_dyn[:,start_t:end_t].to(device),
                     times_to_go=ttgs_dyn[:,start_t:end_t].to(device),
-                    timesteps=timesteps_dyn[:,:chunksize].to(device),
+                    timesteps=timesteps_dyn[:,:np.minimum(end_t,chunksize)].to(device),
                     attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                     return_dict=False
                 )
@@ -639,7 +638,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                 # Constraint violation
                 _, viol_dyn = check_koz_constraint(xypsi_dyn[:,:t+2].T, obs_pos, obs_rad)
                 if len(viol_dyn.shape) == 2:
-                    viol_to_detract_dyn = viol_dyn[:,-1].sum()
+                    viol_to_detract_dyn = (viol_dyn[:,-1].sum() if (not ctg_clipped) else 0)
                 else:
                     viol_to_detract_dyn = (viol_dyn[-1] if (not ctg_clipped) else 0)
                 ctgs_dyn = torch.cat((ctgs_dyn, ctgs_dyn[0, -1].view(1, 1, 1) - viol_to_detract_dyn), dim=1)
@@ -672,11 +671,9 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
 
     return DT_trajectory
 
-############################################################à
-def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_perc=1., rtg=None, ctg_clipped=True):
+def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_perc=1., rtg=None, ttg=None, ctg_clipped=True, chunksize=None, end_on_ttg=False):
     # Get dimensions and statistics from the dataset
     n_state = test_loader.dataset.n_state
-    n_time = test_loader.dataset.max_len
     n_action = test_loader.dataset.n_action
     data_stats = copy.deepcopy(test_loader.dataset.data_stats)
     data_stats['states_mean'] = data_stats['states_mean'].float().to(device)
@@ -685,11 +682,14 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     data_stats['actions_std'] = data_stats['actions_std'].float().to(device)
     data_stats['goal_mean'] = data_stats['goal_mean'].float().to(device)
     data_stats['goal_std'] = data_stats['goal_std'].float().to(device)
+    data_stats['ttgs_mean'] = data_stats['ttgs_mean'].float().to(device)
+    data_stats['ttgs_std'] = data_stats['ttgs_std'].float().to(device)
 
     # Unnormalize the data sample and compute orbital period (data sample is composed by tensors on the cpu)
     if test_loader.dataset.mdp_constr:
-        states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
-        ctgs_i = ctgs_i.view(1, n_time, 1).to(device) # probably not needed??
+        states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
+        ctgs_i = ctgs_i.view(1, -1, 1).to(device) # probably not needed??
+        ttgs_i = ttgs_i.view(1, -1, 1).to(device)
     else:
         states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
     states_i = states_i.to(device)
@@ -703,6 +703,17 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     obs_rad = (obs_rad + robot_radius)*safety_margin
     ff_model = FreeflyerModel()
     Ak, B_imp = torch.tensor(ff_model.Ak).to(device).float(), torch.tensor(ff_model.B_imp).to(device).float()
+    
+    # Time characteristics
+    if end_on_ttg:
+        if not(ttg is None):
+            n_time = int(ttg/dt)
+        else:
+            raise ValueError('Requested to end on ttg, but ttg has not been provided!')
+    else:
+        n_time = test_loader.dataset.max_len
+    if chunksize is None:
+        chunksize = n_time
 
     # Retrieve decoded states and actions for different inference cases
     xypsi_dyn = torch.empty(size=(n_state, n_time), device=device).float()
@@ -712,6 +723,8 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     rtgs_dyn = torch.empty(size=(1, n_time, 1), device=device).float()
     if test_loader.dataset.mdp_constr:
         ctgs_dyn = torch.empty(size=(1, n_time, 1), device=device).float()
+        ttgs_pred_dyn = torch.zeros(size=(1, n_time), device=device).float()
+        ttgs_dyn = torch.zeros(size=(1, n_time, 1), device=device).float()
 
     runtime0_DT = time.time()
     # Dynamics-in-the-loop initialization
@@ -722,39 +735,51 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
         rtgs_dyn[:,0,:] = rtg
     if test_loader.dataset.mdp_constr:
         ctgs_dyn[:,0,:] = ctgs_i[:,0,:]*ctg_perc
+        if not (ttg is None):
+            ttgs_pred_dyn[:,0] = ttg
+            ttgs_dyn[:,0,:] = (ttg - data_stats['ttgs_mean'][0])/(data_stats['ttgs_std'][0]+1e-6)
     xypsi_dyn[:, 0] = (states_dyn[:,0,:] * data_stats['states_std'][0]) + data_stats['states_mean'][0]
     
     # For loop trajectory generation
     for t in np.arange(n_time):
         
-        ##### Dynamics inference        
+        # Time interval to consider
+        start_t = max(t - chunksize + 1, 0)
+        end_t = t + 1
+
+        ##### Dynamics inference
+        # Compute time to go pred for dynamics model
+        if (ttg is None) and (test_loader.dataset.mdp_constr):
+            with torch.no_grad():
+                _, _, ttg_preds_dyn = model(
+                    states=states_dyn[:,start_t:end_t],
+                    actions=actions_dyn[:,start_t:end_t],
+                    goal=goal_i[:,start_t:end_t],
+                    returns_to_go=rtgs_dyn[:,start_t:end_t],
+                    constraints_to_go=ctgs_dyn[:,start_t:end_t],
+                    times_to_go=ttgs_dyn[:,start_t:end_t],
+                    timesteps=timesteps_i[:,:np.minimum(end_t,chunksize)],
+                    attention_mask=attention_mask_i[:,start_t:end_t],
+                    return_dict=False
+                )
+            ttg_dyn_t = ttg_preds_dyn[0,-1] ######## camabiare indice per ttg_preds_ol e analoghi
+            ttgs_dyn[:,t,:] = ttg_preds_dyn[0,-1]
+            ttgs_pred_dyn[:,t] = (ttg_dyn_t * (data_stats['ttgs_std'][t]+1e-6)) + data_stats['ttgs_mean'][t]
+        
         # Compute action pred for dynamics model
         with torch.no_grad():
-            if test_loader.dataset.mdp_constr:
-                output_dyn = model(
-                    states=states_dyn[:,:t+1,:],
-                    actions=actions_dyn[:,:t+1,:],
-                    goal=goal_i[:,:t+1,:],
-                    returns_to_go=rtgs_dyn[:,:t+1,:],
-                    constraints_to_go=ctgs_dyn[:,:t+1,:],
-                    timesteps=timesteps_i[:,:t+1],
-                    attention_mask=attention_mask_i[:,:t+1],
-                    return_dict=False,
-                )
-                (_, action_preds_dyn) = output_dyn
-            else:
-                output_dyn = model(
-                    states=states_dyn[:,:t+1,:],
-                    actions=actions_dyn[:,:t+1,:],
-                    goal=goal_i[:,:t+1,:],
-                    returns_to_go=rtgs_dyn[:,:t+1,:],
-                    timesteps=timesteps_i[:,:t+1],
-                    attention_mask=attention_mask_i[:,:t+1],
-                    return_dict=False,
-                )
-                (_, action_preds_dyn, _) = output_dyn
-
-        action_dyn_t = action_preds_dyn[0,t]
+            _, action_preds_dyn, _ = model(
+                states=states_dyn[:,start_t:end_t],
+                actions=actions_dyn[:,start_t:end_t],
+                goal=goal_i[:,start_t:end_t],
+                returns_to_go=rtgs_dyn[:,start_t:end_t],
+                constraints_to_go=ctgs_dyn[:,start_t:end_t],
+                times_to_go=ttgs_dyn[:,start_t:end_t],
+                timesteps=timesteps_i[:,:np.minimum(end_t,chunksize)],
+                attention_mask=attention_mask_i[:,start_t:end_t],
+                return_dict=False,
+            )
+        action_dyn_t = action_preds_dyn[0,-1]
         actions_dyn[:,t,:] = action_dyn_t
         dv_dyn[:, t] = (action_dyn_t * (data_stats['actions_std'][t]+1e-6)) + data_stats['actions_mean'][t]
 
@@ -763,15 +788,16 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
             xypsi_dyn[:, t+1] = Ak @ (xypsi_dyn[:, t] + B_imp @ dv_dyn[:, t])
             states_dyn[:,t+1,:] = (xypsi_dyn[:,t+1] - data_stats['states_mean'][t+1]) / (data_stats['states_std'][t+1] + 1e-6)
             
-            if test_loader.dataset.mdp_constr:
-                reward_dyn_t = - torch.linalg.norm(dv_dyn[:, t], ord=1)
-                rtgs_dyn[:,t+1,:] = rtgs_dyn[0,t] - reward_dyn_t
-                viol_dyn = torch_check_koz_constraint(xypsi_dyn[:,t+1], obs_pos, obs_rad)
-                ctgs_dyn[:,t+1,:] = ctgs_dyn[0,t] - (viol_dyn if (not ctg_clipped) else 0)
+            # Update reward, constraints and time to go
+            reward_dyn_t = - torch.linalg.norm(dv_dyn[:, t], ord=1)
+            rtgs_dyn[:,t+1,:] = rtgs_dyn[0,t] - reward_dyn_t
+            viol_dyn = torch_check_koz_constraint(xypsi_dyn[:,t+1], obs_pos, obs_rad)
+            ctgs_dyn[:,t+1,:] = ctgs_dyn[0,t] - (viol_dyn if (not ctg_clipped) else 0)
+            if not (ttg is None):
+                ttgs_pred_dyn[:,t+1] = np.maximum(ttgs_pred_dyn[0, t].item() - dt, 0)
+                ttgs_dyn[:,t+1,:] = (ttgs_pred_dyn[0,t+1] - data_stats['ttgs_mean'][t+1])/(data_stats['ttgs_std'][t+1]+1e-6)
             else:
-                '''reward_dyn_t = - torch.linalg.norm(dv_dyn[:, t], ord=1)
-                rtgs_dyn[:,t+1,:] = rtgs_dyn[0,t] - (reward_dyn_t/(data_stats['rtgs_std'][t]+1e-6))'''
-                rtgs_dyn[:,t+1,:] = rtgs_i[0,t+1]
+                ttgs_dyn[:,t+1,:] = 0
             actions_dyn[:,t+1,:] = 0
 
     # Pack trajectory's data in a dictionary and compute runtime
@@ -780,6 +806,7 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     DT_trajectory = {
         'xypsi_dyn' : xypsi_dyn.cpu().numpy(),
         'dv_dyn' : dv_dyn.cpu().numpy(),
+        'ttgs_dyn' : ttgs_pred_dyn.cpu().numpy(),
         'time' : time_sec
     }
 
@@ -792,6 +819,7 @@ def torch_check_koz_constraint(states, obs_positions, obs_radii):
 
     return constr_koz_violation
 
+############################################################
 def torch_model_inference_ol(model, test_loader, data_sample, rtg_perc=1., ctg_perc=1., rtg=None, ctg_clipped=True):
     # Get dimensions and statistics from the dataset
     n_state = test_loader.dataset.n_state
@@ -971,10 +999,10 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
     plt.figure(figsize=(20,5))
     for j in range(3):
         plt.subplot(1,3,j+1)
-        plt.plot(time_sec[0], xypsi_true[j,:], 'k-', linewidth=1.5, label='true')
-        plt.plot(time_sec[0], xypsi_ol[j,:], 'b-', linewidth=1.5, label='pred o.l.')
+        plt.plot(time_sec[0,:len(xypsi_true[j,:])], xypsi_true[j,:], 'k-', linewidth=1.5, label='true')
+        plt.plot(time_sec[0,:len(xypsi_ol[j,:])], xypsi_ol[j,:], 'b-', linewidth=1.5, label='pred o.l.')
         #plt.vlines(time_sec[0][(context2.shape[1]//9)+1], np.min(xypsi_ol[j,:]), np.max(xypsi_ol[j,:]), label='t_{init}', linewidth=2, color='red')
-        plt.plot(time_sec[0], xypsi_dyn[j,:], 'g-', linewidth=1.5, label='pred dyn')
+        plt.plot(time_sec[0,:len(xypsi_dyn[j,:])], xypsi_dyn[j,:], 'g-', linewidth=1.5, label='pred dyn')
         if j == 0:
             plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
             plt.ylabel('$ \delta r_r$ [m]', fontsize=10)
@@ -998,10 +1026,10 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
     plt.figure(figsize=(20,5))
     for j in range(3):
         plt.subplot(1,3,j+1)
-        plt.plot(time_sec[0], xypsi_true[j+3,:], 'k-', linewidth=1.5, label='true')
-        plt.plot(time_sec[0], xypsi_ol[j+3,:], 'b-', linewidth=1.5, label='pred o.l.')
+        plt.plot(time_sec[0,:len(xypsi_true[j+3,:])], xypsi_true[j+3,:], 'k-', linewidth=1.5, label='true')
+        plt.plot(time_sec[0,:len(xypsi_ol[j+3,:])], xypsi_ol[j+3,:], 'b-', linewidth=1.5, label='pred o.l.')
         #plt.vlines(time_sec[0][(context2.shape[1]//9)+1], np.min(xypsi_ol[j+3,:]), np.max(xypsi_ol[j+3,:]), label='t_{init}', linewidth=2, color='red')
-        plt.plot(time_sec[0], xypsi_dyn[j+3,:], 'g-', linewidth=1.5, label='pred dyn')
+        plt.plot(time_sec[0,:len(xypsi_dyn[j+3,:])], xypsi_dyn[j+3,:], 'g-', linewidth=1.5, label='pred dyn')
         if j == 0:
             plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
             plt.ylabel('$ \delta v_r$ [m/s]', fontsize=10)
@@ -1026,9 +1054,9 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
     plt.figure(figsize=(20,5))
     for j in range(3):
         plt.subplot(1,3,j+1)
-        plt.stem(time_sec[0], dv_true[j,:]*1000., 'k-', label='true')
-        plt.stem(time_sec[0], dv_ol[j,:]*1000., 'b-', label='pred o.l.')
-        plt.stem(time_sec[0], dv_dyn[j,:]*1000., 'g-', label='pred dyn.')
+        plt.stem(time_sec[0,:len(dv_true[j,:])], dv_true[j,:]*1000., 'k-', label='true')
+        plt.stem(time_sec[0,:len(dv_ol[j,:])], dv_ol[j,:]*1000., 'b-', label='pred o.l.')
+        plt.stem(time_sec[0,:len(dv_dyn[j,:])], dv_dyn[j,:]*1000., 'g-', label='pred dyn.')
         #plt.vlines(time_sec[0][(context2.shape[1]//9)+1], np.min(dv_ol[j,:]*1000.), np.max(dv_ol[j,:]*1000.), label='t_{init}', linewidth=2, color='red')
         if j == 0:
             plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
@@ -1051,9 +1079,9 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
 
     # norm
     plt.figure()
-    plt.stem(time_sec[0], la.norm(dv_true*1000., axis=0), 'k-', label='true')
-    plt.stem(time_sec[0], la.norm(dv_ol*1000., axis=0), 'b-', label='pred o.l.')
-    plt.stem(time_sec[0], la.norm(dv_dyn*1000., axis=0), 'g-', label='pred dyn')
+    plt.stem(time_sec[0,:len(dv_true[0,:])], la.norm(dv_true*1000., axis=0), 'k-', label='true')
+    plt.stem(time_sec[0,:len(dv_ol[0,:])], la.norm(dv_ol*1000., axis=0), 'b-', label='pred o.l.')
+    plt.stem(time_sec[0,:len(dv_dyn[0,:])], la.norm(dv_dyn*1000., axis=0), 'g-', label='pred dyn')
     plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
     plt.ylabel('$ || \Delta \delta v || $ [mm/s]', fontsize=10)
     plt.grid(True)
@@ -1064,9 +1092,9 @@ def plot_DT_trajectory(DT_trajectory, plot_orb_time = False, savefig = False, pl
 
     # time to go
     plt.figure()
-    plt.plot(time_sec[0], ttgs_true[0], 'k-', label='true')
-    plt.plot(time_sec[0], ttgs_ol[0], 'b-', label='pred o.l.')
-    plt.plot(time_sec[0], ttgs_dyn[0], 'g-', label='pred dyn')
+    plt.plot(time_sec[0,:len(ttgs_true[0])], ttgs_true[0], 'k-', label='true')
+    plt.plot(time_sec[0,:len(ttgs_ol[0])], ttgs_ol[0], 'b-', label='pred o.l.')
+    plt.plot(time_sec[0,:len(ttgs_dyn[0])], ttgs_dyn[0], 'g-', label='pred dyn')
     plt.xlabel('time [orbits]' if plot_orb_time else 'time [steps]', fontsize=10)
     plt.ylabel('Time-to-go [s]', fontsize=10)
     plt.grid(True)
