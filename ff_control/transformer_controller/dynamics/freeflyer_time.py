@@ -102,9 +102,6 @@ class FreeflyerModel:
     def ocp_scp(self, state_ref, action_ref, state_init, state_final, obs, trust_region, obs_av=True):
         # Setup SCP problem
         n_time = action_ref.shape[1]
-        psi_period = np.array([0, -2*np.pi, 2*np.pi])
-        psi_dist = np.abs(state_init[2] - (state_final[2] + psi_period))
-        state_final[2] = state_final[2] + psi_period[np.argmin(psi_dist)]
         s = cp.Variable((self.N_STATE,n_time))
         a = cp.Variable((self.N_ACTION,n_time))
 
@@ -202,6 +199,10 @@ def sample_init_target(sample_time=False):
         state_target = np.random.uniform(low=[ff.goal_region['xy_low'][0], ff.goal_region['xy_low'][1], -np.pi, 0, 0, 0],
                                      high=[ff.goal_region['xy_up'][0], ff.goal_region['xy_up'][1], np.pi, 0, 0, 0])
         valid = ((np.linalg.norm(state_target[:2] - ff.obs['position'],axis=1) - (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin) > 0).all() & ((np.linalg.norm(state_target[:2] - state_init[:2]) - ff.min_init_dist) > 0)
+    # Select correct value of final angle
+    psi_period = np.array([0, -2*np.pi, 2*np.pi])
+    psi_dist = np.abs(state_init[2] - (state_target[2] + psi_period))
+    state_target[2] = state_target[2] + psi_period[np.argmin(psi_dist)]
     
     # Eventually sample final time
     if sample_time:
