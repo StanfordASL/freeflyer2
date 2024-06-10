@@ -31,7 +31,7 @@ Lambda_inv = np.array([[  0, 0.5,  1/(4*thrusters_lever_arm)],
                        [0.5,   0,  1/(4*thrusters_lever_arm)]])
 
 # Table, start and goal regions dimensions
-dataset_scenario = 'time' #'time_whole_table' #
+dataset_scenario = 'time_500000' #'time_whole_table' #
 table = {
     'xy_low' : np.array([0.,0.]),
     'xy_up' : np.array([3.5, 2.5])
@@ -45,7 +45,7 @@ if dataset_scenario == 'time_whole_table':
         'xy_low' : np.array([0., 0.]) + robot_radius,
         'xy_up' : table['xy_up'] - robot_radius
     }
-elif dataset_scenario == 'time':
+elif dataset_scenario == 'time' or dataset_scenario == 'time_500000':
     start_region = {
         'xy_low' : table['xy_low'] + robot_radius,
         'xy_up' : np.array([0.5, 2.5]) - robot_radius

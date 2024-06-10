@@ -156,7 +156,6 @@ def for_computation(input_iterable):
     else:
         out['feasible_DT'] = False
 
-    rtg_0 = -J_cvx
     # Import the Transformer_dag
     if np.char.equal(feas_cvx,'optimal') and mdp_constr:
         if transformer_ws == 'dyn':
