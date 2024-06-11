@@ -53,7 +53,7 @@ def generate_launch_description():
                 # ASL optitrack IP and port
                 parameters=[
                     {
-                        "server": "192.168.1.2",
+                        "server": "192.168.1.3",
                         "port": 3883,
                     }
                 ],
