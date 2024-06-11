@@ -1,68 +1,68 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <root>
  <tabbed_widget name="Main Window" parent="main_window">
-  <Tab tab_name="tab1" containers="1">
+  <Tab containers="1" tab_name="tab1">
    <Container>
-    <DockSplitter sizes="0.200171;0.200171;0.199316;0.200171;0.200171" orientation="-" count="5">
+    <DockSplitter orientation="-" sizes="0.200171;0.200171;0.199316;0.200171;0.200171" count="5">
      <DockArea name="...">
-      <plot style="Dots" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.262947" right="104.032200" bottom="0.437994" top="0.501512"/>
+      <plot mode="TimeSeries" style="Dots" flip_x="false" flip_y="false">
+       <range right="15.078136" top="0.957684" bottom="0.956252" left="5.004835"/>
        <limitY/>
-       <curve name="/robot/goal/state/pose/x" color="#9467bd"/>
-       <curve name="/robot/sim/state/state/pose/x" color="#9467bd"/>
-       <curve name="/vrpn_mocap/robot/pose/pose/position/x" color="#9467bd"/>
+       <curve color="#9467bd" name="/robot/goal/state/pose/x"/>
+       <curve color="#9467bd" name="/robot/sim/state/state/pose/x"/>
+       <curve color="#9467bd" name="/robot/mocap/robot/pose/pose/position/x"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot style="Dots" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.262947" right="104.032200" bottom="0.497600" top="0.598407"/>
+      <plot mode="TimeSeries" style="Dots" flip_x="false" flip_y="false">
+       <range right="15.078136" top="0.274994" bottom="0.274298" left="5.004835"/>
        <limitY/>
-       <curve name="/robot/goal/state/pose/y" color="#17becf"/>
-       <curve name="/robot/sim/state/state/pose/y" color="#17becf"/>
-       <curve name="/vrpn_mocap/robot/pose/pose/position/y" color="#17becf"/>
+       <curve color="#17becf" name="/robot/goal/state/pose/y"/>
+       <curve color="#17becf" name="/robot/sim/state/state/pose/y"/>
+       <curve color="#17becf" name="/robot/mocap/robot/pose/pose/position/y"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot style="Dots" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.262947" right="104.032200" bottom="-0.651391" top="0.015888"/>
+      <plot mode="TimeSeries" style="Dots" flip_x="false" flip_y="false">
+       <range right="15.078136" top="2.952864" bottom="2.949308" left="5.004835"/>
        <limitY/>
-       <curve name="/robot/sim/state/state/pose/theta" color="#f14cc1"/>
-       <curve name="/robot/goal/state/pose/theta" color="#f14cc1"/>
-       <curve name="/vrpn_mocap/robot/pose/pose/orientation/yaw" color="#f14cc1"/>
+       <curve color="#f14cc1" name="/robot/sim/state/state/pose/theta"/>
+       <curve color="#f14cc1" name="/robot/goal/state/pose/theta"/>
+       <curve color="#f14cc1" name="/robot/mocap/robot/pose/pose/orientation/yaw"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot style="Lines" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.262947" right="104.032200" bottom="55.533781" top="58.729647"/>
+      <plot mode="TimeSeries" style="Lines" flip_x="false" flip_y="false">
+       <range right="15.078136" top="52.892654" bottom="52.316030" left="5.004835"/>
        <limitY/>
-       <curve name="/robot/metrics/controller/total_gas_time" color="#1f77b4"/>
+       <curve color="#1f77b4" name="/robot/metrics/controller/total_gas_time"/>
       </plot>
      </DockArea>
      <DockArea name="...">
-      <plot style="StepsInv" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.262947" right="104.032200" bottom="-0.100000" top="0.100000"/>
+      <plot mode="TimeSeries" style="StepsInv" flip_x="false" flip_y="false">
+       <range right="15.078136" top="1.025000" bottom="-0.025000" left="5.004835"/>
        <limitY/>
-       <curve name="/robot/commands/binary_thrust/switches[0]" color="#1f77b4"/>
-       <curve name="/robot/commands/binary_thrust/switches[1]" color="#d62728"/>
-       <curve name="/robot/commands/binary_thrust/switches[2]" color="#1ac938"/>
-       <curve name="/robot/commands/binary_thrust/switches[3]" color="#ff7f0e"/>
-       <curve name="/robot/commands/binary_thrust/switches[4]" color="#f14cc1"/>
-       <curve name="/robot/commands/binary_thrust/switches[5]" color="#9467bd"/>
-       <curve name="/robot/commands/binary_thrust/switches[6]" color="#17becf"/>
-       <curve name="/robot/commands/binary_thrust/switches[7]" color="#bcbd22"/>
+       <curve color="#1f77b4" name="/robot/commands/binary_thrust/switches[0]"/>
+       <curve color="#d62728" name="/robot/commands/binary_thrust/switches[1]"/>
+       <curve color="#1ac938" name="/robot/commands/binary_thrust/switches[2]"/>
+       <curve color="#ff7f0e" name="/robot/commands/binary_thrust/switches[3]"/>
+       <curve color="#f14cc1" name="/robot/commands/binary_thrust/switches[4]"/>
+       <curve color="#9467bd" name="/robot/commands/binary_thrust/switches[5]"/>
+       <curve color="#17becf" name="/robot/commands/binary_thrust/switches[6]"/>
+       <curve color="#bcbd22" name="/robot/commands/binary_thrust/switches[7]"/>
       </plot>
      </DockArea>
     </DockSplitter>
    </Container>
   </Tab>
-  <Tab tab_name="tab2" containers="1">
+  <Tab containers="1" tab_name="tab2">
    <Container>
-    <DockSplitter sizes="1" orientation="-" count="1">
+    <DockSplitter orientation="-" sizes="1" count="1">
      <DockArea name="...">
-      <plot style="Lines" mode="TimeSeries" flip_x="false" flip_y="false">
-       <range left="13.306620" right="38.205586" bottom="2.242944" top="2.617184"/>
+      <plot mode="TimeSeries" style="Lines" flip_x="false" flip_y="false">
+       <range right="14.707464" top="40.202179" bottom="39.972900" left="5.518783"/>
        <limitY/>
-       <curve name="/robot/cost/data" color="#d62728"/>
+       <curve color="#d62728" name="/robot/cost/data"/>
       </plot>
      </DockArea>
     </DockSplitter>
