@@ -79,34 +79,34 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
 
         # Optimization far hyperparameters/gains
-        self.declare_parameter('def_opt_horizon_secs', 2.667)
-        self.declare_parameter('def_opt_freq', 3.0)
-        self.declare_parameter('def_opt_gain_kth', 1.0)
-        self.declare_parameter('def_opt_gain_kpos', 2.5)
-        self.declare_parameter('def_opt_gain_kinput', 20.0)
-        self.declare_parameter('def_opt_gain_kvelo', 40.0)
-
-        self.declare_parameter('close_opt_horizon_secs', 0.4)
-        self.declare_parameter('close_opt_freq', 10.0)
-        self.declare_parameter('close_opt_gain_kth', 5.5)
-        self.declare_parameter('close_opt_gain_kpos', 90.0)
-        self.declare_parameter('close_opt_gain_kinput', 5.5)
-        self.declare_parameter('close_opt_gain_kvelo', 125.0)
-
-        # self.declare_parameter('def_opt_horizon_secs', 8)
-        # self.declare_parameter('def_opt_freq', 6.0)
+        # self.declare_parameter('def_opt_horizon_secs', 2.667)
+        # self.declare_parameter('def_opt_freq', 3.0)
         # self.declare_parameter('def_opt_gain_kth', 1.0)
         # self.declare_parameter('def_opt_gain_kpos', 2.5)
-        # self.declare_parameter('def_opt_gain_kinput', 5.0)
-        # self.declare_parameter('def_opt_gain_kvelo', 150.0)
+        # self.declare_parameter('def_opt_gain_kinput', 20.0)
+        # self.declare_parameter('def_opt_gain_kvelo', 40.0)
+
+        # self.declare_parameter('close_opt_horizon_secs', 0.4)
+        # self.declare_parameter('close_opt_freq', 10.0)
+        # self.declare_parameter('close_opt_gain_kth', 5.5)
+        # self.declare_parameter('close_opt_gain_kpos', 90.0)
+        # self.declare_parameter('close_opt_gain_kinput', 5.5)
+        # self.declare_parameter('close_opt_gain_kvelo', 125.0)
+
+        self.declare_parameter('def_opt_horizon_secs', 8)
+        self.declare_parameter('def_opt_freq', 6.0)
+        self.declare_parameter('def_opt_gain_kth', 1.0)
+        self.declare_parameter('def_opt_gain_kpos', 2.5)
+        self.declare_parameter('def_opt_gain_kinput', 7.0)
+        self.declare_parameter('def_opt_gain_kvelo', 200.0)
         self.declare_parameter('def_opt_gain_komega', 10.0)
 
-        # self.declare_parameter('close_opt_horizon_secs', 2.5)
-        # self.declare_parameter('close_opt_freq', 20.0)
-        # self.declare_parameter('close_opt_gain_kth', 12.5)
-        # self.declare_parameter('close_opt_gain_kpos', 350.0)
-        # self.declare_parameter('close_opt_gain_kinput', 120.0)
-        # self.declare_parameter('close_opt_gain_kvelo', 1000.0)
+        self.declare_parameter('close_opt_horizon_secs', 2.5)
+        self.declare_parameter('close_opt_freq', 20.0)
+        self.declare_parameter('close_opt_gain_kth', 12.5)
+        self.declare_parameter('close_opt_gain_kpos', 350.0)
+        self.declare_parameter('close_opt_gain_kinput', 120.0)
+        self.declare_parameter('close_opt_gain_kvelo', 1000.0)
         self.declare_parameter('close_opt_gain_komega', 10.0)
 
 
@@ -333,8 +333,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 50*self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + 50*self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
-              50*self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + 50*self.k_omega*sumsqr(Xk_end[5]-goal[5])
+        J = J + 300*self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + 300*self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
+              300*self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + 300*self.k_omega*sumsqr(Xk_end[5]-goal[5])
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -357,7 +357,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def unpack_wopt(self, w_opt):
         w_opt = w_opt.full().flatten()
         x = w_opt[0::10]
-        self.get_logger().info(str(x))
+        y = w_opt[1::10]
+        self.get_logger().info(str(y))
         u0_opt = w_opt[6::10]
         u1_opt = w_opt[7::10]
         u2_opt = w_opt[8::10]
