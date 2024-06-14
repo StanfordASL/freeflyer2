@@ -22,6 +22,9 @@
 
 import numpy as np
 from ff_msgs.msg import FreeFlyerState
+from ff_params import RobotParams
+
+p = RobotParams(lambda : pass)
 
 
 ##################### Helper Functions to unpack FreeFlyerState #####################
@@ -60,3 +63,11 @@ def vec2state(vec: np.ndarray) -> FreeFlyerState:
     state.twist.wz = vec[5]
 
     return state
+
+def map_to_force(self, u):
+    # Compute body-frame force from thrusters
+    r = self.p.actuators["thrusters_lever_arm"]
+    Fx = -u[0] + u[2] 
+    Fy = -u[1] + u[3] 
+    M = self.r * (u[0]+u[1]+u[2]+u[3])
+    return Fx, Fy, M
