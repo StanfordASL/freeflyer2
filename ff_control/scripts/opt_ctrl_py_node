@@ -31,7 +31,7 @@ import typing as T
 import matplotlib.pyplot as plt
 import time
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
-from ff_control.utils import state2vec
+from ff_control.utils import state2vec, map_to_force
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
@@ -237,7 +237,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         u = SX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
         goal = SX.sym("goal", self.STATE_DIM)
         
-        body_Fx, body_Fy, M = self._map_to_force(u)
+        body_Fx, body_Fy, M = map_to_force(u, self.r)
 
         th = x[2]
         world_Fx = body_Fx*cos(th) - body_Fy*sin(th)
@@ -328,12 +328,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     ############################### Helper Functions for Opt ###############################
-    def _map_to_force(self, u):
-        # Compute body-frame force from thrusters
-        Fx = -u[0] + u[2] 
-        Fy = -u[1] + u[3] 
-        M = self.r * (u[0]+u[1]+u[2]+u[3])
-        return Fx, Fy, M
 
     def unpack_wopt(self, w_opt):
         w_opt = w_opt.full().flatten()
