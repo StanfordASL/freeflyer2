@@ -109,7 +109,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('close_opt_gain_kvelo', 290.0)
         self.declare_parameter('close_opt_gain_komega', 1.0)
 
-
         # To start, Frequency based on default control frequency in the optimizer (3Hz)
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
@@ -148,11 +147,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             if self._def_controller:
                 pos_err = np.abs(state_des[:2] - curr_state[:2])
                 if np.linalg.norm(pos_err) < self._readjust_controller_bounds:
-                # if np.all(pos_err < self._readjust_controller_bounds):
                     self.set_close_hyperparameters()
             else:
                 pos_err = np.abs(state_des[:2] - curr_state[:2])
-                # if np.any(pos_err > self._readjust_controller_bounds):
                 if np.linalg.norm(pos_err) > self._readjust_controller_bounds:
                     self.set_default_hyperparameters()
 
@@ -163,7 +160,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                 for k in range(N):
                     self._w0  += [DM([0.,0.,0.,0.])]
                     self._w0 += [linear_state_interp[:,k+1]]
-            # self.get_logger().info(str(self._w0))
 
             self.lbw[:len(curr_state)] = curr_state
             self.ubw[:len(curr_state)] = curr_state
@@ -279,20 +275,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Initial guess for u
         u_start = [DM([0.,0.,0.,0.])] * N
-
-        # Get a feasible trajectory as an initial guess
-        # xk = DM(x0)
-        # x_start = [xk]
-        # for k in range(N):
-        #     xk = F(x0=xk, p=u_start[k])['xf']
-        #     x_start += [xk]
-
-        # Start with (infeasible) linearly spaced waypoints
     
         # Start with an empty NLPx
         w=[]
-        # w0 = []
-        w0 = None
         lbw = []
         ubw = []
         J = 0
@@ -305,8 +290,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         w += [X0]
         lbw += x0
         ubw += x0
-        # w0 += [linear_state_interp[:,0]]
-        # w0 += [x_start[0]]
 
         # Formulate the NLP
         Xk = X0
@@ -316,7 +299,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             w   += [Uk]
             lbw += lbu
             ubw += ubu
-            # w0  += [u_start[k]]
 
             # Integrate till the end of the interval
             Fk = F(x0=Xk, p=Uk)
@@ -328,8 +310,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             w   += [Xk]
             lbw += lbx
             ubw += ubx
-            # w0  += [linear_state_interp[:,k+1]]
-            # w0  += [x_start[k+1]]
             # Add equality dynamics constraint 
             g   += [Xk_end-Xk]
             lbg += [0, 0, 0, 0, 0, 0]
@@ -345,7 +325,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Create an NLP solver
         nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
         cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
-        # self.get_logger().info(w0)
+        w0 = None # Reset w0
         return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     ############################### Helper Functions for Opt ###############################
