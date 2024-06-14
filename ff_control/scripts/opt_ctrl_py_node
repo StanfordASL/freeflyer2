@@ -238,7 +238,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         u = SX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
         goal = SX.sym("goal", self.STATE_DIM)
         
-        body_Fx, body_Fy, M = map_to_force(u)
+        body_Fx, body_Fy, M = map_to_force(u, self.r)
 
         th = x[2]
         world_Fx = body_Fx*cos(th) - body_Fy*sin(th)
