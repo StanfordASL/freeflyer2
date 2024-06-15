@@ -334,7 +334,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         w_opt = w_opt.full().flatten()
         x = w_opt[0::10]
         y = w_opt[1::10]
-        self.get_logger().info(str(y))
+        th = w_opt[2::10]
+        self.get_logger().info(str(th))
         u0_opt = w_opt[6::10]
         u1_opt = w_opt[7::10]
         u2_opt = w_opt[8::10]
