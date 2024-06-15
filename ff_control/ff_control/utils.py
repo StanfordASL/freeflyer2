@@ -61,7 +61,7 @@ def vec2state(vec: np.ndarray) -> FreeFlyerState:
     return state
 
 def map_to_force(u, r):
-    # Compute body-frame force from thrusters
+    # Compute body-frame force from trinary thrusters
     Fx = -u[0] + u[2] 
     Fy = -u[1] + u[3] 
     M = r * (u[0]+u[1]+u[2]+u[3])
@@ -73,7 +73,7 @@ def tri_to_bin_thrusters(tri_switches):
     Out: 8 Binary thrusters (0, 1) mapped to hardware
     Convert trinary thruster commands into binary thruster commands
     This formulation represents each thruster pair (eg thruster 1 and 2 below) as a single
-    "trinary" thruster, which can either take value -1 (1 on 2 off), 0 (both off), or 1 (1 off 2 on)
+    "trinary" thruster, which can either take value 1 (1 on 2 off), 0 (both off), or -1 (1 off 2 on)
     This reduces the search space for the optimization, and implicitly removes consideration of the
     undesirable case where both thrusters are on (0 net force or moment, only wasted fuel)
     tri_switches[0] = Thruster Pair [1,2]
@@ -83,9 +83,9 @@ def tri_to_bin_thrusters(tri_switches):
 
     
     Thrusters Configuration
-            (2) e_y (1)        ___
+         (2) e_y (1)        ___
         <--   ^   -->      /   \
-        ^  |   |   |  ^     v M  )
+       ^  |   |   |  ^     v M  )
     (3)|--o-------o--|(0)    __/
             | free- |
             | flyer |   ---> e_x
@@ -113,7 +113,7 @@ def bin_to_tri_thrusters(bin_switches):
     Out: 8 Binary thrusters (0, 1) mapped to hardware
     Convert trinary thruster commands into binary thruster commands
     This formulation represents each thruster pair (eg thruster 1 and 2 below) as a single
-    "trinary" thruster, which can either take value -1 (1 on 2 off), 0 (both off), or 1 (1 off 2 on)
+    "trinary" thruster, which can either take value 1 (1 on 2 off), 0 (both off), or -1 (1 off 2 on)
     This reduces the search space for the optimization, and implicitly removes consideration of the
     undesirable case where both thrusters are on (0 net force or moment, only wasted fuel)
     tri_switches[0] = Thruster Pair [1,2]
@@ -124,9 +124,9 @@ def bin_to_tri_thrusters(bin_switches):
     
     Thrusters Configuration
             (2) e_y (1)        ___
-        <--   ^   -->      /   \
-        ^  |   |   |  ^     v M  )
-    (3)|--o-------o--|(0)    __/
+          <--   ^   -->      /   \
+         ^  |   |   |  ^     v M  )
+      (3)|--o-------o--|(0)    __/
             | free- |
             | flyer |   ---> e_x
             | robot |
@@ -135,17 +135,17 @@ def bin_to_tri_thrusters(bin_switches):
         <--       -->
             (5)     (6)
     """
-    if (bin_switches % 2 != 0):
+    if (len(bin_switches) % 2 != 0):
         raise ValueError("Invalid size of binary switches")
 
     tri_switches = []
-    for i in range(len(bin_switches)/2):
+    for i in range(len(bin_switches)//2):
         ind1 = 2*i+1
         ind2 = (2*i+2) % len(bin_switches)
         if bin_switches[ind1] and not bin_switches[ind2]:
-            tri_switches.append(-1)
-        elif not bin_switches[ind1] and bin_switches[ind2]:
             tri_switches.append(1)
+        elif not bin_switches[ind1] and bin_switches[ind2]:
+            tri_switches.append(-1)
         elif not bin_switches[ind1] and not bin_switches[ind2]:
             tri_switches.append(0)
         else:
