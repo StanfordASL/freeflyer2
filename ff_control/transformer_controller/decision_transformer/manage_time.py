@@ -20,7 +20,7 @@ from accelerate import Accelerator
 
 from decision_transformer.art import AutonomousFreeflyerTransformer_pred_time
 from dynamics.freeflyer_time import FreeflyerModel, check_koz_constraint
-from optimization.ff_scenario_time import obs, safety_margin, robot_radius, table, n_time_max
+from optimization.ff_scenario_time import obs, safety_margin, robot_radius, table, n_time_max, T_const
 import time
 # select device based on availability of GPU
 verbose = False # set to True to get additional print statements
@@ -122,7 +122,7 @@ class RpodDataset(Dataset):
         attention_mask = torch.ones(1, self.chunksize).view(self.chunksize).long().unsqueeze(0)
 
         time_discr = torch.tensor(time_discr)
-        time_sec = torch.tensor(self.data['data_param']['time_sec'][ix].reshape((1, self.chunksize))).unsqueeze(0)
+        time_sec = torch.tensor(self.data['data_param']['time_sec'][ix[0], time_indexes].reshape((1, self.chunksize))).unsqueeze(0)
 
         if self.target == False:
             if not self.mdp_constr:
@@ -161,6 +161,13 @@ def transformer_import_config(model_name):
         config['chunksize'] = chunksize
         if not('time_whole_table' in dataset_scenario):
             raise NameError('Transformer model for scenario with the varying final time and considering the whole table as start and goal region, but "dataset_scenario" in ff_scenario_time.py is \"' + dataset_scenario + '\"')
+        else:
+            config['dataset_scenario'] = dataset_scenario
+    elif 'time_constant' in model_name:
+        from optimization.ff_scenario_time import dataset_scenario, chunksize
+        config['chunksize'] = chunksize
+        if not('time_constant' in dataset_scenario):
+            raise NameError('Transformer model for scenario with constant time, but "dataset_scenario" in ff_scenario_time.py is \"' + dataset_scenario + '\"')
         else:
             config['dataset_scenario'] = dataset_scenario
     elif 'time' in model_name:
@@ -241,7 +248,7 @@ def get_train_val_test_data(mdp_constr, dataset_scenario, timestep_norm, chunksi
         'data_param' : {
             'time_discr' : data_param['time_discr'][n:],
             'time_sec' : data_param['time_sec'][n:, :],
-            'final_time' : data_param['final_time'][:n]
+            'final_time' : data_param['final_time'][n:]
             },
         'data_stats' : data_stats
         }
@@ -288,8 +295,8 @@ def import_dataset_for_DT_eval_vXX(dataset_scenario, mdp_constr):
     # Load the data
     print('Loading data from root/dataset/torch/...', end='')
 
-    data_dir = root_folder + '/dataset/' + dataset_scenario
-    data_dir_torch = root_folder + '/dataset/' + dataset_scenario + '/torch/v05'
+    data_dir = root_folder + '/dataset' if dataset_scenario == "time_constant" else  root_folder + '/dataset/' + dataset_scenario
+    data_dir_torch = root_folder + '/dataset/torch/v05' if dataset_scenario == "time_constant" else  root_folder + '/dataset/' + dataset_scenario + '/torch/v05'
     states_cvx = torch.load(data_dir_torch + '/torch_states_cvx.pth')
     states_scp = torch.load(data_dir_torch + '/torch_states_scp.pth')
     actions_cvx = torch.load(data_dir_torch + '/torch_actions_cvx.pth')
@@ -299,6 +306,9 @@ def import_dataset_for_DT_eval_vXX(dataset_scenario, mdp_constr):
     ctgs_cvx = torch.load(data_dir_torch + '/torch_ctgs_cvx.pth')[:,:,None]
     ctgs_scp = torch.load(data_dir_torch + '/torch_ctgs_scp.pth')[:,:,None]
     data_param = np.load(data_dir + '/dataset-ff-v05-param.npz', allow_pickle=True)
+    if dataset_scenario == "time_constant":
+        data_param = dict(data_param)
+        data_param['final_time'] = T_const*np.ones_like(data_param['dtime'])
 
     # Extend time sequence
     n_time_max = states_cvx.shape[1]

@@ -14,7 +14,7 @@ N_CLUSTERS = 4
 # time problem constants
 '''S = 101 # number of control switches
 n_time_rpod = S-1'''
-chunksize = 100 #None
+chunksize = None #None/100
 
 # constants
 mass = 16.0
@@ -31,7 +31,7 @@ Lambda_inv = np.array([[  0, 0.5,  1/(4*thrusters_lever_arm)],
                        [0.5,   0,  1/(4*thrusters_lever_arm)]])
 
 # Table, start and goal regions dimensions
-dataset_scenario = 'time_500000' #'time_whole_table' #
+dataset_scenario = 'time_constant' #'time_whole_table' #
 table = {
     'xy_low' : np.array([0.,0.]),
     'xy_up' : np.array([3.5, 2.5])
@@ -45,7 +45,7 @@ if dataset_scenario == 'time_whole_table':
         'xy_low' : np.array([0., 0.]) + robot_radius,
         'xy_up' : table['xy_up'] - robot_radius
     }
-elif dataset_scenario == 'time' or dataset_scenario == 'time_500000':
+elif dataset_scenario == 'time' or dataset_scenario == 'time_500000' or dataset_scenario == 'time_constant':
     start_region = {
         'xy_low' : table['xy_low'] + robot_radius,
         'xy_up' : np.array([0.5, 2.5]) - robot_radius
@@ -59,11 +59,11 @@ else:
 min_init_dist = 0.5
 
 # Time discretization and bounds
-dt = 0.5
-T_min = 10.0 if dataset_scenario == 'time_whole_table' else 20.0
-T_max = 100.0
+dt = 0.4 if dataset_scenario == 'time_const' else 0.5
+T_const = 40.0 # max final time horizon in sec
+T_min = T_const if dataset_scenario == 'time_const' else (10.0 if dataset_scenario == 'time_whole_table' else 20.0)
+T_max = T_const if dataset_scenario == 'time_const' else 100.0
 final_time_choices = np.arange(T_min, T_max+dt/2, dt)
-'''T = 40.0 # max final time horizon in sec'''
 n_time_max = int(T_max/dt)
 
 # Obstacle
