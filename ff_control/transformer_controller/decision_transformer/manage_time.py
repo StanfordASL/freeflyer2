@@ -18,7 +18,7 @@ from torch.optim import AdamW
 from transformers import DecisionTransformerConfig, DecisionTransformerModel
 from accelerate import Accelerator
 
-from decision_transformer.art import AutonomousFreeflyerTransformer_pred_time
+from decision_transformer.art import AutonomousFreeflyerTransformer_pred_time, AutonomousFreeflyerTransformer_no_pred_time
 from dynamics.freeflyer_time import FreeflyerModel, check_koz_constraint
 from optimization.ff_scenario_time import obs, safety_margin, robot_radius, table, n_time_max, T_const
 import time
@@ -395,7 +395,10 @@ def get_DT_model(model_name, train_loader, eval_loader):
         attn_pdrop=0.1,
         )
     if 'ctgrtg' in model_name:
-        model = AutonomousFreeflyerTransformer_pred_time(config)
+        if 'no_ttg_pred' in model_name:
+            model = AutonomousFreeflyerTransformer_no_pred_time(config)
+        else:
+            model = AutonomousFreeflyerTransformer_pred_time(config)
     else:
         model = DecisionTransformerModel(config)
     model_size = sum(t.numel() for t in model.parameters())
@@ -515,9 +518,9 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
 
         ##### Open-loop inference
         # Compute time pred for open-loop model
-        if (ttg is None) and (test_loader.dataset.mdp_constr):
+        if (ttg is None) and (test_loader.dataset.mdp_constr) and ('predict_time' in model.__dict__['_modules'].keys()):
             with torch.no_grad():
-                _, _, ttg_preds_ol = model(
+                output_ol = model(
                     states=states_ol[:,start_t:end_t].to(device),
                     actions=actions_ol[:,start_t:end_t].to(device),
                     goal=goal_ol[:,start_t:end_t].to(device),
@@ -528,6 +531,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                     attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                     return_dict=False
                 )
+            ttg_preds_ol = output_ol[2]
             ttg_ol_t = ttg_preds_ol[0,-1].cpu() ######## camabiare indice per ttg_preds_ol e analoghi
             ttgs_ol[:,-1,:] = ttg_preds_ol[0,-1][None,None,:].float()
             ttg_ol_t_unnorm = (ttg_ol_t.to(device) * (data_stats['ttgs_std'][t].to(device)+1e-6)) + data_stats['ttgs_mean'][t].to(device)
@@ -535,7 +539,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
 
         # Compute action pred for open-loop model
         with torch.no_grad():
-            _, action_preds_ol, _ = model(
+            output_ol = model(
                 states=states_ol[:,start_t:end_t].to(device),
                 actions=actions_ol[:,start_t:end_t].to(device),
                 goal=goal_ol[:,start_t:end_t].to(device),
@@ -546,13 +550,14 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                 attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
+        action_preds_ol = output_ol[1]
         action_ol_t = action_preds_ol[0,-1].cpu() ######## camabiare indice per ttg_preds_ol e analoghi
         actions_ol[:,-1,:] = action_preds_ol[0,-1][None,None,:].float()
         action_ol_t_unnorm = (action_ol_t.to(device) * (data_stats['actions_std'][t].to(device)+1e-6)) + data_stats['actions_mean'][t].to(device)
         dv_ol[:, t] = [action_ol_t_unnorm[i].item() for i in range(n_action)]
 
         with torch.no_grad():
-            state_preds_ol, _, _ = model(
+            output_ol = model(
                 states=states_ol[:,start_t:end_t].to(device),
                 actions=actions_ol[:,start_t:end_t].to(device),
                 goal=goal_ol[:,start_t:end_t].to(device),
@@ -563,6 +568,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                 attention_mask=attention_mask_ol[:,start_t:end_t].to(device),
                 return_dict=False
             )
+        state_preds_ol = output_ol[0]
         state_ol_t = state_preds_ol[0,-1].cpu()
 
         # Open-loop propagation of state variable
@@ -600,9 +606,9 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
         if use_dynamics:
             
             # Compute time pred for open-loop model
-            if (ttg is None) and (test_loader.dataset.mdp_constr):
+            if (ttg is None) and (test_loader.dataset.mdp_constr) and ('predict_time' in model.__dict__['_modules'].keys()):
                 with torch.no_grad():
-                    _, _, ttg_preds_dyn = model(
+                    output_dyn = model(
                         states=states_dyn[:,start_t:end_t].to(device),
                         actions=actions_dyn[:,start_t:end_t].to(device),
                         goal=goal_dyn[:,start_t:end_t].to(device),
@@ -613,6 +619,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                         attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                         return_dict=False
                     )
+                ttg_preds_dyn = output_dyn[2]
                 ttg_dyn_t = ttg_preds_dyn[0,-1].cpu()
                 ttgs_dyn[:,-1,:] = ttg_preds_dyn[0,-1][None,None,:].float()
                 ttg_dyn_t_unnorm = (ttg_dyn_t.to(device) * (data_stats['ttgs_std'][t].to(device)+1e-6)) + data_stats['ttgs_mean'][t].to(device)
@@ -620,7 +627,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
 
             # Compute action pred for dynamics model
             with torch.no_grad():
-                _, action_preds_dyn, _ = model(
+                output_dyn = model(
                     states=states_dyn[:,start_t:end_t].to(device),
                     actions=actions_dyn[:,start_t:end_t].to(device),
                     goal=goal_dyn[:,start_t:end_t].to(device),
@@ -631,6 +638,7 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
                     attention_mask=attention_mask_dyn[:,start_t:end_t].to(device),
                     return_dict=False
                 )
+            action_preds_dyn = output_dyn[1]
             action_dyn_t = action_preds_dyn[0,-1].cpu()
             actions_dyn[:,-1,:] = action_preds_dyn[0,-1][None,None,:].float()
             action_dyn_t_unnorm = (action_dyn_t.to(device) * (data_stats['actions_std'][t].to(device)+1e-6)) + data_stats['actions_mean'][t].to(device)
@@ -761,9 +769,9 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
 
         ##### Dynamics inference
         # Compute time to go pred for dynamics model
-        if (ttg is None) and (test_loader.dataset.mdp_constr):
+        if (ttg is None) and (test_loader.dataset.mdp_constr) and ('predict_time' in model.__dict__['_modules'].keys()):
             with torch.no_grad():
-                _, _, ttg_preds_dyn = model(
+                output_dyn = model(
                     states=states_dyn[:,start_t:end_t],
                     actions=actions_dyn[:,start_t:end_t],
                     goal=goal_i[:,start_t:end_t],
@@ -774,13 +782,14 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
                     attention_mask=attention_mask_i[:,start_t:end_t],
                     return_dict=False
                 )
+            ttg_preds_dyn = output_dyn[2]
             ttg_dyn_t = ttg_preds_dyn[0,-1] ######## camabiare indice per ttg_preds_ol e analoghi
             ttgs_dyn[:,t,:] = ttg_preds_dyn[0,-1]
             ttgs_pred_dyn[:,t] = (ttg_dyn_t * (data_stats['ttgs_std'][t]+1e-6)) + data_stats['ttgs_mean'][t]
         
         # Compute action pred for dynamics model
         with torch.no_grad():
-            _, action_preds_dyn, _ = model(
+            output_dyn = model(
                 states=states_dyn[:,start_t:end_t],
                 actions=actions_dyn[:,start_t:end_t],
                 goal=goal_i[:,start_t:end_t],
@@ -791,6 +800,7 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
                 attention_mask=attention_mask_i[:,start_t:end_t],
                 return_dict=False,
             )
+        action_preds_dyn = output_dyn[1]
         action_dyn_t = action_preds_dyn[0,-1]
         actions_dyn[:,t,:] = action_dyn_t
         dv_dyn[:, t] = (action_dyn_t * (data_stats['actions_std'][t]+1e-6)) + data_stats['actions_mean'][t]
