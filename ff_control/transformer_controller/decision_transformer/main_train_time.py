@@ -12,7 +12,7 @@ import decision_transformer.manage_time as TTO_manager
 from decision_transformer.manage_time import device
 from optimization.ff_scenario_time import chunksize
 
-model_name_4_saving = 'checkpoint_ff_time_chunk' +str(chunksize) + '_ctgrtg'
+model_name_4_saving = 'checkpoint_ff_time40_100_chunk_ctgrtg'
 model_config = TTO_manager.transformer_import_config(model_name_4_saving)
 datasets, dataloaders = TTO_manager.get_train_val_test_data(mdp_constr=model_config['mdp_constr'], dataset_scenario=model_config['dataset_scenario'],
                                                             timestep_norm=model_config['timestep_norm'], chunksize=model_config['chunksize'])
@@ -77,6 +77,9 @@ def evaluate():
     for step in range(eval_iters):
         data_iter = iter(eval_dataloader)
         states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, _, _, _ = next(data_iter)
+        mask = rtgs_i < 0
+        mask_act = torch.repeat_interleave(mask, 3, 2)
+        mask_st = torch.repeat_interleave(mask[:,1:,:], 6, 2)
         with torch.no_grad():
             state_preds, action_preds, ttgs_pred = model(
                 states=states_i,
@@ -89,9 +92,9 @@ def evaluate():
                 attention_mask=attention_mask_i,
                 return_dict=False,
             )
-        loss_i = torch.mean((action_preds - actions_i) ** 2)
-        loss_i_state = torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)
-        loss_i_ttgs = torch.mean((ttgs_pred - ttgs_i) ** 2)
+        loss_i = torch.mean((action_preds[mask_act] - actions_i[mask_act]) ** 2)#torch.mean((action_preds - actions_i) ** 2)#
+        loss_i_state = torch.mean((state_preds[:,:-1,:][mask_st] - states_i[:,1:,:][mask_st]) ** 2)#torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)#
+        loss_i_ttgs = torch.mean((ttgs_pred[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
         losses.append(accelerator.gather(loss_i + loss_i_state + loss_i_ttgs))
         losses_state.append(accelerator.gather(loss_i_state))
         losses_action.append(accelerator.gather(loss_i))
@@ -110,7 +113,7 @@ accelerator.print({"loss/eval": eval_loss, "loss/state": loss_state, "loss/actio
 
 eval_steps = 500
 samples_per_step = accelerator.state.num_processes * train_loader.batch_size
-#torch.manual_seed(4)
+torch.manual_seed(4)
 
 model.train()
 completed_steps = 0
@@ -125,6 +128,9 @@ for epoch in range(num_train_epochs):
     for step, batch in enumerate(train_dataloader, start=0):
         with accelerator.accumulate(model):
             states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, _, _, _ = batch
+            mask = rtgs_i < 0
+            mask_act = torch.repeat_interleave(mask, 3, 2)
+            mask_st = torch.repeat_interleave(mask[:,1:,:], 6, 2)
             state_preds, action_preds, ttgs_pred = model(
                 states=states_i,
                 actions=actions_i,
@@ -136,9 +142,9 @@ for epoch in range(num_train_epochs):
                 attention_mask=attention_mask_i,
                 return_dict=False,
             )
-            loss_i_action = torch.mean((action_preds - actions_i) ** 2)
-            loss_i_state = torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)
-            loss_i_ttg = torch.mean((ttgs_pred - ttgs_i) ** 2)
+            loss_i_action = torch.mean((action_preds[mask_act] - actions_i[mask_act]) ** 2)#torch.mean((action_preds - actions_i) ** 2)#
+            loss_i_state = torch.mean((state_preds[:,:-1,:][mask_st] - states_i[:,1:,:][mask_st]) ** 2)#torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)#
+            loss_i_ttg = torch.mean((ttgs_pred[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
             loss = loss_i_action + loss_i_state + loss_i_ttg
             if step % 100 == 0:
                 accelerator.print(

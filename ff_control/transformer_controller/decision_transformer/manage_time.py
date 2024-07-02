@@ -727,7 +727,7 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     # Time characteristics
     if end_on_ttg:
         if not(ttg is None):
-            n_time = int(ttg/dt)
+            n_time = round(ttg/dt)
         else:
             raise ValueError('Requested to end on ttg, but ttg has not been provided!')
     else:
