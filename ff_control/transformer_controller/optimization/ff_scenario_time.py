@@ -31,7 +31,7 @@ Lambda_inv = np.array([[  0, 0.5,  1/(4*thrusters_lever_arm)],
                        [0.5,   0,  1/(4*thrusters_lever_arm)]])
 
 # Table, start and goal regions dimensions
-dataset_scenario = 'time_40_100' #'time_whole_table' #
+dataset_scenario = 'time_const_90' #'time_whole_table' #
 table = {
     'xy_low' : np.array([0.,0.]),
     'xy_up' : np.array([3.5, 2.5])
@@ -45,7 +45,8 @@ if dataset_scenario == 'time_whole_table':
         'xy_low' : np.array([0., 0.]) + robot_radius,
         'xy_up' : table['xy_up'] - robot_radius
     }
-elif dataset_scenario == 'time' or dataset_scenario == 'time_500000' or dataset_scenario == 'time_constant' or dataset_scenario == 'time_40_60' or dataset_scenario == 'time_40_100':
+elif dataset_scenario == 'time' or dataset_scenario == 'time_500000' or dataset_scenario == 'time_constant' or dataset_scenario == 'time_40_60' \
+    or dataset_scenario == 'time_40_100' or dataset_scenario == 'time_const_90':
     start_region = {
         'xy_low' : table['xy_low'] + robot_radius,
         'xy_up' : np.array([0.5, 2.5]) - robot_radius
@@ -64,8 +65,8 @@ T_const = 40.0 # max final time horizon in sec
 '''T_min = T_const if dataset_scenario == 'time_constant' else (10.0 if dataset_scenario == 'time_whole_table' else 20.0)
 T_max = T_const if dataset_scenario == 'time_constant' else 100.0
 final_time_choices = np.arange(T_min, T_max+dt/2, dt)'''
-T_min = 40.0
-T_max = 100.0#60.0#
+T_min = 90.0
+T_max = 90.0#60.0#
 final_time_choices = np.arange(T_min, T_max+1, 20.0)
 n_time_max = int(T_max/dt)
 

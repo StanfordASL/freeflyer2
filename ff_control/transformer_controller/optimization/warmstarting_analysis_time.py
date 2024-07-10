@@ -65,17 +65,17 @@ def for_computation(input_iterable):
         test_sample[0][0,:,:] = (torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6)
         test_sample[1][0,:,:] = torch.zeros((n_time_max,N_ACTION))
         test_sample[2][0,:,0] = torch.zeros((n_time_max,))
-        test_sample[3][:,0] = torch.zeros((n_time_max,))
-        test_sample[4][:,0] = torch.zeros((n_time_max,))
+        test_sample[3][0,:,0] = torch.zeros((n_time_max,))
+        test_sample[4][0,:,0] = torch.zeros((n_time_max,))
         test_sample[5][0,:,:] = (torch.tensor(np.repeat(state_final[None,:], n_time_max, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6)
-        out['test_dataset_ix'] = test_sample[-1][0]
+        out['test_dataset_ix'] = test_sample[-1].item()
     else:
         if not mdp_constr:
             states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = test_sample
         else:
             states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = test_sample
         # print('Sampled trajectory ' + str(ix) + ' from test_dataset.')
-        out['test_dataset_ix'] = ix[0]
+        out['test_dataset_ix'] = ix.item()
         state_init = np.array((states_i[0, 0, :] * data_stats['states_std'][0]) + data_stats['states_mean'][0])
         state_final = np.array((goal_i[0, 0, :] * data_stats['goal_std'][0]) + data_stats['goal_mean'][0])
 
@@ -185,7 +185,7 @@ def for_computation(input_iterable):
                                                                                         ttg=final_time, ctg_clipped=True, chunksize=chunksize, end_on_ttg=True)    
         out['J_dag'] = np.sum(la.norm(DT_dag_trajectory['dv_' + transformer_ws], ord=1, axis=0))
         states_ws_DT_dag = np.hstack((DT_dag_trajectory['xypsi_' + transformer_ws],
-                                      (DT_trajectory['xypsi_' + transformer_ws][:,-1] + ff_model.B_imp @ DT_trajectory['dv_' + transformer_ws][:, -1]).reshape((6,1)))) # set warm start
+                                      (DT_dag_trajectory['xypsi_' + transformer_ws][:,-1] + ff_model.B_imp @ DT_dag_trajectory['dv_' + transformer_ws][:, -1]).reshape((6,1)))) # set warm start
         actions_ws_DT_dag = DT_dag_trajectory['dv_' + transformer_ws] # set warm start
         # Save DT in the output dictionary
         out['runtime_dag'] = runtime_DT_dag
@@ -202,7 +202,7 @@ def for_computation(input_iterable):
             out['iter_scp_dag'] = iter_scp_dag
             out['runtime_scp_dag'] = runtime_scp_dag
         else:
-            out['feasible_scp_dag'] = False  
+            out['feasible_scp_dag'] = False
     else:
         out['J_dag'] = -1.
         out['runtime_dag'] = -1.
@@ -213,7 +213,7 @@ def for_computation(input_iterable):
 if __name__ == '__main__':
 
     transformer_ws = 'dyn' # 'dyn'/'ol'
-    transformer_model_name = 'checkpoint_ff_time_chunk100_ctgrtg'
+    transformer_model_name = 'checkpoint_ff_time_const90_chunkNone_ctgrtg'
     transformer_model_name_dag = None
     import_config = DT_manager.transformer_import_config(transformer_model_name)
     set_start_method('spawn')
@@ -235,7 +235,7 @@ if __name__ == '__main__':
     for ttg_com in ttg_com_list:
         # Parallel for inputs
         print("############### Beginning analysis for final_time =", ttg_com, "############################")
-        N_data_test = test_loader.dataset.n_data
+        N_data_test = 5000#test_loader.dataset.n_data
         other_args = {
             'model' : model,
             'model_dag' : model_dag,

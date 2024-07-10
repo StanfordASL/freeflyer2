@@ -48,6 +48,9 @@ class RpodDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        '''
+        Method called from DataLoader to randomly sample data.
+        '''
         ix = torch.randint(self.n_data, (1,))
         # Select the chunk
         time_discr = self.data['data_param']['time_discr'][ix].item()
@@ -72,6 +75,7 @@ class RpodDataset(Dataset):
         attention_mask = torch.ones(1, self.chunksize).view(self.chunksize).long()
 
         time_sec = self.data['data_param']['time_sec'][ix, time_indexes].reshape((1, self.chunksize))
+        time_discr = torch.tensor([time_discr])
 
         if self.target == False:
             if not self.mdp_constr:
@@ -98,7 +102,10 @@ class RpodDataset(Dataset):
                 return states, actions, rtgs, ctgs, ttgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
     
     def getix(self, ix):
-        ix = [ix]
+        '''
+        Method for deterministic sample
+        '''
+        ix = torch.tensor([ix]).unsqueeze(0)
         # Select the chunk
         time_discr = self.data['data_param']['time_discr'][ix].item()
         final_time = self.data['data_param']['final_time'][ix].item()
@@ -121,7 +128,7 @@ class RpodDataset(Dataset):
         timesteps = torch.tensor([[i for i in range(self.chunksize)] for _ in ix]).view(self.chunksize).long().unsqueeze(0)
         attention_mask = torch.ones(1, self.chunksize).view(self.chunksize).long().unsqueeze(0)
 
-        time_discr = torch.tensor(time_discr)
+        time_discr = torch.tensor([time_discr]).unsqueeze(0)
         time_sec = torch.tensor(self.data['data_param']['time_sec'][ix[0], time_indexes].reshape((1, self.chunksize))).unsqueeze(0)
 
         if self.target == False:
@@ -129,9 +136,9 @@ class RpodDataset(Dataset):
                 return states, actions, rtgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
             else:
                 ctgs = torch.stack([self.data['ctgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float()
+                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
                 ttgs = torch.stack([self.data['ttgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float()
+                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
                 return states, actions, rtgs, ctgs, ttgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
         else:
             target_states = torch.stack([self.data['target_states'][i, time_indexes, :]
@@ -143,9 +150,9 @@ class RpodDataset(Dataset):
                 return states, actions, rtgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
             else:
                 ctgs = torch.stack([self.data['ctgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float()
+                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
                 ttgs = torch.stack([self.data['ttgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float()
+                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
                 return states, actions, rtgs, ctgs, ttgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
 
     def get_data_size(self):
@@ -427,8 +434,6 @@ def use_model_for_imitation_learning(model, test_loader, data_sample, rtg_perc=1
     # Unnormalize the data sample and compute orbital period
     if test_loader.dataset.mdp_constr:
         states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
-        ctgs_i = ctgs_i.view(1, n_time, 1)
-        ttgs_i = ttgs_i.view(1, n_time, 1)
     else:
         states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
     states_i_unnorm = (states_i * data_stats['states_std']) + data_stats['states_mean']
@@ -708,12 +713,12 @@ def torch_model_inference_dyn(model, test_loader, data_sample, rtg_perc=1., ctg_
     # Unnormalize the data sample and compute orbital period (data sample is composed by tensors on the cpu)
     if test_loader.dataset.mdp_constr:
         states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
-        ctgs_i = ctgs_i.view(1, -1, 1).to(device) # probably not needed??
-        ttgs_i = ttgs_i.view(1, -1, 1).to(device)
     else:
         states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = data_sample
     states_i = states_i.to(device)
     rtgs_i = rtgs_i.to(device)
+    ctgs_i = ctgs_i.to(device)
+    ttgs_i = ttgs_i.to(device)
     goal_i = goal_i.to(device)
     timesteps_i = timesteps_i.long().to(device)
     attention_mask_i = attention_mask_i.long().to(device)

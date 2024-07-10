@@ -12,7 +12,7 @@ import decision_transformer.manage_time as TTO_manager
 from decision_transformer.manage_time import device
 from optimization.ff_scenario_time import chunksize
 
-model_name_4_saving = 'checkpoint_ff_time40_100_chunk_ctgrtg'
+model_name_4_saving = 'checkpoint_ff_time_const90_chunkNone_ctgrtg'
 model_config = TTO_manager.transformer_import_config(model_name_4_saving)
 datasets, dataloaders = TTO_manager.get_train_val_test_data(mdp_constr=model_config['mdp_constr'], dataset_scenario=model_config['dataset_scenario'],
                                                             timestep_norm=model_config['timestep_norm'], chunksize=model_config['chunksize'])
@@ -63,7 +63,7 @@ lr_scheduler = get_scheduler(
 )
 
 # To activate only when starting from a pretrained model
-# accelerator.load_state(root_folder + '/decision_transformer/saved_files/checkpoints/' + model_name_4_dataset)
+# accelerator.load_state(root_folder + '/decision_transformer/saved_files/checkpoints/' + model_name_4_saving)
 
 # Eval function
 eval_iters = 100
