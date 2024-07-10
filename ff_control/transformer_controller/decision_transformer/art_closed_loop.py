@@ -740,7 +740,7 @@ class ConvexMPC():
         # Initial state and constraints extraction from the current environment
         t_i = current_env.timestep
         t_f = min(t_i + self.n_steps, current_env.n_time_rpod)
-        n_time = t_f - t_i
+        
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
@@ -1029,7 +1029,7 @@ class MyopicConvexMPC():
         # Initial state and constraints extraction from the current environment
         t_i = current_env.timestep
         t_f = min(t_i + self.n_steps, current_env.n_time_rpod)
-        n_time = t_f - t_i
+        
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
@@ -1169,7 +1169,7 @@ class MyopicConvexMPC():
             #rho = np.array([1.,1.,1.,7.,7.,7.])
             cost = cp.sum(cp.norm(a, 1, axis=0))
             # Goal reaching penalizing term: if the end of the maneuver is already in the planning horizon aim for the goal
-            if t_f == ff.n_time_rpod:
+            if t_f == env.n_time_rpod:
                 cost = cost + 9.9*cp.norm((s[:,-1] + ffm.B_imp @ a[:,-1]) - state_final, 2)
             
             # Otherwise follow the warmstarting reference

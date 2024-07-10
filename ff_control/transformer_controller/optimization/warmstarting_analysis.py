@@ -63,16 +63,16 @@ def for_computation(input_iterable):
         test_sample[0][0,:,:] = (torch.tensor(np.repeat(state_init[None,:], n_time_rpod, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6)
         test_sample[1][0,:,:] = torch.zeros((n_time_rpod,N_ACTION))
         test_sample[2][0,:,0] = torch.zeros((n_time_rpod,))
-        test_sample[3][:,0] = torch.zeros((n_time_rpod,))
+        test_sample[3][0,:,0] = torch.zeros((n_time_rpod,))
         test_sample[4][0,:,:] = (torch.tensor(np.repeat(state_final[None,:], n_time_rpod, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6)
-        out['test_dataset_ix'] = test_sample[-1][0]
+        out['test_dataset_ix'] = test_sample[-1].item()
     else:
         if not mdp_constr:
             states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = test_sample
         else:
             states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = test_sample
         # print('Sampled trajectory ' + str(ix) + ' from test_dataset.')
-        out['test_dataset_ix'] = ix[0]
+        out['test_dataset_ix'] = ix.item()
         state_init = np.array((states_i[0, 0, :] * data_stats['states_std'][0]) + data_stats['states_mean'][0])
         state_final = np.array((goal_i[0, 0, :] * data_stats['goal_std'][0]) + data_stats['goal_mean'][0])
 
@@ -125,67 +125,77 @@ def for_computation(input_iterable):
 
     ####### Warmstart Transformer
     # Import the Transformer
-    if np.char.equal(feas_cvx,'optimal') and mdp_constr:
-        rtg_0 = -out['J_cvx']
-        if transformer_ws == 'dyn':
-            DT_trajectory, runtime_DT = DT_manager.torch_model_inference_dyn(model, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
-        elif transformer_ws == 'ol':
-            DT_trajectory, runtime_DT = DT_manager.torch_model_inference_ol(model, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
-    else:
-        if transformer_ws == 'dyn':
-            DT_trajectory, runtime_DT = DT_manager.torch_model_inference_dyn(model, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)
-        elif transformer_ws == 'ol':
-            DT_trajectory, runtime_DT = DT_manager.torch_model_inference_ol(model, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)    
-    out['J_DT'] = np.sum(la.norm(DT_trajectory['dv_' + transformer_ws], ord=1, axis=0))
-    states_ws_DT = np.hstack((DT_trajectory['xypsi_' + transformer_ws], state_final.reshape(-1,1))) # set warm start
-    actions_ws_DT = DT_trajectory['dv_' + transformer_ws] # set warm start
-    # Save DT in the output dictionary
-    out['runtime_DT'] = runtime_DT
+    if np.char.equal(feas_cvx,'optimal'):
+        if mdp_constr:
+            rtg_0 = -out['J_cvx']
+            if transformer_ws == 'dyn':
+                DT_trajectory, runtime_DT = DT_manager.torch_model_inference_dyn(model, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+            elif transformer_ws == 'ol':
+                DT_trajectory, runtime_DT = DT_manager.torch_model_inference_ol(model, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+        else:
+            if transformer_ws == 'dyn':
+                DT_trajectory, runtime_DT = DT_manager.torch_model_inference_dyn(model, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)
+            elif transformer_ws == 'ol':
+                DT_trajectory, runtime_DT = DT_manager.torch_model_inference_ol(model, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)    
+        out['J_DT'] = np.sum(la.norm(DT_trajectory['dv_' + transformer_ws], ord=1, axis=0))
+        states_ws_DT = np.hstack((DT_trajectory['xypsi_' + transformer_ws],
+                                  (DT_trajectory['xypsi_' + transformer_ws][:,-1] + ff_model.B_imp @ DT_trajectory['dv_' + transformer_ws][:, -1]).reshape((6,1)))) # set warm start
+        actions_ws_DT = DT_trajectory['dv_' + transformer_ws] # set warm start
+        # Save DT in the output dictionary
+        out['runtime_DT'] = runtime_DT
 
-    # Solve SCP
-    runtime0_scp_DT = time.time()
-    traj_scp_DT, J_vect_scp_DT, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ff_model, states_ws_DT, actions_ws_DT, state_init, state_final)
-    runtime1_scp_DT = time.time()
-    runtime_scp_DT = runtime1_scp_DT - runtime0_scp_DT
-    
-    if np.char.equal(feas_scp_DT,'optimal'):
-        # Save scp_DT in the output dictionary
-        out['J_vect_scp_DT'] = J_vect_scp_DT
-        out['iter_scp_DT'] = iter_scp_DT
-        out['runtime_scp_DT'] = runtime_scp_DT
+        # Solve SCP
+        runtime0_scp_DT = time.time()
+        traj_scp_DT, J_vect_scp_DT, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ff_model, states_ws_DT, actions_ws_DT, state_init, state_final)
+        runtime1_scp_DT = time.time()
+        runtime_scp_DT = runtime1_scp_DT - runtime0_scp_DT
+        
+        if np.char.equal(feas_scp_DT,'optimal'):
+            # Save scp_DT in the output dictionary
+            out['J_vect_scp_DT'] = J_vect_scp_DT
+            out['iter_scp_DT'] = iter_scp_DT
+            out['runtime_scp_DT'] = runtime_scp_DT
+        else:
+            out['feasible_DT'] = False
     else:
         out['feasible_DT'] = False
 
     # Import the Transformer_dag
-    if np.char.equal(feas_cvx,'optimal') and mdp_constr:
-        if transformer_ws == 'dyn':
-            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
-        elif transformer_ws == 'ol':
-            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
-    else:
-        if transformer_ws == 'dyn':
-            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)
-        elif transformer_ws == 'ol':
-            DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)    
-    out['J_dag'] = np.sum(la.norm(DT_dag_trajectory['dv_' + transformer_ws], ord=1, axis=0))
-    states_ws_DT_dag = np.hstack((DT_dag_trajectory['xypsi_' + transformer_ws], state_final.reshape(-1,1))) # set warm start
-    actions_ws_DT_dag = DT_dag_trajectory['dv_' + transformer_ws] # set warm start
-    # Save DT in the output dictionary
-    out['runtime_dag'] = runtime_DT_dag
+    if np.char.equal(feas_cvx,'optimal') and (not (model_dag is None)):
+        if mdp_constr:
+            if transformer_ws == 'dyn':
+                DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+            elif transformer_ws == 'ol':
+                DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=None, ctg_perc=0., rtg=rtg_0, ctg_clipped=True)
+        else:
+            if transformer_ws == 'dyn':
+                DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_dyn(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)
+            elif transformer_ws == 'ol':
+                DT_dag_trajectory, runtime_DT_dag = DT_manager.torch_model_inference_ol(model_dag, test_loader, test_sample, rtg_perc=1., ctg_perc=0., rtg=None, ctg_clipped=True)    
+        out['J_dag'] = np.sum(la.norm(DT_dag_trajectory['dv_' + transformer_ws], ord=1, axis=0))
+        states_ws_DT_dag = np.hstack((DT_dag_trajectory['xypsi_' + transformer_ws],
+                                      (DT_dag_trajectory['xypsi_' + transformer_ws][:,-1] + ff_model.B_imp @ DT_dag_trajectory['dv_' + transformer_ws][:, -1]).reshape((6,1)))) # set warm start
+        actions_ws_DT_dag = DT_dag_trajectory['dv_' + transformer_ws] # set warm start
+        # Save DT in the output dictionary
+        out['runtime_dag'] = runtime_DT_dag
 
-    # Solve SCP
-    runtime0_scp_dag = time.time()
-    traj_scp_dag, J_vect_scp_dag, iter_scp_dag, feas_scp_dag = ocp_obstacle_avoidance(ff_model, states_ws_DT_dag, actions_ws_DT_dag, state_init, state_final)
-    runtime1_scp_dag = time.time()
-    runtime_scp_dag = runtime1_scp_dag - runtime0_scp_dag
-    
-    if np.char.equal(feas_scp_dag,'optimal'):
-        # Save scp_DT in the output dictionary
-        out['J_vect_scp_dag'] = J_vect_scp_dag
-        out['iter_scp_dag'] = iter_scp_dag
-        out['runtime_scp_dag'] = runtime_scp_dag
+        # Solve SCP
+        runtime0_scp_dag = time.time()
+        traj_scp_dag, J_vect_scp_dag, iter_scp_dag, feas_scp_dag = ocp_obstacle_avoidance(ff_model, states_ws_DT_dag, actions_ws_DT_dag, state_init, state_final)
+        runtime1_scp_dag = time.time()
+        runtime_scp_dag = runtime1_scp_dag - runtime0_scp_dag
+        
+        if np.char.equal(feas_scp_dag,'optimal'):
+            # Save scp_DT in the output dictionary
+            out['J_vect_scp_dag'] = J_vect_scp_dag
+            out['iter_scp_dag'] = iter_scp_dag
+            out['runtime_scp_dag'] = runtime_scp_dag
+        else:
+            out['feasible_scp_dag'] = False
     else:
-        out['feasible_scp_dag'] = False  
+        out['J_dag'] = -1.
+        out['runtime_dag'] = -1.
+        out['feasible_scp_dag'] = False
 
     return out
 
@@ -202,10 +212,13 @@ if __name__ == '__main__':
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], timestep_norm=import_config['timestep_norm'])
     train_loader, eval_loader, test_loader = dataloaders
     model = DT_manager.get_DT_model(transformer_model_name, train_loader, eval_loader)
-    model_dag = DT_manager.get_DT_model(transformer_model_name_dag, train_loader, eval_loader)
+    if not(transformer_model_name_dag is None):
+        model_dag = DT_manager.get_DT_model(transformer_model_name_dag, train_loader, eval_loader)
+    else:
+        model_dag = None
 
     # Parallel for inputs
-    N_data_test = test_loader.dataset.n_data
+    N_data_test = 5000#test_loader.dataset.n_data
     other_args = {
         'model' : model,
         'model_dag' : model_dag,
@@ -256,6 +269,10 @@ if __name__ == '__main__':
             runtime_cvx[i] = res['runtime_cvx']
             ctgs0_cvx[i] = res['ctgs0_cvx']
             cvx_problem[i] = res['cvx_problem']
+            J_DT[i] = res['J_DT']
+            runtime_DT[i] = res['runtime_DT']
+            J_dag[i] = res['J_dag']
+            runtime_dag[i] = res['runtime_dag']
         else:
             i_unfeas_cvx += [ i ]
 
@@ -267,19 +284,15 @@ if __name__ == '__main__':
             i_unfeas_scp_cvx += [ i ]
 
         if res['feasible_DT']:
-            J_DT[i] = res['J_DT']
             J_vect_scp_DT[i,:] = res['J_vect_scp_DT']
             iter_scp_DT[i] = res['iter_scp_DT']
-            runtime_DT[i] = res['runtime_DT']
             runtime_scp_DT[i] = res['runtime_scp_DT']
         else:
             i_unfeas_DT += [ i ]
         
         if res['feasible_scp_dag']:
-            J_dag[i] = res['J_dag']
             J_vect_scp_dag[i,:] = res['J_vect_scp_dag']
             iter_scp_dag[i] = res['iter_scp_dag']
-            runtime_dag[i] = res['runtime_dag']
             runtime_scp_dag[i] = res['runtime_scp_dag']
         else:
             i_unfeas_scp_dag += [ i ]
