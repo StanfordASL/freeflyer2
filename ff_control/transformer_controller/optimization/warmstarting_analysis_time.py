@@ -213,7 +213,7 @@ def for_computation(input_iterable):
 if __name__ == '__main__':
 
     transformer_ws = 'dyn' # 'dyn'/'ol'
-    transformer_model_name = 'checkpoint_ff_time_const90_chunkNone_ctgrtg'
+    transformer_model_name = 'checkpoint_ff_time_const90_chunk100_ctgrtg'
     transformer_model_name_dag = None
     import_config = DT_manager.transformer_import_config(transformer_model_name)
     set_start_method('spawn')
@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
     # Get the datasets and loaders from the torch data
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], dataset_scenario=import_config['dataset_scenario'],
-                                                               timestep_norm=import_config['timestep_norm'], chunksize=import_config['chunksize'])
+                                                               timestep_norm=import_config['timestep_norm'], chunksize=import_config['chunksize'], random_chunk=False)
     train_loader, eval_loader, test_loader = dataloaders
     model = DT_manager.get_DT_model(transformer_model_name, train_loader, eval_loader)
     if not(transformer_model_name_dag is None):

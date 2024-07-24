@@ -35,7 +35,7 @@ print(device)
 
 class RpodDataset(Dataset):
     # Create a Dataset object
-    def __init__(self, data, mdp_constr, chunksize=None, target=False):
+    def __init__(self, data, mdp_constr, chunksize=None, random_chunk=True, target=False):
         self.data_stats = data['data_stats']
         self.data = data
         self.n_data, self.max_len, self.n_state = self.data['states'].shape
@@ -43,6 +43,7 @@ class RpodDataset(Dataset):
         self.mdp_constr = mdp_constr
         self.target = target
         self.chunksize = chunksize if not(chunksize is None) else self.max_len
+        self.random_chunk = random_chunk
 
     def __len__(self):
         return len(self.data)
@@ -55,12 +56,19 @@ class RpodDataset(Dataset):
         # Select the chunk
         time_discr = self.data['data_param']['time_discr'][ix].item()
         final_time = self.data['data_param']['final_time'][ix].item()
-        time_index_final = round(final_time/time_discr)
-        if time_index_final > self.chunksize:
-            if np.random.choice([0,1],1) == 0:
-                time_indexes = np.arange(0, self.chunksize)
+        final_time_index = round(final_time/time_discr)
+
+        if final_time_index > self.chunksize:
+            if self.random_chunk:
+                # select an interval of 'chunksize' time steps uniformly in [0,T)
+                max_start_index = max(0, final_time_index - self.chunksize)
+                start_index = np.random.randint(0, max_start_index + 1)
+                time_indexes = np.arange(start_index, start_index + self.chunksize)
             else:
-                time_indexes = np.arange(time_index_final - self.chunksize, time_index_final)
+                if np.random.choice([0,1],1) == 0:
+                    time_indexes = np.arange(0, self.chunksize)
+                else:
+                    time_indexes = np.arange(final_time_index - self.chunksize, final_time_index)
         else:
             time_indexes = np.arange(0, self.chunksize)
         states = torch.stack([self.data['states'][i, time_indexes, :]
@@ -109,12 +117,19 @@ class RpodDataset(Dataset):
         # Select the chunk
         time_discr = self.data['data_param']['time_discr'][ix].item()
         final_time = self.data['data_param']['final_time'][ix].item()
-        time_index_final = round(final_time/time_discr)
-        if time_index_final > self.chunksize:
-            if np.random.choice([0,1],1) == 0:
-                time_indexes = np.arange(0, self.chunksize)
+        final_time_index = round(final_time/time_discr)
+
+        if final_time_index > self.chunksize:
+            if self.random_chunk:
+                # select an interval of 'chunksize' time steps uniformly in [0,T)
+                max_start_index = max(0, final_time_index - self.chunksize)
+                start_index = np.random.randint(0, max_start_index + 1)
+                time_indexes = np.arange(start_index, start_index + self.chunksize)
             else:
-                time_indexes = np.arange(time_index_final - self.chunksize, time_index_final)
+                if np.random.choice([0,1],1) == 0:
+                    time_indexes = np.arange(0, self.chunksize)
+                else:
+                    time_indexes = np.arange(final_time_index - self.chunksize, final_time_index)
         else:
             time_indexes = np.arange(0, self.chunksize)
         states = torch.stack([self.data['states'][i, time_indexes, :]
@@ -194,7 +209,25 @@ def transformer_import_config(model_name):
     
     return config
 
-def get_train_val_test_data(mdp_constr, dataset_scenario, timestep_norm, chunksize):
+def get_fake_sample_like(state_init, state_final, final_time, dataloader):
+    '''
+    Method to create a fake sample from desired initial/final state and final time. The fake sample has the sample structure of a real random sample taken from dataloader can be used to initialize the trajectory generation process at inference.
+    '''
+    # Take a random sample
+    fake_test_sample = next(iter(dataloader))
+    data_stats = dataloader.dataset.data_stats
+    dt = dataloader.dataset.data['data_param']['time_discr'][0].item()
+    # Substitute initial state, actions (0), rtgs (0), ctgs (0), ttgs, goal
+    fake_test_sample[0][0,:,:] = (torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6)
+    fake_test_sample[1][0,:,:] = torch.zeros((n_time_max,3))
+    fake_test_sample[2][0,:,0] = torch.zeros((n_time_max,))
+    fake_test_sample[3][0,:,0] = torch.zeros((n_time_max,))
+    fake_test_sample[4][0,:,:] = (torch.arange(final_time, 0, -dt)[:,None] - data_stats['ttgs_mean'])/(data_stats['ttgs_std'] + 1e-6)
+    fake_test_sample[5][0,:,:] = (torch.tensor(np.repeat(state_final[None,:], n_time_max, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6)
+
+    return fake_test_sample
+
+def get_train_val_test_data(mdp_constr, dataset_scenario, timestep_norm, chunksize, random_chunk):
 
     # Import and normalize torch dataset, then save data statistics
     torch_data, data_param = import_dataset_for_DT_eval_vXX(dataset_scenario, mdp_constr)
@@ -261,8 +294,8 @@ def get_train_val_test_data(mdp_constr, dataset_scenario, timestep_norm, chunksi
         }
     
     # Create datasets
-    train_dataset = RpodDataset(train_data, mdp_constr, chunksize)
-    val_dataset = RpodDataset(val_data, mdp_constr, chunksize)
+    train_dataset = RpodDataset(train_data, mdp_constr, chunksize, random_chunk)
+    val_dataset = RpodDataset(val_data, mdp_constr, chunksize, random_chunk)
     test_dataset = RpodDataset(val_data, mdp_constr)
     datasets = (train_dataset, val_dataset, test_dataset)
 
