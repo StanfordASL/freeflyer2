@@ -217,12 +217,15 @@ def get_fake_sample_like(state_init, state_final, final_time, dataloader):
     fake_test_sample = next(iter(dataloader))
     data_stats = dataloader.dataset.data_stats
     dt = dataloader.dataset.data['data_param']['time_discr'][0].item()
+    ttg = torch.arange(final_time, 0, -dt)
+    ttg_sample = torch.zeros((n_time_max,))
+    ttg_sample[:ttg.shape[0]] = ttg
     # Substitute initial state, actions (0), rtgs (0), ctgs (0), ttgs, goal
     fake_test_sample[0][0,:,:] = (torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6)
     fake_test_sample[1][0,:,:] = torch.zeros((n_time_max,3))
     fake_test_sample[2][0,:,0] = torch.zeros((n_time_max,))
     fake_test_sample[3][0,:,0] = torch.zeros((n_time_max,))
-    fake_test_sample[4][0,:,:] = (torch.arange(final_time, 0, -dt)[:,None] - data_stats['ttgs_mean'])/(data_stats['ttgs_std'] + 1e-6)
+    fake_test_sample[4][0,:,:] = (ttg_sample[:,None] - data_stats['ttgs_mean'])/(data_stats['ttgs_std'] + 1e-6)
     fake_test_sample[5][0,:,:] = (torch.tensor(np.repeat(state_final[None,:], n_time_max, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6)
 
     return fake_test_sample

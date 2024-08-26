@@ -11,7 +11,7 @@ import torch
 
 import decision_transformer.manage_time as DT_manager
 from dynamics.freeflyer_time import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, compute_constraint_to_go, sample_init_target
-from optimization.ff_scenario_time import N_STATE, N_ACTION, T_min, T_max, n_time_max, obs, iter_max_SCP, robot_radius, safety_margin
+from optimization.ff_scenario_time import N_STATE, N_ACTION, T_min, T_max, n_time_max, obs, iter_max_SCP, robot_radius, safety_margin, random_chunk
 import time
 import itertools
 from multiprocessing import Pool, set_start_method
@@ -213,7 +213,7 @@ def for_computation(input_iterable):
 if __name__ == '__main__':
 
     transformer_ws = 'dyn' # 'dyn'/'ol'
-    transformer_model_name = 'checkpoint_ff_time_const90_chunk100_ctgrtg'
+    transformer_model_name = 'checkpoint_ff_time40_100_chunk100R_ctgrtg12000'
     transformer_model_name_dag = None
     import_config = DT_manager.transformer_import_config(transformer_model_name)
     set_start_method('spawn')
@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
     # Get the datasets and loaders from the torch data
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], dataset_scenario=import_config['dataset_scenario'],
-                                                               timestep_norm=import_config['timestep_norm'], chunksize=import_config['chunksize'], random_chunk=False)
+                                                               timestep_norm=import_config['timestep_norm'], chunksize=import_config['chunksize'], random_chunk=random_chunk)
     train_loader, eval_loader, test_loader = dataloaders
     model = DT_manager.get_DT_model(transformer_model_name, train_loader, eval_loader)
     if not(transformer_model_name_dag is None):
@@ -230,7 +230,7 @@ if __name__ == '__main__':
         model_dag = None
 
     # List of possible time allotted for the trajectory
-    ttg_com_list = np.arange(T_min, T_max+1, 20.0)
+    ttg_com_list = np.arange(T_min, T_max+1, 10.0)
 
     for ttg_com in ttg_com_list:
         # Parallel for inputs
