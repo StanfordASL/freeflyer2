@@ -86,9 +86,11 @@ class TransformerBasedSCPController(LinearController):
         # Load Transformer model and FreeFlyer model
         self.TTO_model = TTO_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM)
         self.TTO_model.eval()
-        self.data_stats = TTO_manager.get_data_stats()
+        self.data_stats = TTO_manager.get_data_stats(self.TRANSFORMER_MODEL)
         self.get_logger().info('Transformer model '+self.TRANSFORMER_MODEL+' imported, LET\'S FLY!!!')
         self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
+        self.generalized_time = ff_scenario.generalized_time
+        self.generalized_obs = ff_scenario.generalized_obs
 
         # Goal State command
         self.state_callback_group = MutuallyExclusiveCallbackGroup()
@@ -109,8 +111,8 @@ class TransformerBasedSCPController(LinearController):
         self.declare_parameter('gain_df', 10.0)
         self.declare_parameter('gain_t', 0.2)
         self.declare_parameter('gain_dt', 0.4)
-        self.declare_parameter('total_time', ff_scenario.T)
-        self.n_timesteps = ff_scenario.S
+        self.declare_parameter('total_time', ff_scenario.T_nominal)
+        self.n_timesteps = int(ff_scenario.T_nominal/ff_scenario.dt) + 1
         self._trajectory_ready = False
         self.control_period = 0.1
         self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.control_callback_group)
@@ -235,13 +237,19 @@ class TransformerBasedSCPController(LinearController):
         self.get_logger().info('Radius robot: '+str(ffm.param['radius']))
         
         # Solve Convex Problem
-        traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final)
+        final_time = self.get_parameter('total_time').get_parameter_value().double_value
+        traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final, final_time)
         _, actions_ws_cvx = traj_cvx['states'], traj_cvx['actions_G']
 
         # Use Transformer to infer the warm-starting trajectory
-        inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS)
         rtg = - np.sum(np.linalg.norm(actions_ws_cvx, ord=1, axis=0))
-        DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        if (not self.generalized_obs) and (not self.generalized_time):
+            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS)
+            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        elif (not self.generalized_obs) and (self.generalized_time):
+            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS+'_time')
+            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ttg=final_time,
+                                                       ctg_clipped=True, chunksize=ff_scenario.chunksize, end_on_ttg=True)
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
@@ -253,9 +261,8 @@ class TransformerBasedSCPController(LinearController):
         scp_runtime = time.time() - scp_time0
         self.path_pub.publish(self.traj2path(traj_scp_DT['states'], height=0.1))
 
-        total_time = self.get_parameter('total_time').get_parameter_value().double_value
         self.trajectory_timer.cancel()
-        self.trajectory_timer = self.create_timer(total_time/(self.n_timesteps - 1), self.trajectory_loop)
+        self.trajectory_timer = self.create_timer(ff_scenario.dt, self.trajectory_loop)
         self.get_logger().info('============== SCP iterations: '+str(iter_scp_DT))
         self.get_logger().info('============== SCP status: '+str(feas_scp_DT))
         self.get_logger().info('============== TTO computational time: '+str(DT_runtime)+' s')

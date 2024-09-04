@@ -11,9 +11,17 @@ N_STATE = 6
 N_ACTION = 3
 N_CLUSTERS = 4
 
+# Generalization level
+generalized_time = True
+generalized_obs = False
+
 # time problem constants
-S = 101 # number of control switches
-n_time_rpod = S-1
+if generalized_time:
+    chunksize = 100 #None/100
+    random_chunk = True
+else:
+    S = 101 # number of control switches
+    n_time_rpod = S-1
 
 # constants
 mass = 16.0
@@ -42,10 +50,23 @@ goal_region = {
     'xy_low' : np.array([3.0, 0.]) + robot_radius,
     'xy_up' : table['xy_up'] - robot_radius
 }
+min_init_dist = 0.5
+
+# Time discretization and bounds
+dt = 0.5 if generalized_time else 0.4
+T_const = 40.0 # max final time horizon in sec
+'''T_min = T_const if dataset_scenario == 'time_constant' else (10.0 if dataset_scenario == 'time_whole_table' else 20.0)
+T_max = T_const if dataset_scenario == 'time_constant' else 100.0
+final_time_choices = np.arange(T_min, T_max+dt/2, dt)'''
+T_min = 40.0 if generalized_time else 40.0
+T_max = 100.0 if generalized_time else 40.0
+T_nominal = 40.0
+final_time_choices = np.arange(T_min, T_max+1, 20.0)
+n_time_max = int(T_max/dt)
 
 # Obstacle
-T = 40.0#80.0 # max final time horizon in sec
-dt = T / n_time_rpod
+'''T = 40.0#80.0 # max final time horizon in sec
+dt = T / n_time_rpod'''
 obs = {
     'position' : np.array([[1.0,  0.7],
                            [1.5,  1.7],
@@ -59,6 +80,15 @@ obs = {
 }'''
 n_obs = obs['position'].shape[0]
 safety_margin = 1.1
+
+'''# PID Controller
+gain_f = 2.0*0
+gain_df = 10.0*2
+gain_t = 0.2*0
+gain_dt = 0.4*2
+K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
+              [0, gain_f, 0, 0, gain_df, 0],
+              [0, 0, gain_t, 0, 0, gain_dt]])'''
 
 # Optimization interface
 iter_max_SCP = 20

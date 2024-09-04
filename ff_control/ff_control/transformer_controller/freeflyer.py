@@ -67,9 +67,9 @@ class FreeflyerModel:
         return state_dot
     
     ################## OPTIMIZATION METHODS ###############
-    def initial_guess_line(self, state_init, state_final):
-        tt = np.arange(0,ff.T + ff.dt/2, ff.dt)
-        state_ref = state_init[:,None] + ((state_final - state_init)[:,None]/ff.T)*np.repeat(tt[None,:], self.N_STATE, axis=0)
+    def initial_guess_line(self, state_init, state_final, final_time=ff.T_nominal):
+        tt = np.arange(0,final_time + ff.dt/2, ff.dt)
+        state_ref = state_init[:,None] + ((state_final - state_init)[:,None]/final_time)*np.repeat(tt[None,:], self.N_STATE, axis=0)
         action_ref = np.zeros((self.N_ACTION, len(tt)-1))
         return state_ref, action_ref
 
@@ -176,19 +176,37 @@ class FreeflyerModel:
                             [           0,            0, 1]])
         return R_BG  
 
-def sample_init_target():
-    state_init = np.random.uniform(low=[ff.start_region['xy_low'][0], ff.start_region['xy_low'][1], -np.pi, 0, 0, 0],
+def sample_init_target(sample_time=False):
+
+    # Sample initial and final states
+    valid = False
+    while not valid:
+        state_init = np.random.uniform(low=[ff.start_region['xy_low'][0], ff.start_region['xy_low'][1], -np.pi, 0, 0, 0],
                                    high=[ff.start_region['xy_up'][0], ff.start_region['xy_up'][1], np.pi, 0, 0, 0])
-    state_target = np.random.uniform(low=[ff.goal_region['xy_low'][0], ff.goal_region['xy_low'][1], -np.pi, 0, 0, 0],
+        valid = ((np.linalg.norm(state_init[:2] - ff.obs['position'], axis=1) - (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin) > 0).all()
+    valid = False
+    while not valid:
+        state_target = np.random.uniform(low=[ff.goal_region['xy_low'][0], ff.goal_region['xy_low'][1], -np.pi, 0, 0, 0],
                                      high=[ff.goal_region['xy_up'][0], ff.goal_region['xy_up'][1], np.pi, 0, 0, 0])
-    return state_init, state_target
+        valid = ((np.linalg.norm(state_target[:2] - ff.obs['position'],axis=1) - (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin) > 0).all() & ((np.linalg.norm(state_target[:2] - state_init[:2]) - ff.min_init_dist) > 0)
+    # Select correct value of final angle
+    psi_period = np.array([0, -2*np.pi, 2*np.pi])
+    psi_dist = np.abs(state_init[2] - (state_target[2] + psi_period))
+    state_target[2] = state_target[2] + psi_period[np.argmin(psi_dist)]
+    
+    # Eventually sample final time
+    if sample_time:
+        final_time = np.random.choice(ff.final_time_choices)
+        return state_init, state_target, final_time
+    else:
+        return state_init, state_target
 
 
 # ----------------------------------
 # Optimization problems
-def ocp_no_obstacle_avoidance(model:FreeflyerModel, state_init, state_final):
+def ocp_no_obstacle_avoidance(model:FreeflyerModel, state_init, state_final, final_time=ff.T_nominal):
     # Initial reference
-    state_ref, action_ref = model.initial_guess_line(state_init, state_final)
+    state_ref, action_ref = model.initial_guess_line(state_init, state_final, final_time)
     obs = copy.deepcopy(ff.obs)
     obs['radius'] = (obs['radius'] + model.param['radius'])*ff.safety_margin
     
@@ -231,7 +249,7 @@ def ocp_no_obstacle_avoidance(model:FreeflyerModel, state_init, state_final):
         J = J_vect[scp_iter]
 
     traj_opt = {
-        'time' : np.arange(0,ff.T + ff.dt/2, ff.dt),
+        'time' : np.arange(0,final_time + ff.dt/2, ff.dt),
         'states' : s_opt,
         'actions_G' : a_opt,
         'actions_t' : a_opt_t
@@ -243,6 +261,7 @@ def ocp_obstacle_avoidance(model:FreeflyerModel, state_ref, action_ref, state_in
     # Initalization
     obs = copy.deepcopy(ff.obs)
     obs['radius'] = (obs['radius'] + model.param['radius'])*ff.safety_margin
+    final_time = ff.dt*(state_ref.shape[1] - 1)
 
     # Initial condition for the scp
     DELTA_J = 10
@@ -283,7 +302,7 @@ def ocp_obstacle_avoidance(model:FreeflyerModel, state_ref, action_ref, state_in
         J = J_vect[scp_iter]
 
     traj_opt = {
-        'time' : np.arange(0,ff.T + ff.dt/2, ff.dt),
+        'time' : np.arange(0,final_time + ff.dt/2, ff.dt),
         'states' : s_opt,
         'actions_G' : a_opt,
         'actions_t' : a_opt_t
@@ -299,7 +318,7 @@ def compute_reward_to_go(actions):
     rewards_to_go = np.empty(shape=(n_data, n_time), dtype=float)
     for n in range(n_data):
         for t in range(n_time):
-            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, :, t:], ord=1,  axis=1))
+            rewards_to_go[n, t] = - np.sum(np.linalg.norm(actions[n, t:, :], ord=1,  axis=1))
         
     return rewards_to_go
 

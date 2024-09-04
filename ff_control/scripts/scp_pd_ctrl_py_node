@@ -275,8 +275,8 @@ class TransformerBasedSCPController(LinearController):
         self.declare_parameter('gain_df', 10.0)
         self.declare_parameter('gain_t', 0.2)
         self.declare_parameter('gain_dt', 0.4)
-        self.declare_parameter('total_time', ff_scenario.T)
-        self.n_timesteps = ff_scenario.S
+        self.declare_parameter('total_time', ff_scenario.T_nominal)
+        self.n_timesteps = int(ff_scenario.T_nominal/ff_scenario.dt) + 1
         self._trajectory_ready = False
         self.control_period = 0.1
         self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.control_callback_group)
@@ -398,7 +398,7 @@ class TransformerBasedSCPController(LinearController):
         self.iocp = ImpulsiveOCP(self.STATE_DIM, self.CONTROL_DIM, param)
         total_time = self.get_parameter('total_time').get_parameter_value().double_value
         self.trajectory_timer.cancel()
-        self.trajectory_timer = self.create_timer(total_time/(self.n_timesteps - 1), self.trajectory_loop)
+        self.trajectory_timer = self.create_timer(ff_scenario.dt, self.trajectory_loop)
         traj_scp, J_vect_scp, iter_scp, feas_scp = self.iocp.solve_scp(state_init, state_final, self.obstacles, total_time, self.n_timesteps)
         self.path_pub.publish(self.traj2path(traj_scp['states'], height=0.1))
         self.get_logger().info('============== SCP iterations: '+str(iter_scp))
