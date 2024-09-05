@@ -63,8 +63,8 @@ def state_init_final2sample(data_stats, state_init, state_final, final_time=T_no
     '''
     n_time = data_stats['states_mean'].shape[0]
     ix = torch.tensor([0])[None,:]
-    ttg = torch.arange(final_time, 0, -dt)
-    ttg_sample = torch.zeros((n_time_max,))
+    ttg = torch.arange(final_time, 0, -dt).to(device)
+    ttg_sample = torch.zeros((n_time_max,), device=device)
     ttg_sample[:ttg.shape[0]] = ttg
     states_i = ((torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0), device=device) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6))[None,:,:].float()
     actions_i = torch.zeros((n_time_max,3))[None,:,:].float()

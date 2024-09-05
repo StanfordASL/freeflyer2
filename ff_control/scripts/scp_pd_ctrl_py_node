@@ -26,7 +26,9 @@
 import copy
 import rclpy
 import sys
-sys.path.append('/home/freeflyerhub/Transformer/lib/python3.10/site-packages')
+import os
+username = os.getenv("USERNAME")
+sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
 import numpy as np
 import cvxpy as cp
 import typing as T
