@@ -22,6 +22,8 @@ if generalized_time:
 else:
     S = 101 # number of control switches
     n_time_rpod = S-1
+    chunksize = None
+    random_chunk = True
 
 
 # constants

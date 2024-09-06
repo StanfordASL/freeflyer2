@@ -104,7 +104,7 @@ class RpodDataset(Dataset):
                 else:
                     return states, actions, rtgs, ctgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
         else:
-            target_states = torch.stack([self.data['target_states'][i, time_indexes, :]
+            target_states = torch.stack([self.data['target_states'][i, time_indexes[:-1], :]
                             for i in ix]).view(self.chunksize-1, self.n_state).float()
             target_actions = torch.stack([self.data['target_actions'][i, time_indexes, :]
                             for i in ix]).view(self.chunksize, self.n_action).float()
@@ -121,75 +121,81 @@ class RpodDataset(Dataset):
                 else:
                     states, actions, rtgs, ctgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
     
-    def getix(self, ix):
+    def getix(self, ix, get_full_sample=False):
         '''
-        Method for deterministic sample
+        Method for deterministic sample. 
+        INPUTS:
+            - ix : index of the sample in the dataset;
+            - get_full_sample : boolean flag to return either the chunked or full sample (default=False).
+        NOTE: if get_full_sample = True, the dataset uses the chunksize set at the moment of the creation of the dataset. 
+              If the dataset has been created without chunking size, the get_full_sample flag won't make any difference.
         '''
         ix = torch.tensor([ix]).unsqueeze(0)
 
         # Select the chunk
         time_discr = self.data['data_param']['time_discr'][ix].item()
+        chunksize_tbu = self.max_len if get_full_sample else self.chunksize
         if generalized_time:
             final_time = self.data['data_param']['final_time'][ix].item()
             final_time_index = round(final_time/time_discr)
 
-            if final_time_index > self.chunksize:
+            if final_time_index > chunksize_tbu:
                 if self.random_chunk:
                     # select an interval of 'chunksize' time steps uniformly in [0,T)
-                    max_start_index = max(0, final_time_index - self.chunksize)
+                    max_start_index = max(0, final_time_index - chunksize_tbu)
                     start_index = np.random.randint(0, max_start_index + 1)
-                    time_indexes = np.arange(start_index, start_index + self.chunksize)
+                    time_indexes = np.arange(start_index, start_index + chunksize_tbu)
                 else:
                     if np.random.choice([0,1],1) == 0:
-                        time_indexes = np.arange(0, self.chunksize)
+                        time_indexes = np.arange(0, chunksize_tbu)
                     else:
-                        time_indexes = np.arange(final_time_index - self.chunksize, final_time_index)
+                        time_indexes = np.arange(final_time_index - chunksize_tbu, final_time_index)
             else:
-                time_indexes = np.arange(0, self.chunksize)
+                time_indexes = np.arange(0, chunksize_tbu)
         else:
-            time_indexes = np.arange(0, self.chunksize)
+            time_indexes = np.arange(0, chunksize_tbu)
 
         # Extract the chunk
         states = torch.stack([self.data['states'][i, time_indexes, :]
-                        for i in ix]).view(self.chunksize, self.n_state).float().unsqueeze(0)
+                        for i in ix]).view(chunksize_tbu, self.n_state).float().unsqueeze(0)
         actions = torch.stack([self.data['actions'][i, time_indexes, :]
-                        for i in ix]).view(self.chunksize, self.n_action).float().unsqueeze(0)
+                        for i in ix]).view(chunksize_tbu, self.n_action).float().unsqueeze(0)
         rtgs = torch.stack([self.data['rtgs'][i, time_indexes]
-                        for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
+                        for i in ix]).view(chunksize_tbu, 1).float().unsqueeze(0)
         goal = torch.stack([self.data['goal'][i, time_indexes, :]
-                        for i in ix]).view(self.chunksize, self.n_state).float().unsqueeze(0)
-        timesteps = torch.tensor([[i for i in range(self.chunksize)] for _ in ix]).view(self.chunksize).long().unsqueeze(0)
-        attention_mask = torch.ones(1, self.chunksize).view(self.chunksize).long().unsqueeze(0)
+                        for i in ix]).view(chunksize_tbu, self.n_state).float().unsqueeze(0)
+        timesteps = torch.tensor([[i for i in range(chunksize_tbu)] for _ in ix]).view(chunksize_tbu).long().unsqueeze(0)
+        attention_mask = torch.ones(1, chunksize_tbu).view(chunksize_tbu).long().unsqueeze(0)
 
         time_discr = torch.tensor([time_discr]).unsqueeze(0)
-        time_sec = torch.tensor(self.data['data_param']['time_sec'][ix[0], time_indexes].reshape((1, self.chunksize))).unsqueeze(0)
+        time_sec = torch.tensor(self.data['data_param']['time_sec'][ix[0], time_indexes].reshape((1, chunksize_tbu))).unsqueeze(0)
 
         if self.target == False:
             if not self.mdp_constr:
                 return states, actions, rtgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
             else:
                 ctgs = torch.stack([self.data['ctgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
+                            for i in ix]).view(chunksize_tbu, 1).float().unsqueeze(0)
                 if generalized_time:
                     ttgs = torch.stack([self.data['ttgs'][i, time_indexes]
-                                for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
+                                for i in ix]).view(chunksize_tbu, 1).float().unsqueeze(0)
                     return states, actions, rtgs, ctgs, ttgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
                 else:
                     return states, actions, rtgs, ctgs, goal, timesteps, attention_mask, time_discr, time_sec, ix
         else:
-            target_states = torch.stack([self.data['target_states'][i, time_indexes, :]
-                            for i in ix]).view(self.chunksize-1, self.n_state).float().unsqueeze(0)
+            target_states = torch.stack([self.data['target_states'][i, time_indexes[:-1], :]
+                            for i in ix]).view(chunksize_tbu-1, self.n_state).float().unsqueeze(0)
             target_actions = torch.stack([self.data['target_actions'][i, time_indexes, :]
-                            for i in ix]).view(self.chunksize, self.n_action).float().unsqueeze(0)
+                            for i in ix]).view(chunksize_tbu, self.n_action).float().unsqueeze(0)
 
             if not self.mdp_constr:
                 return states, actions, rtgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
             else:
                 ctgs = torch.stack([self.data['ctgs'][i, time_indexes]
-                            for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
+                            for i in ix]).view(chunksize_tbu, 1).float().unsqueeze(0)
                 if generalized_time:
                     ttgs = torch.stack([self.data['ttgs'][i, time_indexes]
-                                for i in ix]).view(self.chunksize, 1).float().unsqueeze(0)
+                                for i in ix]).view(chunksize_tbu, 1).float().unsqueeze(0)
                     return states, actions, rtgs, ctgs, ttgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix
                 else:
                     return states, actions, rtgs, ctgs, goal, target_states, target_actions, timesteps, attention_mask, time_discr, time_sec, ix

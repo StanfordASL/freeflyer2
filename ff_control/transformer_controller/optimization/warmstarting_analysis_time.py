@@ -9,9 +9,9 @@ import numpy as np
 import numpy.linalg as la
 import torch
 
-import decision_transformer.manage_time as DT_manager
-from dynamics.freeflyer_time import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, compute_constraint_to_go, sample_init_target
-from optimization.ff_scenario_time import N_STATE, N_ACTION, T_min, T_max, n_time_max, obs, iter_max_SCP, robot_radius, safety_margin, random_chunk
+import decision_transformer.manage as DT_manager
+from dynamics.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, compute_constraint_to_go, sample_init_target
+from optimization.ff_scenario import N_STATE, N_ACTION, T_min, T_max, n_time_max, obs, iter_max_SCP, robot_radius, safety_margin, random_chunk
 import time
 import itertools
 from multiprocessing import Pool, set_start_method

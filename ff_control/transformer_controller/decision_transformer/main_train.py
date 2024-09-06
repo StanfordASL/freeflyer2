@@ -25,6 +25,7 @@ n_state = train_loader.dataset.n_state
 n_data = train_loader.dataset.n_data
 n_action = train_loader.dataset.n_action
 n_time = train_loader.dataset.max_len
+data_stats = train_loader.dataset.data_stats
 
 # Transformer parameters
 config = DecisionTransformerConfig(
@@ -78,6 +79,7 @@ lr_scheduler = get_scheduler(
 if generalized_time:
     # Eval function
     eval_iters = 100
+    ttg_zero_norm = (0.01 - data_stats['ttgs_mean'][0]) / (data_stats['ttgs_std'][0] + 1e-6)
     @torch.no_grad()
     def evaluate():
         model.eval()
@@ -88,11 +90,11 @@ if generalized_time:
         for step in range(eval_iters):
             data_iter = iter(eval_dataloader)
             states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, _, _, _ = next(data_iter)
-            mask = rtgs_i < 0
+            mask = ttgs_i > ttg_zero_norm#rtgs_i < 0
             mask_act = torch.repeat_interleave(mask, 3, 2)
             mask_st = torch.repeat_interleave(mask[:,1:,:], 6, 2)
             with torch.no_grad():
-                state_preds, action_preds, ttgs_pred = model(
+                state_preds, action_preds, ttg_preds = model(
                     states=states_i,
                     actions=actions_i,
                     goal=goal_i,
@@ -105,7 +107,7 @@ if generalized_time:
                 )
             loss_i = torch.mean((action_preds[mask_act] - actions_i[mask_act]) ** 2)#torch.mean((action_preds - actions_i) ** 2)#
             loss_i_state = torch.mean((state_preds[:,:-1,:][mask_st] - states_i[:,1:,:][mask_st]) ** 2)#torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)#
-            loss_i_ttgs = torch.mean((ttgs_pred[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
+            loss_i_ttgs = torch.mean((ttg_preds[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
             losses.append(accelerator.gather(loss_i + loss_i_state + loss_i_ttgs))
             losses_state.append(accelerator.gather(loss_i_state))
             losses_action.append(accelerator.gather(loss_i))
@@ -139,10 +141,10 @@ if generalized_time:
         for step, batch in enumerate(train_dataloader, start=0):
             with accelerator.accumulate(model):
                 states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, _, _, _ = batch
-                mask = rtgs_i < 0
+                mask = ttgs_i > ttg_zero_norm#rtgs_i < 0
                 mask_act = torch.repeat_interleave(mask, 3, 2)
                 mask_st = torch.repeat_interleave(mask[:,1:,:], 6, 2)
-                state_preds, action_preds, ttgs_pred = model(
+                state_preds, action_preds, ttg_preds = model(
                     states=states_i,
                     actions=actions_i,
                     goal=goal_i,
@@ -155,7 +157,7 @@ if generalized_time:
                 )
                 loss_i_action = torch.mean((action_preds[mask_act] - actions_i[mask_act]) ** 2)#torch.mean((action_preds - actions_i) ** 2)#
                 loss_i_state = torch.mean((state_preds[:,:-1,:][mask_st] - states_i[:,1:,:][mask_st]) ** 2)#torch.mean((state_preds[:,:-1,:] - states_i[:,1:,:]) ** 2)#
-                loss_i_ttg = torch.mean((ttgs_pred[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
+                loss_i_ttg = torch.mean((ttg_preds[mask] - ttgs_i[mask]) ** 2)#torch.mean((ttgs_pred - ttgs_i) ** 2)#
                 loss = loss_i_action + loss_i_state + loss_i_ttg
                 if step % 100 == 0:
                     accelerator.print(
