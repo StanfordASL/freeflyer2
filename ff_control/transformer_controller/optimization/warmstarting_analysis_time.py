@@ -175,9 +175,9 @@ def for_computation(input_iterable):
             out['iter_scp_DT'] = iter_scp_DT
             out['runtime_scp_DT'] = runtime_scp_DT
         else:
-            out['feasible_DT'] = False
+            out['feasible_scp_DT'] = False
     else:
-        out['feasible_DT'] = False
+        out['feasible_scp_DT'] = False
 
     if np.char.equal(feas_cvx,'optimal') and (not (model2 is None)):
         # Import the Transformer2
@@ -274,9 +274,9 @@ if __name__ == '__main__':
     import_config2 = DT_manager.transformer_import_config(transformer_model_name2)
     import_config2['dataset_scenario'] = 'time'
     import_config3 = DT_manager.transformer_import_config(transformer_model_name3)
-    import_config3['dataset_scenario'] = 'time_const90'
+    import_config3['dataset_scenario'] = 'time_const_90'
     set_start_method('spawn')
-    num_processes = 20
+    num_processes = 10
 
     # Get the datasets and loaders from the torch data
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], dataset_scenario=import_config['dataset_scenario'],
@@ -355,10 +355,10 @@ if __name__ == '__main__':
         i_unfeas_scp_DT = []
 
         # Pool creation --> Should automatically select the maximum number of processes
-        #p = Pool(processes=num_processes)
-        #for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
-        for i in np.arange(N_data_test):
-            res = for_computation((i, other_args))
+        p = Pool(processes=num_processes)
+        for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
+            #for i in np.arange(N_data_test):
+            #res = for_computation((i, other_args))
 
             # Save the input in the dataset
             test_dataset_ix[i] = res['test_dataset_ix']
@@ -387,7 +387,7 @@ if __name__ == '__main__':
             else:
                 i_unfeas_scp_cvx += [ i ]
 
-            if res['feasible_DT']:
+            if res['feasible_scp_DT']:
                 J_vect_scp_DT[i,:] = res['J_vect_scp_DT']
                 iter_scp_DT[i] = res['iter_scp_DT']
                 runtime_scp_DT[i] = res['runtime_scp_DT']
@@ -410,7 +410,10 @@ if __name__ == '__main__':
             
             if i % 10000 == 0:
                 #  Save dataset (local folder for the workstation)
-                np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_vs_dag_' + transformer_ws + str(ttg_com) + '_'+ str(i),
+                np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_comp_' + transformer_ws + str(ttg_com) + '_'+ str(i),
+                                    model_name = transformer_model_name,
+                                    model_name2 = transformer_model_name2,
+                                    model_name3 = transformer_model_name3,
                                     J_vect_scp_cvx = J_vect_scp_cvx,
                                     J_vect_scp_DT3 = J_vect_scp_DT3,
                                     J_vect_scp_DT2 = J_vect_scp_DT2,
@@ -446,7 +449,10 @@ if __name__ == '__main__':
 
         
         #  Save dataset (local folder for the workstation)
-        np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_vs_dag_' + transformer_ws + str(ttg_com),
+        np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_comp_' + transformer_ws + str(ttg_com),
+                            model_name = transformer_model_name,
+                            model_name2 = transformer_model_name2,
+                            model_name3 = transformer_model_name3,
                             J_vect_scp_cvx = J_vect_scp_cvx,
                             J_vect_scp_DT3 = J_vect_scp_DT3,
                             J_vect_scp_DT2 = J_vect_scp_DT2,
