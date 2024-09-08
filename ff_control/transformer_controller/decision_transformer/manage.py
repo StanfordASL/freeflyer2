@@ -20,7 +20,7 @@ from accelerate import Accelerator
 
 from decision_transformer.art import AutonomousFreeflyerTransformer, AutonomousFreeflyerTransformer_pred_time, AutonomousFreeflyerTransformer_no_pred_time
 from dynamics.freeflyer import FreeflyerModel, check_koz_constraint
-from optimization.ff_scenario import obs, safety_margin, robot_radius, table, n_time_max, T_nominal, generalized_time, generalized_obs
+from optimization.ff_scenario import obs, safety_margin, robot_radius, table, T_nominal, generalized_time, generalized_obs
 import time
 # select device based on availability of GPU
 verbose = False # set to True to get additional print statements
@@ -378,14 +378,14 @@ def import_dataset_for_DT_eval_vXX(dataset_scenario, mdp_constr):
 
     if generalized_time:
         # Extend time sequence
-        n_time_max = states_cvx.shape[1]
+        n_time = states_cvx.shape[1]
         ttgs = -100*np.ones(rtgs_cvx.shape)
         time_sec = -100*np.ones(states_cvx.shape[:2])
         for n_data, (time_i, final_time_i) in enumerate(zip(data_param_raw['time'], data_param_raw['final_time'])):
             dt_i = time_i[1] - time_i[0]
-            time_sec[n_data, :] = np.hstack((time_i, time_i[-1] + dt_i*np.arange(1, n_time_max - time_i.shape[0] +1)))
+            time_sec[n_data, :] = np.hstack((time_i, time_i[-1] + dt_i*np.arange(1, n_time - time_i.shape[0] +1)))
             ttgs_i = np.arange(final_time_i, 0, -dt_i)
-            ttgs[n_data, :, 0] = np.concatenate((ttgs_i, np.zeros((n_time_max - time_i.shape[0]))))
+            ttgs[n_data, :, 0] = np.concatenate((ttgs_i, np.zeros((n_time - time_i.shape[0]))))
         ttgs = torch.from_numpy(ttgs)
     else:
         time_sec = data_param_raw['time']
@@ -453,11 +453,12 @@ def normalize(data, timestep_norm):
 
 def get_DT_model(model_name, train_loader, eval_loader):
     # DT model creation
+    n_time = train_loader.dataset.max_len
     config = DecisionTransformerConfig(
         state_dim=train_loader.dataset.n_state, 
         act_dim=train_loader.dataset.n_action,
         hidden_size=384,
-        max_ep_len=n_time_max,
+        max_ep_len=n_time,
         vocab_size=1,
         action_tanh=False,
         n_positions=2048 if generalized_time else 1024,
@@ -492,30 +493,32 @@ def get_DT_model(model_name, train_loader, eval_loader):
 
     return model.eval()
 
-def get_fake_sample_like(dataloader, state_init, state_final, final_time=T_nominal):
+def get_fake_sample_like(dataloader, state_init, state_final, final_time=T_nominal, n_time=None):
     '''
     Method to create a fake sample from desired initial/final state and final time. The fake sample has the sample structure of a real random sample taken from dataloader can be used to initialize the trajectory generation process at inference.
     '''
     # Take a random sample
     data_stats = dataloader.dataset.data_stats
     dt = dataloader.dataset.data['data_param']['time_discr'][0].item()
+    if n_time is None:
+        n_time = dataloader.dataset.max_len
     # Substitute initial state, actions (0), rtgs (0), ctgs (0), ttgs, goal
     ix = torch.tensor([0])[None,:]
     ttg = torch.arange(final_time, 0, -dt)
-    ttg_sample = torch.zeros((n_time_max,))
+    ttg_sample = torch.zeros((n_time,))
     ttg_sample[:ttg.shape[0]] = ttg
-    states_i = ((torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6))[None,:,:].float()
-    actions_i = torch.zeros((n_time_max,3))[None,:,:].float()
-    rtgs_i = torch.zeros((n_time_max,))[None,:,None].float()
-    ctgs_i = torch.zeros((n_time_max,))[None,:,None].float()
-    goal_i = ((torch.tensor(np.repeat(state_final[None,:], n_time_max, axis=0)) - data_stats['goal_mean'])/(data_stats['goal_std'] + 1e-6))[None,:,:].float()
-    timesteps_i = (torch.tensor([[i for i in range(n_time_max)] for _ in ix]).view(n_time_max).long())[None,:]
-    attention_mask_i = (torch.ones(1, n_time_max).view(n_time_max).long())[None,:]
+    states_i = ((torch.tensor(np.repeat(state_init[None,:], n_time, axis=0)) - data_stats['states_mean'][0])/(data_stats['states_std'][0] + 1e-6))[None,:,:].float()
+    actions_i = torch.zeros((n_time,3))[None,:,:].float()
+    rtgs_i = torch.zeros((n_time,))[None,:,None].float()
+    ctgs_i = torch.zeros((n_time,))[None,:,None].float()
+    goal_i = ((torch.tensor(np.repeat(state_final[None,:], n_time, axis=0)) - data_stats['goal_mean'][0])/(data_stats['goal_std'][0] + 1e-6))[None,:,:].float()
+    timesteps_i = (torch.tensor([[i for i in range(n_time)] for _ in ix]).view(n_time).long())[None,:]
+    attention_mask_i = (torch.ones(1, n_time).view(n_time).long())[None,:]
     dt_i = torch.tensor([dt])[None,:].float()
-    time_sec_i = torch.arange(0, n_time_max*dt, dt).float()[None,None,:]
+    time_sec_i = torch.arange(0, n_time*dt, dt).float()[None,None,:]
     
     if generalized_time and (not generalized_obs):
-        ttgs_i = ((ttg_sample[:,None] - data_stats['ttgs_mean'])/(data_stats['ttgs_std'] + 1e-6))[None,:,:].float()
+        ttgs_i = ((ttg_sample[:,None] - data_stats['ttgs_mean'][0])/(data_stats['ttgs_std'][0] + 1e-6))[None,:,:].float()
         return states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt_i, time_sec_i, ix
     elif (not generalized_time) and (not generalized_obs):
         return states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt_i, time_sec_i, ix
@@ -1277,7 +1280,7 @@ def torch_model_inference_dyn_time(model, test_loader, data_sample, rtg_perc=1.,
             ttg_preds_dyn = output_dyn[2]
             ttg_dyn_t = ttg_preds_dyn[0,-1] ######## camabiare indice per ttg_preds_ol e analoghi
             ttgs_dyn[:,t,:] = ttg_preds_dyn[0,-1]
-            ttgs_pred_dyn[:,t] = (ttg_dyn_t * (data_stats['ttgs_std'][t]+1e-6)) + data_stats['ttgs_mean'][t]
+            ttgs_pred_dyn[:,t] = (ttg_dyn_t * (data_stats['ttgs_std'][0]+1e-6)) + data_stats['ttgs_mean'][0]
         
         # Compute action pred for dynamics model
         with torch.no_grad():
@@ -1295,12 +1298,12 @@ def torch_model_inference_dyn_time(model, test_loader, data_sample, rtg_perc=1.,
         action_preds_dyn = output_dyn[1]
         action_dyn_t = action_preds_dyn[0,-1]
         actions_dyn[:,t,:] = action_dyn_t
-        dv_dyn[:, t] = (action_dyn_t * (data_stats['actions_std'][t]+1e-6)) + data_stats['actions_mean'][t]
+        dv_dyn[:, t] = (action_dyn_t * (data_stats['actions_std'][0]+1e-6)) + data_stats['actions_mean'][0]
 
         # Dynamics propagation of state variable 
         if t != n_time-1:
             xypsi_dyn[:, t+1] = Ak @ (xypsi_dyn[:, t] + B_imp @ dv_dyn[:, t])
-            states_dyn[:,t+1,:] = (xypsi_dyn[:,t+1] - data_stats['states_mean'][t+1]) / (data_stats['states_std'][t+1] + 1e-6)
+            states_dyn[:,t+1,:] = (xypsi_dyn[:,t+1] - data_stats['states_mean'][0]) / (data_stats['states_std'][0] + 1e-6)
             
             # Update reward, constraints and time to go
             reward_dyn_t = - torch.linalg.norm(dv_dyn[:, t], ord=1)
@@ -1309,7 +1312,7 @@ def torch_model_inference_dyn_time(model, test_loader, data_sample, rtg_perc=1.,
             ctgs_dyn[:,t+1,:] = ctgs_dyn[0,t] - (viol_dyn if (not ctg_clipped) else 0)
             if not (ttg is None):
                 ttgs_pred_dyn[:,t+1] = np.maximum(ttgs_pred_dyn[0, t].item() - dt, 0)
-                ttgs_dyn[:,t+1,:] = (ttgs_pred_dyn[0,t+1] - data_stats['ttgs_mean'][t+1])/(data_stats['ttgs_std'][t+1]+1e-6)
+                ttgs_dyn[:,t+1,:] = (ttgs_pred_dyn[0,t+1] - data_stats['ttgs_mean'][0])/(data_stats['ttgs_std'][0]+1e-6)
             else:
                 ttgs_dyn[:,t+1,:] = 0
             actions_dyn[:,t+1,:] = 0
