@@ -10,10 +10,13 @@ import numpy as np
 N_STATE = 6
 N_ACTION = 3
 N_CLUSTERS = 4
+N_OBS_MAX = 4
+SINGLE_OBS_DIM = 3
+N_OBSERVATION = N_OBS_MAX*SINGLE_OBS_DIM
 
 # Generalization level
-generalized_time = True
-generalized_obs = False
+generalized_time = False
+generalized_obs = True
 
 # time problem constants
 if generalized_time:
@@ -22,6 +25,8 @@ if generalized_time:
 else:
     S = 101 # number of control switches
     n_time_rpod = S-1
+    chunksize = None
+    random_chunk=None
 
 # constants
 mass = 16.0
@@ -50,6 +55,10 @@ goal_region = {
     'xy_low' : np.array([3.0, 0.]) + robot_radius,
     'xy_up' : table['xy_up'] - robot_radius
 }
+obs_region = {
+    'xy_low': np.array([0.5, 0.]),
+    'xy_up': np.array([3.0, 2.5])
+}
 min_init_dist = 0.5
 
 # Time discretization and bounds
@@ -65,20 +74,47 @@ final_time_choices = np.arange(T_min, T_max+1, 20.0)
 n_time_max = int(T_max/dt)
 
 # Obstacle
-'''T = 40.0#80.0 # max final time horizon in sec
-dt = T / n_time_rpod'''
-obs = {
+obs_nominal = {
     'position' : np.array([[1.0,  0.7],
-                           [1.5,  1.7],
-                           [2.5, 0.75],
-                           [2.5, 1.75]]),
+                            [1.5,  1.7],
+                            [2.5, 0.75],
+                            [2.5, 1.75]]),
     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
 }
-'''obs = {
-    'position' : np.array([[2.5, +0.5]]),
-    'radius' : np.array([1.])
-}'''
-n_obs = obs['position'].shape[0]
+n_obs_nominal = obs_nominal['position'].shape[0]
+relative_observations = True #True/False
+if generalized_obs:
+    obs1 = {
+        'position': np.array([[1.0, 0.7],
+                              [1.5, 1.7],
+                              [2.5, 0.75],
+                              [2.5, 1.75]]),
+        'radius': np.array([0.18, 0.15, 0.12, 0.2])
+    }
+    obs2 = {
+        'position': np.array([[.8, .5],
+                              [1.3, 1.7],
+                              [2, 1.05],
+                              [2.6, 2.05]]),
+        'radius': np.array([0.17, 0.2, 0.14, 0.13])
+    }
+    obs3 = {
+        'position': np.array([[1.5, .6],
+                              [2.1, 1.13],
+                              [1.1, 1.45],
+                              [1.9, 2.05]]),
+        'radius': np.array([0.138, 0.11, 0.15, 0.19])
+    }
+    obs4 = {
+        'position': np.array([[1, 1],
+                              [1.75, 1.5],
+                              [2.5, 2],
+                              [2.4, .45]]),
+        'radius': np.array([0.123, 0.151, 0.131, 0.184])
+    }
+    obs_list = [obs1, obs2, obs3, obs4]
+    n_obs_list = [4, 4, 4, 4]
+    obs_nominal = obs1
 safety_margin = 1.1
 
 '''# PID Controller
