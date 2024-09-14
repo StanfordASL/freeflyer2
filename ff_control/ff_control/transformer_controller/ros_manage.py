@@ -279,6 +279,7 @@ def ros_model_inference_dyn(model, data_stats, state_init, state_final, rtg_perc
                                                                                                                            state_final=state_final)
     states_i = states_i.to(device)
     rtgs_i = rtgs_i.to(device)
+    ctgs_i = ctgs_i.to(device)
     goal_i = goal_i.to(device)
     timesteps_i = timesteps_i.long().to(device)
     attention_mask_i = attention_mask_i.long().to(device)

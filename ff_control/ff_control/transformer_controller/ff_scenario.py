@@ -26,7 +26,7 @@ else:
     S = 101 # number of control switches
     n_time_rpod = S-1
     chunksize = None
-    random_chunk=None
+    random_chunk = None
 
 # constants
 mass = 16.0
@@ -76,9 +76,9 @@ n_time_max = int(T_max/dt)
 # Obstacle
 obs_nominal = {
     'position' : np.array([[1.0,  0.7],
-                            [1.5,  1.7],
-                            [2.5, 0.75],
-                            [2.5, 1.75]]),
+                           [1.5,  1.7],
+                           [2.5, 0.75],
+                           [2.5, 1.75]]),
     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
 }
 n_obs_nominal = obs_nominal['position'].shape[0]
