@@ -5,7 +5,7 @@ root_folder = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__
 sys.path.append(root_folder)
 
 from dynamics.freeflyer import FreeflyerModel, sample_init_target, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance
-from optimization.ff_scenario import N_STATE, N_ACTION, N_CLUSTERS, n_time_rpod, dt, T, S
+from optimization.ff_scenario import N_STATE, N_ACTION, N_CLUSTERS, T_nominal, dt, dataset_scenario, generalized_obs, generalized_time
 import numpy as np
 from multiprocessing import Pool, set_start_method
 import itertools
@@ -18,7 +18,13 @@ def for_computation(input):
     ff_model = other_args['ff_model']
 
     # Randomic sample of initial and final conditions
-    init_state, target_state = sample_init_target()
+    if generalized_time and (not generalized_obs):
+        init_state, target_state, final_time = sample_init_target(sample_time=True)
+    elif (not generalized_time) and (not generalized_obs):
+        init_state, target_state = sample_init_target()
+        final_time = T_nominal
+    else:
+        raise ValueError('Generalized obstaccles not implemented yet!!')
 
     # Output dictionary initialization
     out = {'feasible' : True,
@@ -30,11 +36,12 @@ def for_computation(input):
            'actions_t_scp' : [],
            'target_state' : [],
            'dtime' : [],
+           'final_time' : [],
            'time' : []
            }
 
     # Solve simplified problem -> without obstacle avoidance
-    traj_cvx_i, J_cvx_i, iter_cvx_i, feas_cvx_i = ocp_no_obstacle_avoidance(ff_model, init_state, target_state)
+    traj_cvx_i, J_cvx_i, iter_cvx_i, feas_cvx_i = ocp_no_obstacle_avoidance(ff_model, init_state, target_state, final_time)
     
     if np.char.equal(feas_cvx_i,'optimal'):
         
@@ -54,7 +61,8 @@ def for_computation(input):
 
                 out['target_state'] = target_state
                 out['dtime'] = dt
-                out['time'] = np.linspace(0, T, S)[:-1]
+                out['final_time'] = final_time
+                out['time'] = traj_cvx_i['time'][:-1]
             else:
                 out['feasible'] = False
         except:
@@ -79,17 +87,36 @@ if __name__ == '__main__':
         'ff_model' : ff_model
     }
 
-    states_cvx = np.empty(shape=(N_data, n_time_rpod, n_S), dtype=float) # [m,m,m,m/s,m/s,m/s]
-    actions_cvx = np.empty(shape=(N_data, n_time_rpod, n_A), dtype=float) # [m/s]
-    actions_t_cvx = np.empty(shape=(N_data, n_time_rpod, n_C), dtype=float)
+    if generalized_time:
+        dataset_scenario_folder = '/' + dataset_scenario
 
-    states_scp = np.empty(shape=(N_data, n_time_rpod, n_S), dtype=float) # [m,m,m,m/s,m/s,m/s]
-    actions_scp = np.empty(shape=(N_data, n_time_rpod, n_A), dtype=float) # [m/s]
-    actions_t_scp = np.empty(shape=(N_data, n_time_rpod, n_C), dtype=float)
+        states_cvx = np.empty(shape=(N_data, ), dtype=object) # [m,m,m,m/s,m/s,m/s]
+        actions_cvx = np.empty(shape=(N_data, ), dtype=object) # [m/s]
+        actions_t_cvx = np.empty(shape=(N_data, ), dtype=object)
 
-    target_state = np.empty(shape=(N_data, n_S), dtype=float)
-    dtime = np.empty(shape=(N_data, ), dtype=float)
-    time = np.empty(shape=(N_data, n_time_rpod), dtype=float)
+        states_scp = np.empty(shape=(N_data, ), dtype=object) # [m,m,m,m/s,m/s,m/s]
+        actions_scp = np.empty(shape=(N_data, ), dtype=object) # [m/s]
+        actions_t_scp = np.empty(shape=(N_data, ), dtype=object)
+
+        target_state = np.empty(shape=(N_data, n_S), dtype=float)
+        dtime = np.empty(shape=(N_data, ), dtype=float)
+        final_time = np.empty(shape=(N_data, ), dtype=float)
+        time = np.empty(shape=(N_data, ), dtype=object)
+    else:
+        dataset_scenario_folder = ''
+        n_time_rpod = round(T_nominal/dt)
+
+        states_cvx = np.empty(shape=(N_data, n_time_rpod, n_S), dtype=float) # [m,m,m,m/s,m/s,m/s]
+        actions_cvx = np.empty(shape=(N_data, n_time_rpod, n_A), dtype=float) # [m/s]
+        actions_t_cvx = np.empty(shape=(N_data, n_time_rpod, n_C), dtype=float)
+
+        states_scp = np.empty(shape=(N_data, n_time_rpod, n_S), dtype=float) # [m,m,m,m/s,m/s,m/s]
+        actions_scp = np.empty(shape=(N_data, n_time_rpod, n_A), dtype=float) # [m/s]
+        actions_t_scp = np.empty(shape=(N_data, n_time_rpod, n_C), dtype=float)
+
+        target_state = np.empty(shape=(N_data, n_S), dtype=float)
+        dtime = np.empty(shape=(N_data, ), dtype=float)
+        time = np.empty(shape=(N_data, n_time_rpod), dtype=float)
 
     i_unfeas = []
 
@@ -100,27 +127,32 @@ if __name__ == '__main__':
     #    res = for_computation((i, other_args))
         # If the solution is feasible save the optimization output
         if res['feasible']:
-            states_cvx[i,:,:] = res['states_cvx']
-            actions_cvx[i,:,:] = res['actions_cvx']
-            actions_t_cvx[i,:,:] = res['actions_t_cvx']
+            states_cvx[i] = res['states_cvx']
+            actions_cvx[i] = res['actions_cvx']
+            actions_t_cvx[i] = res['actions_t_cvx']
 
-            states_scp[i,:,:] = res['states_scp']
-            actions_scp[i,:,:] = res['actions_scp']
-            actions_t_scp[i,:,:] = res['actions_t_scp']
+            states_scp[i] = res['states_scp']
+            actions_scp[i] = res['actions_scp']
+            actions_t_scp[i] = res['actions_t_scp']
         
             target_state[i,:] = res['target_state']
             dtime[i] = res['dtime']
-            time[i,:] = res['time']
+            if generalized_time:
+                final_time[i] = res['final_time']
+            time[i] = res['time']
 
         # Else add the index to the list
         else:
             i_unfeas += [ i ]
         
         if i % 50000 == 0:
-            np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-scp' + str(i), states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp, i_unfeas = i_unfeas)
-            np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-cvx' + str(i), states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx, i_unfeas = i_unfeas)
-            np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, dtime = dtime, i_unfeas = i_unfeas)
-
+            np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-scp' + str(i), states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp, i_unfeas = i_unfeas)
+            np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-cvx' + str(i), states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx, i_unfeas = i_unfeas)
+            if generalized_time:
+                np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, final_time=final_time, dtime = dtime, i_unfeas = i_unfeas)
+            else:
+                np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-param' + str(i), target_state = target_state, time = time, dtime = dtime, i_unfeas = i_unfeas)
+    
     # Remove unfeasible data points
     if i_unfeas:
         states_cvx = np.delete(states_cvx, i_unfeas, axis=0)
@@ -133,9 +165,14 @@ if __name__ == '__main__':
         
         target_state = np.delete(target_state, i_unfeas, axis=0)
         dtime = np.delete(dtime, i_unfeas, axis=0)
+        if generalized_time:
+            final_time = np.delete(final_time, i_unfeas, axis=0)
         time = np.delete(time, i_unfeas, axis=0)
 
     #  Save dataset (local folder for the workstation)
-    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
-    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
-    np.savez_compressed(root_folder + '/dataset/dataset-ff-v05-param', target_state = target_state, time = time, dtime = dtime)
+    np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-scp', states_scp = states_scp, actions_scp = actions_scp, actions_t_scp = actions_t_scp)
+    np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-cvx', states_cvx = states_cvx, actions_cvx = actions_cvx, actions_t_cvx = actions_t_cvx)
+    if generalized_time:
+        np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-param', target_state = target_state, time = time, final_time=final_time, dtime = dtime)
+    else:
+        np.savez_compressed(root_folder + '/dataset' + dataset_scenario_folder + '/dataset-ff-v05-param', target_state = target_state, time = time, dtime = dtime)

@@ -33,7 +33,7 @@ class FreeflyerEnv():
             - reset_mode: 'det' -> deterministic reset which uses reset_condition to reset
                           'rsamp' -> random sample performed from the dataloader to reset
                           'dsamp' -> deterministic sample of the idx_sample from the dataloader to reset
-            - reset_condtion: tuple (dt, state_init, state_final) containing the deterministic condition to reset the environment, TO BE PROVIDED for 'det' mode
+            - reset_condtion: tuple (dt, state_init, state_final, final_time) containing the deterministic condition to reset the environment, TO BE PROVIDED for 'det' mode
             - dataloader: dataloader containing the dataset from which the reset condition should be sample, TO BE PROVIDED for 'rsamp' AND 'dsamp' modes
             - idx_sample: index of the sample to be extracted from the dataloader to reset the environment, TO BE PROVIDED for 'dsamp' mode
             - return_sample: boolean input, set to True if the data sample used for the reset should be returned (in case of 'rsamp' and 'dsamp' modes)
@@ -52,33 +52,38 @@ class FreeflyerEnv():
             
             # Extract the values form the sample
             if dataloader.dataset.mdp_constr:
-                states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
+                if self.generalized_time and (not self.generalized_obs):
+                    states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
+                elif (not self.generalized_time) and (not self. generalized_obs):
+                    states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
+                else:
+                    raise ValueError('Generalized obstacle not implemented yet!!')
             else:
                 states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
             data_stats = dataloader.dataset.data_stats
 
-            # Time characteristics and discretization of the manuever
-            self.dt = dt.item()
-
             # Fill initial conditions
             self.__load_state(np.array((states_i[0, 0, :] * data_stats['states_std'][0]) + data_stats['states_mean'][0]))
             self.__load_goal(np.array((goal_i[0, 0, :] * data_stats['goal_std'][0]) + data_stats['goal_mean'][0]))
-            self.timestep = 0
-            self.time = np.array([0.])
+            # Time characteristics and discretization of the manuever
+            if self.generalized_time:
+                self.__initialize_time(dt.item(), np.round(((ttgs_i[0, 0, :] * data_stats['ttgs_std'][0]) + data_stats['ttgs_mean'][0]).item(),1))
+            else:
+                self.__initialize_time(dt.item(), self.T_nominal)
             
             # Evntually return the data sampled
             if return_sample:
                 return traj_sample
 
         elif reset_mode == 'det':
-            # Time characteristics and discretization of the manuever
-            self.dt = reset_condition[0]
-
             # Fill initial conditions
             self.__load_state(reset_condition[1])
             self.__load_goal(reset_condition[2])
-            self.timestep = 0
-            self.time = np.array([0.])
+            # Time characteristics and discretization of the manuever
+            if self.generalized_time:
+                self.__initialize_time(reset_condition[0], np.round(reset_condition[3],1))
+            else:
+                self.__initialize_time(reset_condition[0], self.T_nominal)
 
         else:
             raise NameError('Reset mode not found.')
@@ -94,6 +99,7 @@ class FreeflyerEnv():
         self.dv_t = np.empty((self.N_CLUSTERS,0)) # thursters deltaV
         self.goal = np.empty((self.N_STATE, 0)) # true goal
         self.reward = np.empty((0, ))
+        self.ttg = np.empty((0, ))
 
         self.__initialize_predictions()
 
@@ -103,6 +109,17 @@ class FreeflyerEnv():
         '''
         self.pred_history = []
 
+    def __initialize_time(self, dt, final_time):
+        '''
+        Function to initialize the time variables (n_timestep, time, ttg).
+        '''
+        self.dt = dt
+        self.timestep = 0
+        self.time = np.array([0.])
+        self.ttg  = np.array([final_time])
+        self.n_time_rpod = round(final_time/dt)
+        self.T = final_time
+        
     ########## PROPAGATION METHODS ##########
     def step(self, action=None, goal=None, state_desired=None):
         '''
@@ -151,10 +168,11 @@ class FreeflyerEnv():
     
     def __propagate_time(self):
         '''
-        Function to propagate the time.
+        Function to propagate the time and update the time-to-go.
         '''
         # Update the time
         self.time = np.hstack((self.time, self.time[-1] + self.dt))
+        self.ttg = np.hstack((self.ttg, self.ttg[-1] - self.dt))
 
     def __propagate_dynamics(self):
         '''
@@ -205,22 +223,24 @@ class FreeflyerEnv():
         '''
 
         self.ff_model = FreeflyerModel()
-        from optimization.ff_scenario import n_time_rpod, dt, obs, mass, inertia, robot_radius, safety_margin, table, F_max_per_thruster, T, Lambda, Lambda_inv, N_STATE, N_ACTION, N_CLUSTERS
-        self.N_STATE = N_STATE
-        self.N_ACTION = N_ACTION
-        self.N_CLUSTERS = N_CLUSTERS
-        self.mass = mass
-        self.J = inertia
-        self.robot_radius = robot_radius
-        self.safety_margin = safety_margin
-        self.table = table
-        self.F_t_M = F_max_per_thruster
-        self.n_time_rpod = n_time_rpod
-        self.dt = dt
-        self.T = T
-        self.obs = obs
-        self.Lambda = Lambda
-        self.Lambda_inv = Lambda_inv
+        import optimization.ff_scenario as ff
+        self.N_STATE = ff.N_STATE
+        self.N_ACTION = ff.N_ACTION
+        self.N_CLUSTERS = ff.N_CLUSTERS
+        self.mass = ff.mass
+        self.J = ff.inertia
+        self.robot_radius = ff.robot_radius
+        self.safety_margin = ff.safety_margin
+        self.table = ff.table
+        self.F_t_M = ff.F_max_per_thruster
+        self.n_time_max = ff.n_time_max
+        self.dt = ff.dt
+        self.T_nominal = ff.T_nominal
+        self.obs = ff.obs
+        self.Lambda = ff.Lambda
+        self.Lambda_inv = ff.Lambda_inv
+        self.generalized_time = ff.generalized_time
+        self.generalized_obs = ff.generalized_obs
 
     def __get_reward(self):
         '''
@@ -244,6 +264,8 @@ class FreeflyerEnv():
             - 'time' : current time,
             - 'state' : current value of the state
             - 'dv' : latest action performed (so the action corresponding to the previous timestep)
+            - 'dv_t' : latest action performed (in the thrusters' reference frame)
+            - 'ttg' : time-to-go remaining until the end of the trajectory.
         '''
         # Check the correct length of the timeseries
         time_action = self.dv.shape[1]
@@ -256,7 +278,8 @@ class FreeflyerEnv():
                 'state' : self.state[:, -1].copy(),
                 'dv' : (self.dv[:, -1] if time_action > 0 else np.array([])).copy(),
                 'dv_t' : (self.dv_t[:, -1] if time_action_t > 0 else np.array([])).copy(),
-                'goal' : self.goal[:,-1].copy()
+                'goal' : self.goal[:,-1].copy(),
+                'ttg' : self.ttg[-1]
             }
             return observation
         

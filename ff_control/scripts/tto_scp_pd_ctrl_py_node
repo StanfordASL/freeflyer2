@@ -26,7 +26,9 @@
 import copy
 import rclpy
 import sys
-sys.path.append('/home/freeflyerhub/Transformer/lib/python3.10/site-packages')
+import os
+username = os.getenv("USERNAME")
+sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
 import numpy as np
 import cvxpy as cp
 import typing as T
@@ -55,10 +57,14 @@ class TransformerBasedSCPController(LinearController):
 
     Note: the current implementation is not thread safe
     """
-    STATE_DIM = 6
-    CONTROL_DIM = 3
-    TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg'
+    STATE_DIM = ff_scenario.N_STATE
+    CONTROL_DIM = ff_scenario.N_ACTION
+    OBSERVATION_DIM = ff_scenario.N_OBSERVATION
+    SINGLE_OBS_DIM = ff_scenario.SINGLE_OBS_DIM
+    N_OBS_MAX = ff_scenario.N_OBS_MAX
+    TRANSFORMER_MODEL = 'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
     TRANSFORMER_WS = 'dyn'
+    EMBD_OBS_FLAG = True
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -84,11 +90,13 @@ class TransformerBasedSCPController(LinearController):
         self.get_obs_info_request()
 
         # Load Transformer model and FreeFlyer model
-        self.TTO_model = TTO_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM)
+        self.TTO_model = TTO_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM, self.OBSERVATION_DIM, self.SINGLE_OBS_DIM, self.EMBD_OBS_FLAG)
         self.TTO_model.eval()
-        self.data_stats = TTO_manager.get_data_stats()
+        self.data_stats = TTO_manager.get_data_stats(self.TRANSFORMER_MODEL)
         self.get_logger().info('Transformer model '+self.TRANSFORMER_MODEL+' imported, LET\'S FLY!!!')
         self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
+        self.generalized_time = ff_scenario.generalized_time
+        self.generalized_obs = ff_scenario.generalized_obs
 
         # Goal State command
         self.state_callback_group = MutuallyExclusiveCallbackGroup()
@@ -109,8 +117,8 @@ class TransformerBasedSCPController(LinearController):
         self.declare_parameter('gain_df', 10.0)
         self.declare_parameter('gain_t', 0.2)
         self.declare_parameter('gain_dt', 0.4)
-        self.declare_parameter('total_time', ff_scenario.T)
-        self.n_timesteps = ff_scenario.S
+        self.declare_parameter('total_time', ff_scenario.T_nominal)
+        self.n_timesteps = int(ff_scenario.T_nominal/ff_scenario.dt) + 1
         self._trajectory_ready = False
         self.control_period = 0.1
         self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.control_callback_group)
@@ -182,10 +190,10 @@ class TransformerBasedSCPController(LinearController):
         rclpy.spin_until_future_complete(self, future)
         obs_info = future.result()
         self.obstacles = {
-            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))),
+            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))).T,
             'radius' : np.array(obs_info.cyl_rads)
         }
-        if (self.obstacles['position'] == ff_scenario.obs['position'].T).all() and (self.obstacles['radius'] == ff_scenario.obs['radius']).all():
+        if (self.obstacles['position'] == ff_scenario.obs_nominal['position']).all() and (self.obstacles['radius'] == ff_scenario.obs_nominal['radius']).all():
             self.get_logger().info(str(self.obstacles))
         else:
             raise ValueError('The obstacles specified for the ROS simulation and in ff_scenario.py don\'t match!!!')
@@ -202,6 +210,7 @@ class TransformerBasedSCPController(LinearController):
         # copy current position as goal position
         self._state_desired.header.stamp = self.get_clock().now().to_msg()
         self._state_desired.state = self.get_state()
+        self.get_logger().info('Initial state desired: '+str(self._state_desired))
 
     def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
         self._state_desired = copy.deepcopy(msg)
@@ -219,6 +228,7 @@ class TransformerBasedSCPController(LinearController):
         state_desired.state.twist.vy = 0.
         state_desired.state.twist.wz = 0.
         state_init = self.state2vec(self.get_state())
+        state_init[3:] = 0
         state_final = self.state2vec(state_desired.state)
 
         # Create Freeflyer model
@@ -235,13 +245,30 @@ class TransformerBasedSCPController(LinearController):
         self.get_logger().info('Radius robot: '+str(ffm.param['radius']))
         
         # Solve Convex Problem
-        traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final)
+        final_time = self.get_parameter('total_time').get_parameter_value().double_value
+        self.get_logger().info('State init '+str(state_init))
+        self.get_logger().info('State final '+str(state_final))
+        self.get_logger().info('Time final '+str(final_time))
+        self.get_logger().info('Obstacles '+str(self.obstacles))
+        traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final, final_time, self.obstacles)
         _, actions_ws_cvx = traj_cvx['states'], traj_cvx['actions_G']
 
         # Use Transformer to infer the warm-starting trajectory
-        inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS)
         rtg = - np.sum(np.linalg.norm(actions_ws_cvx, ord=1, axis=0))
-        DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        if (not self.generalized_obs) and (not self.generalized_time):
+            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS)
+            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        elif (not self.generalized_obs) and (self.generalized_time):
+            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS+'_time')
+            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ttg=final_time,
+                                                       ctg_clipped=True, chunksize=ff_scenario.chunksize, end_on_ttg=True)
+        elif (self.generalized_obs) and (not self.generalized_time):
+            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS+'_obs')
+            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, self.obstacles, self.N_OBS_MAX, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
+        else:
+            raise ValueError('The formulation with generalized final time and obstacles has not been implemented yet!')
+        
+        np.savez_compressed('/home/dcelestini/ff_ws/src/freeflyer2/ff_control/ff_control/transformer_controller/debug_ros_obs.npz', DT_trajectory=DT_trajectory)
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
@@ -249,13 +276,12 @@ class TransformerBasedSCPController(LinearController):
         
         # Solve SCP
         scp_time0 = time.time()
-        traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
+        traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final, self.obstacles)
         scp_runtime = time.time() - scp_time0
         self.path_pub.publish(self.traj2path(traj_scp_DT['states'], height=0.1))
 
-        total_time = self.get_parameter('total_time').get_parameter_value().double_value
         self.trajectory_timer.cancel()
-        self.trajectory_timer = self.create_timer(total_time/(self.n_timesteps - 1), self.trajectory_loop)
+        self.trajectory_timer = self.create_timer(ff_scenario.dt, self.trajectory_loop)
         self.get_logger().info('============== SCP iterations: '+str(iter_scp_DT))
         self.get_logger().info('============== SCP status: '+str(feas_scp_DT))
         self.get_logger().info('============== TTO computational time: '+str(DT_runtime)+' s')
