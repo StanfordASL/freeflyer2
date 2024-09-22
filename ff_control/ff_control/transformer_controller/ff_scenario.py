@@ -13,10 +13,11 @@ N_CLUSTERS = 4
 N_OBS_MAX = 4
 SINGLE_OBS_DIM = 3
 N_OBSERVATION = N_OBS_MAX*SINGLE_OBS_DIM
+TRANSFORMER_MODEL = 'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
 
 # Generalization level
-generalized_time = False
-generalized_obs = True
+generalized_time = True
+generalized_obs = False
 
 # time problem constants
 if generalized_time:
@@ -63,13 +64,13 @@ min_init_dist = 0.5
 
 # Time discretization and bounds
 dt = 0.5 if generalized_time else 0.4
-T_const = 40.0 # max final time horizon in sec
+# T_const = 40.0 # max final time horizon in sec
 '''T_min = T_const if dataset_scenario == 'time_constant' else (10.0 if dataset_scenario == 'time_whole_table' else 20.0)
 T_max = T_const if dataset_scenario == 'time_constant' else 100.0
 final_time_choices = np.arange(T_min, T_max+dt/2, dt)'''
 T_min = 40.0 if generalized_time else 40.0
 T_max = 100.0 if generalized_time else 40.0
-T_nominal = 40.0
+T_nominal = 80.0
 final_time_choices = np.arange(T_min, T_max+1, 20.0)
 n_time_max = int(T_max/dt)
 
@@ -114,7 +115,7 @@ if generalized_obs:
     }
     obs_list = [obs1, obs2, obs3, obs4]
     n_obs_list = [4, 4, 4, 4]
-    obs_nominal = obs1
+    obs_nominal = obs1 # Set this variable to the desired obs configuations (one of the four above)
 safety_margin = 1.1
 
 '''# PID Controller

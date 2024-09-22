@@ -62,7 +62,7 @@ class TransformerBasedSCPController(LinearController):
     OBSERVATION_DIM = ff_scenario.N_OBSERVATION
     SINGLE_OBS_DIM = ff_scenario.SINGLE_OBS_DIM
     N_OBS_MAX = ff_scenario.N_OBS_MAX
-    TRANSFORMER_MODEL = 'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
+    TRANSFORMER_MODEL = ff_scenario.TRANSFORMER_MODEL #'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
     TRANSFORMER_WS = 'dyn'
     EMBD_OBS_FLAG = True
 
@@ -268,7 +268,7 @@ class TransformerBasedSCPController(LinearController):
         else:
             raise ValueError('The formulation with generalized final time and obstacles has not been implemented yet!')
         
-        np.savez_compressed('/home/dcelestini/ff_ws/src/freeflyer2/ff_control/ff_control/transformer_controller/debug_ros_obs.npz', DT_trajectory=DT_trajectory)
+        # np.savez_compressed('/home/dcelestini/ff_ws/src/freeflyer2/ff_control/ff_control/transformer_controller/debug_ros_obs.npz', DT_trajectory=DT_trajectory)
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
