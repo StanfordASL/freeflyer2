@@ -29,7 +29,7 @@ else:
 # constants
 mass = 16.0
 inertia = 0.18
-robot_radius = 0.2
+robot_radius = 0.15
 F_max_per_thruster = 0.2
 thrusters_lever_arm = 0.11461
 Lambda = np.array([[                  0,                    1,                    0,                   1],
