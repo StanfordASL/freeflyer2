@@ -69,11 +69,11 @@ def for_computation(input_iterable):
    
     if sample_init_final:
         state_init, state_final = sample_init_target(sample_time=False)
-        test_sample = DT_manager.get_fake_sample_like(test_loader, state_init, state_final, final_time)
+        test_sample = DT_manager.get_fake_sample_like(test_loader, state_init, state_final, final_time, 200)
         if not model2 is None:
-            test_sample2 = DT_manager.get_fake_sample_like(test_loader2, state_init, state_final, final_time)
+            test_sample2 = DT_manager.get_fake_sample_like(test_loader2, state_init, state_final, final_time, 200)
         if not model3 is None:
-            test_sample3 = DT_manager.get_fake_sample_like(test_loader3, state_init, state_final, final_time)
+            test_sample3 = DT_manager.get_fake_sample_like(test_loader3, state_init, state_final, final_time, 200)
         '''test_sample[0][0,:,:] = (torch.tensor(np.repeat(state_init[None,:], n_time_max, axis=0)) - data_stats['states_mean'])/(data_stats['states_std'] + 1e-6)
         test_sample[1][0,:,:] = torch.zeros((n_time_max,N_ACTION))
         test_sample[2][0,:,0] = torch.zeros((n_time_max,))
@@ -272,16 +272,18 @@ if __name__ == '__main__':
 
     transformer_ws = 'dyn' # 'dyn'/'ol'
     transformer_model_name = 'checkpoint_ff_time40_100_chunk100R_ctgrtg12000'
-    transformer_model_name2 = None
-    transformer_model_name3 = None
+    transformer_model_name2 = 'checkpoint_ff_time40_100_chunk100R_ctgrtg12000_cl_2'
+    transformer_model_name3 = 'checkpoint_ff_time40_100_chunk100R_ctgrtg12000_cl_3'
     import_config = DT_manager.transformer_import_config(transformer_model_name)
     import_config['dataset_scenario'] = 'time_40_100'
-    import_config2 = DT_manager.transformer_import_config(transformer_model_name)
-    import_config2['dataset_scenario'] = 'time'
-    import_config3 = DT_manager.transformer_import_config(transformer_model_name)
-    import_config3['dataset_scenario'] = 'time_const_90'
+    if not transformer_model_name2 is None:
+        import_config2 = DT_manager.transformer_import_config(transformer_model_name2)
+        import_config2['dataset_scenario'] = 'time_40_100'
+    if not transformer_model_name3 is None:
+        import_config3 = DT_manager.transformer_import_config(transformer_model_name3)
+        import_config3['dataset_scenario'] = 'time_40_100'
     set_start_method('spawn')
-    num_processes = 20
+    num_processes = 26
 
     # Get the datasets and loaders from the torch data
     datasets, dataloaders = DT_manager.get_train_val_test_data(mdp_constr=import_config['mdp_constr'], dataset_scenario=import_config['dataset_scenario'],
@@ -289,16 +291,22 @@ if __name__ == '__main__':
     train_loader, eval_loader, test_loader = dataloaders
     model = DT_manager.get_DT_model(transformer_model_name, train_loader, eval_loader)
     if not(transformer_model_name2 is None):
-        datasets2, dataloaders2 = DT_manager.get_train_val_test_data(mdp_constr=import_config2['mdp_constr'], dataset_scenario=import_config2['dataset_scenario'],
-                                                                     timestep_norm=import_config2['timestep_norm'], chunksize=import_config2['chunksize'], random_chunk=random_chunk)
+        if not import_config['dataset_scenario'] == import_config2['dataset_scenario']:
+            datasets2, dataloaders2 = DT_manager.get_train_val_test_data(mdp_constr=import_config2['mdp_constr'], dataset_scenario=import_config2['dataset_scenario'],
+                                                                        timestep_norm=import_config2['timestep_norm'], chunksize=import_config2['chunksize'], random_chunk=random_chunk)
+        else:
+            datasets2, dataloaders2 = datasets, dataloaders
         train_loader2, eval_loader2, test_loader2 = dataloaders2
         model2 = DT_manager.get_DT_model(transformer_model_name2, train_loader2, eval_loader2)
     else:
         test_loader2 = None
         model2 = None
     if not(transformer_model_name3 is None):
-        datasets3, dataloaders3 = DT_manager.get_train_val_test_data(mdp_constr=import_config3['mdp_constr'], dataset_scenario=import_config3['dataset_scenario'],
-                                                                     timestep_norm=import_config3['timestep_norm'], chunksize=import_config3['chunksize'], random_chunk=random_chunk)
+        if not import_config['dataset_scenario'] == import_config3['dataset_scenario']:
+            datasets3, dataloaders3 = DT_manager.get_train_val_test_data(mdp_constr=import_config3['mdp_constr'], dataset_scenario=import_config3['dataset_scenario'],
+                                                                        timestep_norm=import_config3['timestep_norm'], chunksize=import_config3['chunksize'], random_chunk=random_chunk)
+        else:
+            datasets3, dataloaders3 = datasets, dataloaders
         train_loader3, eval_loader3, test_loader3 = dataloaders3
         model3 = DT_manager.get_DT_model(transformer_model_name3, train_loader3, eval_loader3)
     else:
@@ -415,7 +423,7 @@ if __name__ == '__main__':
             
             if i % 10000 == 0:
                 #  Save dataset (local folder for the workstation)
-                np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_' + transformer_ws + str(ttg_com) + '_'+ str(i),
+                np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysisFULL_' + transformer_model_name + '_vs_FT_' + transformer_ws + str(ttg_com) + '_'+ str(i),
                                     model_name = transformer_model_name,
                                     model_name2 = transformer_model_name2,
                                     model_name3 = transformer_model_name3,
@@ -454,7 +462,7 @@ if __name__ == '__main__':
 
         
         #  Save dataset (local folder for the workstation)
-        np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysis_' + transformer_model_name + '_' + transformer_ws + str(ttg_com),
+        np.savez_compressed(root_folder + '/optimization/saved_files/warmstarting/ws_analysisFULL_' + transformer_model_name + '_vs_FT_' + transformer_ws + str(ttg_com),
                             model_name = transformer_model_name,
                             model_name2 = transformer_model_name2,
                             model_name3 = transformer_model_name3,
