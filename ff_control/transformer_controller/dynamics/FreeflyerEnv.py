@@ -6,7 +6,8 @@ sys.path.append(root_folder)
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Rectangle
-from dynamics.freeflyer import FreeflyerModel, sample_init_target
+from dynamics.freeflyer import FreeflyerModel, check_obs_format, generate_perfect_observations, compute_relative_observations
+import copy
 
 '''
     TODO:
@@ -33,7 +34,7 @@ class FreeflyerEnv():
             - reset_mode: 'det' -> deterministic reset which uses reset_condition to reset
                           'rsamp' -> random sample performed from the dataloader to reset
                           'dsamp' -> deterministic sample of the idx_sample from the dataloader to reset
-            - reset_condtion: tuple (dt, state_init, state_final, final_time) containing the deterministic condition to reset the environment, TO BE PROVIDED for 'det' mode
+            - reset_condtion: tuple (dt, state_init, state_final, final_time, obs, n_obs) containing the deterministic condition to reset the environment, TO BE PROVIDED for 'det' mode
             - dataloader: dataloader containing the dataset from which the reset condition should be sample, TO BE PROVIDED for 'rsamp' AND 'dsamp' modes
             - idx_sample: index of the sample to be extracted from the dataloader to reset the environment, TO BE PROVIDED for 'dsamp' mode
             - return_sample: boolean input, set to True if the data sample used for the reset should be returned (in case of 'rsamp' and 'dsamp' modes)
@@ -54,10 +55,12 @@ class FreeflyerEnv():
             if dataloader.dataset.mdp_constr:
                 if self.generalized_time and (not self.generalized_obs):
                     states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
+                elif self.generalized_obs and (not self.generalized_time):
+                    states_i, observations_i, n_obs_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, obstacles_state, obstacles_radius, ix = traj_sample
                 elif (not self.generalized_time) and (not self. generalized_obs):
                     states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
                 else:
-                    raise ValueError('Generalized obstacle not implemented yet!!')
+                    raise ValueError('Generalized obstacle and final time not implemented yet!!')
             else:
                 states_i, actions_i, rtgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = traj_sample
             data_stats = dataloader.dataset.data_stats
@@ -65,6 +68,15 @@ class FreeflyerEnv():
             # Fill initial conditions
             self.__load_state(np.array((states_i[0, 0, :] * data_stats['states_std'][0]) + data_stats['states_mean'][0]))
             self.__load_goal(np.array((goal_i[0, 0, :] * data_stats['goal_std'][0]) + data_stats['goal_mean'][0]))
+            # Scenario
+            if self.generalized_obs:
+                obs = {
+                        'position' : obstacles_state.cpu().numpy(),
+                        'radius' : obstacles_radius.cpu().numpy()
+                    }
+                self.__load_scenario(obs, n_obs_i.item())
+            else:
+                self.__load_scenario(self.obs_nominal, self.n_obs_nominal)
             # Time characteristics and discretization of the manuever
             if self.generalized_time:
                 self.__initialize_time(dt.item(), np.round(((ttgs_i[0, 0, :] * data_stats['ttgs_std'][0]) + data_stats['ttgs_mean'][0]).item(),1))
@@ -79,6 +91,11 @@ class FreeflyerEnv():
             # Fill initial conditions
             self.__load_state(reset_condition[1])
             self.__load_goal(reset_condition[2])
+            # Scenario
+            if self.generalized_obs:
+                self.__load_scenario(reset_condition[4], reset_condition[5])
+            else:
+                self.__load_scenario(self.obs_nominal, self.n_obs_nominal)
             # Time characteristics and discretization of the manuever
             if self.generalized_time:
                 self.__initialize_time(reset_condition[0], np.round(reset_condition[3],1))
@@ -98,8 +115,12 @@ class FreeflyerEnv():
         self.dv = np.empty((self.N_ACTION, 0)) # true applied action
         self.dv_t = np.empty((self.N_CLUSTERS,0)) # thursters deltaV
         self.goal = np.empty((self.N_STATE, 0)) # true goal
+        self.abs_observation = np.empty((self.N_OBSERVATION, 0))
+        self.rel_observation = np.empty((self.N_OBSERVATION, 0))
         self.reward = np.empty((0, ))
         self.ttg = np.empty((0, ))
+        self.n_obs = []
+        self.obs = []
 
         self.__initialize_predictions()
 
@@ -121,12 +142,13 @@ class FreeflyerEnv():
         self.T = final_time
         
     ########## PROPAGATION METHODS ##########
-    def step(self, action=None, goal=None, state_desired=None):
+    def step(self, action=None, goal=None, obs=None, state_desired=None):
         '''
         Function to compute one step forward in the environment and return the corresponding observation and reward.
         Inputs:
             - actions: np.array with shape (3,) containing the action to execute at the current timestep
             - goal : np.array with shape (6,) containing the current goal (if None -> maintain the current)
+            - obs : dictionary containing current scenario information (if None -> maintain the current)
             - state_desired : step used for the feedback control term
         '''
 
@@ -142,7 +164,7 @@ class FreeflyerEnv():
             self.__load_action(action)
 
             # Load the goal in the history
-            if goal == None:
+            if goal is None:
                 self.__load_goal(self.goal[:,-1].copy())
             else:
                 self.__load_goal(goal)
@@ -152,6 +174,14 @@ class FreeflyerEnv():
                 self.__propagate_dynamics_with_PID(state_desired)
             else:
                 self.__propagate_dynamics()
+            
+            # Load scenario information in the history
+            if obs is None:
+                self.__load_scenario(self.obs[-1], self.n_obs[-1])
+            else:
+                check_obs_format(obs)
+                n_obs = len(obs['radius'])
+                self.__load_scenario(obs, n_obs)
            
             # Get the reward and load it into the history vector
             current_reward = self.__get_reward()
@@ -223,10 +253,12 @@ class FreeflyerEnv():
         '''
 
         self.ff_model = FreeflyerModel()
-        import optimization.ff_scenario as ff
+        import optimization.ff_scenario_new as ff
         self.N_STATE = ff.N_STATE
         self.N_ACTION = ff.N_ACTION
         self.N_CLUSTERS = ff.N_CLUSTERS
+        self.N_OBSERVATION = ff.N_OBSERVATION
+        self.SINGLE_OBS_DIM = ff.SINGLE_OBS_DIM
         self.mass = ff.mass
         self.J = ff.inertia
         self.robot_radius = ff.robot_radius
@@ -236,7 +268,8 @@ class FreeflyerEnv():
         self.n_time_max = ff.n_time_max
         self.dt = ff.dt
         self.T_nominal = ff.T_nominal
-        self.obs = ff.obs
+        self.obs_nominal = ff.obs_nominal
+        self.n_obs_nominal = ff.n_obs_nominal
         self.Lambda = ff.Lambda
         self.Lambda_inv = ff.Lambda_inv
         self.generalized_time = ff.generalized_time
@@ -265,7 +298,11 @@ class FreeflyerEnv():
             - 'state' : current value of the state
             - 'dv' : latest action performed (so the action corresponding to the previous timestep)
             - 'dv_t' : latest action performed (in the thrusters' reference frame)
-            - 'ttg' : time-to-go remaining until the end of the trajectory.
+            - 'ttg' : time-to-go remaining until the end of the trajectory
+            - 'abs_observation' : latest absolute scenario observation
+            - 'rel_observation' : latest relative scenario observation
+            - 'obs' : latest scenario information
+            - 'n_obs' : latest number of obstacles in the scenario
         '''
         # Check the correct length of the timeseries
         time_action = self.dv.shape[1]
@@ -279,7 +316,11 @@ class FreeflyerEnv():
                 'dv' : (self.dv[:, -1] if time_action > 0 else np.array([])).copy(),
                 'dv_t' : (self.dv_t[:, -1] if time_action_t > 0 else np.array([])).copy(),
                 'goal' : self.goal[:,-1].copy(),
-                'ttg' : self.ttg[-1]
+                'ttg' : self.ttg[-1],
+                'abs_observation' : self.abs_observation[:, -1].copy(),
+                'rel_observation' : self.rel_observation[:, -1].copy(),
+                'obs' : copy.deepcopy(self.obs[-1]),
+                'n_obs' : self.n_obs[-1]
             }
             return observation
         
@@ -335,6 +376,30 @@ class FreeflyerEnv():
         
         else:
             raise RuntimeError('Trying to update goal at time index', time_goal, 'with time at time index', time_steps)
+
+    def __load_scenario(self, obs, n_obs):
+        '''
+        Function to load into the scenario history vectors the provided scenario information.
+        '''
+        # Check the format of the input
+        obs = copy.deepcopy(obs)
+        check_obs_format(obs)
+
+        # Check the correct length of the timeseries
+        time_steps = self.time.shape[0]
+        time_state = self.state.shape[1]
+        time_scenario = self.abs_observation.shape[1]
+        if (time_steps == time_scenario) and (time_state == (time_scenario + 1)):
+            # Update scenario features
+            self.obs.append(obs)
+            self.n_obs.append(n_obs)
+            # Update the scenario observations history
+            self.abs_observation = np.hstack((self.abs_observation, generate_perfect_observations(obs['position'], obs['radius']).reshape(self.N_OBSERVATION,1)))
+            self.rel_observation = np.hstack((self.rel_observation, compute_relative_observations(self.state[:2,-1], obs['position'],
+                                                                                                  (obs['radius'] + self.robot_radius)*self.safety_margin).reshape(self.N_OBSERVATION,1)))
+        
+        else:
+            raise RuntimeError('Trying to update scenario observations at time index', time_scenario, 'with time at time index', time_steps, 'and state at time index', time_state)
 
     def __load_reward(self, reward):
         '''
@@ -431,11 +496,11 @@ class FreeflyerEnv():
             maneuver_ART_lines = ax.plot(maneuver_rtn_ART[0,:], maneuver_rtn_ART[1,:], color=[0.2,0.2,0.2], linewidth=0.5, label=mpc_label+'$_{total} $', zorder=3)[0]
             maneuver_ARTscp_lines = ax.plot(maneuver_rtn_scpART[0,:], maneuver_rtn_scpART[1,:], color='r', linewidth=0.5, label='scp'+mpc_label+'$_{total} $', zorder=3)[0]
             ax.add_patch(Rectangle((0,0), self.table['xy_up'][0], self.table['xy_up'][1], fc=(0.5,0.5,0.5,0.2), ec='k', label='table', zorder=2.5))
-            for n_obs in range(self.obs['radius'].shape[0]):
+            for n_obs in range(self.obs[-1]['radius'].shape[0]):
                 label_obs = 'obs' if n_obs == 0 else None
                 label_robot = 'robot radius' if n_obs == 0 else None
-                ax.add_patch(Circle(self.obs['position'][n_obs,:], self.obs['radius'][n_obs], fc='r', label=label_obs, zorder=2.5))
-                ax.add_patch(Circle(self.obs['position'][n_obs,:], self.obs['radius'][n_obs]+self.robot_radius, fc='r', alpha=0.2, label=label_robot, zorder=2.5))
+                ax.add_patch(Circle(self.obs[-1]['position'][n_obs,:], self.obs[-1]['radius'][n_obs], fc='r', label=label_obs, zorder=2.5))
+                ax.add_patch(Circle(self.obs[-1]['position'][n_obs,:], self.obs[-1]['radius'][n_obs]+self.robot_radius, fc='r', alpha=0.2, label=label_robot, zorder=2.5))
             ART_lines = ax.plot(plan_rtn_ART[0,:], plan_rtn_ART[1,:], color="b", linewidth=1.5, label=mpc_label, zorder=3)[0]
             ARTMPC_lines = ax.plot(plan_rtn_ARTMPC[0,:], plan_rtn_ARTMPC[1,:], color="g", linewidth=1.5, label=mpc_label+'-MPC', zorder=3)[0]
             history_lines = ax.plot(history_rtn[0,:], history_rtn[1,:], color="k", linewidth=1.5, label='env', zorder=3)[0]

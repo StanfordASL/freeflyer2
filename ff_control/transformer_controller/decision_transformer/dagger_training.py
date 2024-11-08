@@ -10,7 +10,8 @@ import torch
 
 from transformers import DecisionTransformerConfig
 import decision_transformer.manage as TTO_manager
-from decision_transformer.art import AutonomousFreeflyerTransformer, AutonomousFreeflyerTransformer_pred_time
+from decision_transformer.art import AutonomousFreeflyerTransformer, AutonomousFreeflyerTransformer_pred_time,\
+    AutonomousFreeflyerTransformer_VarObs, AutonomousFreeflyerTransformer_VarObs_ConcatObservations
 from torch.optim import AdamW
 from accelerate import Accelerator
 from transformers import get_scheduler
@@ -52,6 +53,8 @@ def for_computation(input_iterable):
 
            'context_state': [],
            'context_state_norm': [],
+           'context_observation': [],
+           'context_observation_norm': [],
            'context_action': [],
            'context_action_norm': [],
            'target_state': [],
@@ -71,9 +74,21 @@ def for_computation(input_iterable):
         if ff.generalized_time and (not ff.generalized_obs):
             states_i, actions_i, rtgs_i, ctgs_i, ttgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = sample
             final_time = ((ttgs_i[0,0] * data_stats['ttgs_std'][0]) + (data_stats['ttgs_mean'][0])).item()
+            obs = ff.obs_nominal
+            n_obs = ff.n_obs_nominal
+        elif ff.generalized_obs and (not ff.generalized_time):
+            states_i, observations_i, n_obs_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, obstacles_state, obstacles_radius, ix = sample
+            final_time = ff.T_nominal
+            obs = {
+                'position' : obstacles_state[0,0,:,:].cpu().numpy(),
+                'radius' : obstacles_radius[0,0,:].cpu().numpy()
+            }
+            n_obs = n_obs_i.item()
         elif (not ff.generalized_time) and (not ff.generalized_obs):
             states_i, actions_i, rtgs_i, ctgs_i, goal_i, timesteps_i, attention_mask_i, dt, time_sec, ix = sample
             final_time = ff.T_nominal
+            obs = ff.obs_nominal
+            n_obs = ff.n_obs_nominal
     out['dataset_ix'] = ix[0]
     dt = dt.item()
     state_init = np.array((states_i[0, 0, :] * data_stats['states_std'][0]) + data_stats['states_mean'][0])
@@ -82,7 +97,7 @@ def for_computation(input_iterable):
 
     ####### Warmstart Convex Problem QUAD
     try:
-        traj_cvx, _, _, feas_cvx = ocp_no_obstacle_avoidance(ff_model, state_init, state_final, final_time) #### Remember states_cvx:(6,101) actions_cvx:(3,100)
+        traj_cvx, _, _, feas_cvx = ocp_no_obstacle_avoidance(ff_model, state_init, state_final, final_time, obs) #### Remember states_cvx:(6,101) actions_cvx:(3,100)
         states_cvx = traj_cvx['states']
         actions_cvx = traj_cvx['actions_G']
         if feas_cvx == 'infeasible':
@@ -95,7 +110,7 @@ def for_computation(input_iterable):
         print('======================================\n ======================================\n ======================================\n ======================================\n')
         print('\n The following error occurred: ', type(error).__name__, '-', error)
         print('\n Saving log_error_cvx file...........')
-        np.savez_compressed(root_folder + '/optimization/saved_files/closed_loop/log_error_cvx',
+        '''np.savez_compressed(root_folder + '/optimization/saved_files/closed_loop/log_error_cvx',
                             train_loader = train_loader,
                             states_i = states_i,
                             rtgs_i = rtgs_i,
@@ -103,13 +118,13 @@ def for_computation(input_iterable):
                             state_init = state_init,
                             state_final = state_final,
                             final_time = final_time
-                            )
+                            )'''
         
     
     if not np.char.equal(feas_cvx,'infeasible'):
         out['J_cvx'] = sum(la.norm(actions_cvx,axis=0,ord=1))
         rtg_0 = -out['J_cvx']
-        ctgs_cvx = compute_constraint_to_go(states_cvx.T, ff.obs['position'], (ff.obs['radius'] + ff.robot_radius)*ff.safety_margin)
+        ctgs_cvx = compute_constraint_to_go(states_cvx.T, obs['position'], (obs['radius'] + ff.robot_radius)*ff.safety_margin, n_obs)
         ctgs0_cvx = ctgs_cvx[0,0]
         out['ctgs0_cvx'] = ctgs0_cvx
         out['cvx_problem'] = ctgs0_cvx == 0
@@ -117,13 +132,15 @@ def for_computation(input_iterable):
         ############## MPC methods
         # Create and initialize the environments and the MCPCs 
         quad_env_art = FreeflyerEnv()
-        traj_sample = (dt, state_init, state_final, final_time)
+        traj_sample = (dt, state_init, state_final, final_time, obs, n_obs)
         quad_env_art.reset('det',traj_sample)
         mpc_steps = np.random.randint(mpc_steps_min, np.minimum(mpc_steps_max, quad_env_art.n_time_rpod)+1)
         out['plan_steps'] = mpc_steps
         artMPC = AutonomousFreeflyerTransformerMPC(model,train_loader,mpc_steps,transformer_mode='dyn',ctg_clipped=True,scp_mode='soft')
         cvxMPC = ConvexMPC(quad_env_art.n_time_rpod,scp_mode='soft')
+        #cvxMPC = AutonomousFreeflyerTransformerMPC(model_oracle,train_loader,quad_env_art.n_time_rpod,transformer_mode='dyn',ctg_clipped=True,scp_mode='soft')
         observed_state =  np.repeat(state_final[None,:], quad_env_art.n_time_max, axis=0)#np.zeros((quad_env_art.n_time_max, quad_env_art.N_STATE))
+        observed_observation =  np.zeros((quad_env_art.n_time_max, quad_env_art.N_OBSERVATION))
         observed_goal = np.repeat(state_final[None,:], quad_env_art.n_time_max, axis=0)#np.zeros((quad_env_art.n_time_max, quad_env_art.N_STATE))
         executed_action = np.zeros((quad_env_art.n_time_max, quad_env_art.N_ACTION))
         target_state_oracle = np.repeat(state_final[None,:], quad_env_art.n_time_max-1, axis=0)#np.zeros((quad_env_art.n_time_max-1, quad_env_art.N_STATE))
@@ -150,10 +167,16 @@ def for_computation(input_iterable):
                 current_obs_art = quad_env_art.get_observation()
                 observed_state[i,:] = current_obs_art['state']
                 observed_goal[i,:] = current_obs_art['goal']
+                observed_observation[i,:] = current_obs_art['rel_observation' if train_loader.dataset.relative_observations else 'abs_observation']
                 real_obs_art = {
                     'state' : quad_env_art.state[:,-1].copy(),
                     'goal' : quad_env_art.goal[:,-1].copy(),
-                    'ttg' : quad_env_art.ttg[-1]
+                    'dv' : (quad_env_art.dv[:, -1] if i > 0 else np.array([])).copy(),
+                    'ttg' : quad_env_art.ttg[-1],
+                    'abs_observation' : quad_env_art.abs_observation[:, -1].copy(),
+                    'rel_observation' : quad_env_art.rel_observation[:, -1].copy(),
+                    'obs' : copy.deepcopy(quad_env_art.obs[-1]),
+                    'n_obs' : quad_env_art.n_obs[-1]
                 }
                 # ART-ws
                 tic = time.time()
@@ -195,13 +218,11 @@ def for_computation(input_iterable):
 
             out['J_artMPC'] = np.sum(la.norm(quad_env_art.dv, axis=0, ord=1))
             out['time_artMPC'] = time_artMPC
-            
-            ################### Da qui in poi
-            # 1 - context_ttg deve essere None se generalized_time == False (forse non è necessario salvare context_ttg ma lo si può riprendere dal dataset come i data params)
-            # 2 - tutti i context devono avere lunghezza pari a n_time_max
-            # 3 - in dagger_training rtg può essere < 0 prima della fine della manovra -> cambiare modo di fare masking in training loop            
+                     
             out['context_state'] = observed_state[None]
             out['context_state_norm'] = (torch.from_numpy(observed_state[None]) - data_stats['states_mean']) / (data_stats['states_std'] + 1e-6)#artMPC.norm_state_context.cpu()
+            out['context_observation'] = observed_observation[None]
+            out['context_observation_norm'] = (torch.from_numpy(observed_observation[None]) - data_stats['observations_mean']) / (data_stats['observations_std'] + 1e-6)
             out['context_action'] = executed_action[None]
             out['context_action_norm'] = (torch.from_numpy(executed_action[None]) - data_stats['actions_mean']) / (data_stats['actions_std'] + 1e-6)#artMPC.norm_action_context.cpu()
             out['context_rtg'] = artMPC.rtgs_context.cpu()[0]
@@ -223,21 +244,22 @@ def for_computation(input_iterable):
 if __name__ == '__main__':
 
     # OPEN LOOP INITIAL DATASET AND MODEL
-    initial_transformer_name = 'checkpoint_ff_time40_100_chunk100R_ctgrtg12000'
+    initial_transformer_name = 'checkpoint_ff_obs_Rscen_cae_rel_ctgrtg'
+    root_folder_dag = root_folder#'/home/davide.celestini/amir/freeflyer2/ff_control/transformer_controller/'
     import_config_ol = TTO_manager.transformer_import_config(initial_transformer_name)
-    mdp_constr, timestep_norm, dataset_scenario, chunksize, random_chunk = import_config_ol['mdp_constr'], import_config_ol['timestep_norm'], \
-        import_config_ol['dataset_scenario'], import_config_ol['chunksize'], import_config_ol['random_chunk']
+    mdp_constr, timestep_norm, dataset_scenario, chunksize, random_chunk, relative_observations = import_config_ol['mdp_constr'], import_config_ol['timestep_norm'], \
+        import_config_ol['dataset_scenario'], import_config_ol['chunksize'], import_config_ol['random_chunk'], import_config_ol['relative_observations']
     train_only_on_cl = False
     oracle_fixed_flag = True
     # Get the datasets and loaders from the torch data
     datasets_ol, dataloaders_ol = TTO_manager.get_train_val_test_data(mdp_constr=mdp_constr, dataset_scenario=dataset_scenario, timestep_norm=timestep_norm, \
-                                                                      chunksize=chunksize, random_chunk=random_chunk)
+                                                                      chunksize=chunksize, random_chunk=random_chunk, relative_observations=relative_observations, root_folder=root_folder_dag)
     train_loader_ol, eval_loader_ol, test_loader_ol = dataloaders_ol
     data_stats = copy.deepcopy(train_loader_ol.dataset.data_stats)
     
     # Pool creation --> Should automatically select the maximum number of processes
     set_start_method('spawn')
-    num_processes = 20
+    num_processes = 24
     p = Pool(processes=num_processes)
     n_dagger_i = 0
     N_dagger_max = 20    
@@ -255,7 +277,7 @@ if __name__ == '__main__':
 
         # Get the current model with the open loop dataloaders
         print('DAGGER ITERATION', n_dagger , ': Generating closed-loop dataset with ART model', current_transformer_model_name)
-        model = TTO_manager.get_DT_model(current_transformer_model_name, train_loader_ol, eval_loader_ol)
+        model = TTO_manager.get_DT_model(current_transformer_model_name, train_loader_ol, eval_loader_ol, root_folder=root_folder_dag)
 
         # Parallel for inputs
         N_data_test = 2000
@@ -269,87 +291,93 @@ if __name__ == '__main__':
             'switch_window_max' : 25, # these windows will be intended as portion of the nominal value of timesteps (100) and properly rescaled
             'oracle_fixed' : oracle_fixed_flag
         }
-        if n_dagger > 0:
-            J_cvx = np.empty(shape=(N_data_test, ), dtype=float)
-            J_artMPC = np.empty(shape=(N_data_test, ), dtype=float)
-            time_artMPC = np.empty(shape=(N_data_test, ff.n_time_max), dtype=float)
-            ctgs0_cvx = np.empty(shape=(N_data_test, ), dtype=float)
-            cvx_problem = np.full(shape=(N_data_test, ), fill_value=False)
-            dataset_ix = -np.ones(shape=(N_data_test, ), dtype=int)
-            plan_steps = -np.ones(shape=(N_data_test, ), dtype=int)
+        
+        J_cvx = np.empty(shape=(N_data_test, ), dtype=float)
+        J_artMPC = np.empty(shape=(N_data_test, ), dtype=float)
+        time_artMPC = np.empty(shape=(N_data_test, ff.n_time_max), dtype=float)
+        ctgs0_cvx = np.empty(shape=(N_data_test, ), dtype=float)
+        cvx_problem = np.full(shape=(N_data_test, ), fill_value=False)
+        dataset_ix = -np.ones(shape=(N_data_test, ), dtype=int)
+        plan_steps = -np.ones(shape=(N_data_test, ), dtype=int)
 
-            context_state = np.empty(shape=(N_data_test, ff.n_time_max, 6), dtype=float)
-            context_state_norm = np.empty(shape=(N_data_test, ff.n_time_max, 6), dtype=float)
-            context_action = np.empty(shape=(N_data_test, ff.n_time_max, 3), dtype=float)
-            context_action_norm = np.empty(shape=(N_data_test, ff.n_time_max, 3), dtype=float)
-            target_state = np.empty(shape=(N_data_test, ff.n_time_max-1, 6), dtype=float)
-            target_action = np.empty(shape=(N_data_test, ff.n_time_max, 3), dtype=float)
-            context_rtg = np.empty(shape=(N_data_test, ff.n_time_max, 1), dtype=float)
-            context_ctg = np.empty(shape=(N_data_test, ff.n_time_max, 1), dtype=float)
-            context_goal = np.empty(shape=(N_data_test, ff.n_time_max, 6), dtype=float)
-            context_goal_norm = np.empty(shape=(N_data_test, ff.n_time_max, 6), dtype=float)
+        context_state = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_STATE), dtype=float)
+        context_state_norm = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_STATE), dtype=float)
+        context_observation = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_OBSERVATION), dtype=float)
+        context_observation_norm = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_OBSERVATION), dtype=float)
+        context_action = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_ACTION), dtype=float)
+        context_action_norm = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_ACTION), dtype=float)
+        target_state = np.empty(shape=(N_data_test, ff.n_time_max-1, ff.N_STATE), dtype=float)
+        target_action = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_ACTION), dtype=float)
+        context_rtg = np.empty(shape=(N_data_test, ff.n_time_max, 1), dtype=float)
+        context_ctg = np.empty(shape=(N_data_test, ff.n_time_max, 1), dtype=float)
+        context_goal = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_STATE), dtype=float)
+        context_goal_norm = np.empty(shape=(N_data_test, ff.n_time_max, ff.N_STATE), dtype=float)
 
-            i_unfeas_cvx = []
-            i_unfeas_artMPC = []
-            for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
-                # Save the input in the dataset
-                dataset_ix[i] = res['dataset_ix']
+        i_unfeas_cvx = []
+        i_unfeas_artMPC = []
+        for i, res in enumerate(tqdm(p.imap(for_computation, zip(np.arange(N_data_test), itertools.repeat(other_args))), total=N_data_test)):
+            #for i in np.arange(N_data_test):
+            #res = for_computation((i, other_args))
+            # Save the input in the dataset
+            dataset_ix[i] = res['dataset_ix']
 
-                # If the solution is feasible save the optimization output
-                if res['feasible_cvx']:
-                    J_cvx[i] = res['J_cvx']
-                    ctgs0_cvx[i] = res['ctgs0_cvx']
-                    cvx_problem[i] = res['cvx_problem']
-                else:
-                    i_unfeas_cvx += [ i ]
-                
-                if res['feasible_artMPC']:
-                    plan_steps[i] = res['plan_steps']
-                    J_artMPC[i] = res['J_artMPC']
-                    time_artMPC[i,:] = res['time_artMPC']
-                    context_state[i,:,:] = res['context_state']
-                    context_state_norm[i,:,:] = res['context_state_norm']
-                    context_action[i,:,:] = res['context_action']
-                    context_action_norm[i,:,:] = res['context_action_norm']
-                    target_state[i,:,:] = res['target_state']
-                    target_action[i,:,:] = res['target_action']
-                    context_rtg[i,:,:] = res['context_rtg']
-                    context_ctg[i,:,:] = res['context_ctg']
-                    context_goal[i,:,:] = res['context_goal']
-                    context_goal_norm[i,:,:] = res['context_goal_norm']
-                else:
-                    i_unfeas_artMPC += [ i ]
+            # If the solution is feasible save the optimization output
+            if res['feasible_cvx']:
+                J_cvx[i] = res['J_cvx']
+                ctgs0_cvx[i] = res['ctgs0_cvx']
+                cvx_problem[i] = res['cvx_problem']
+            else:
+                i_unfeas_cvx += [ i ]
+            
+            if res['feasible_artMPC']:
+                plan_steps[i] = res['plan_steps']
+                J_artMPC[i] = res['J_artMPC']
+                time_artMPC[i,:] = res['time_artMPC']
+                context_state[i,:,:] = res['context_state']
+                context_state_norm[i,:,:] = res['context_state_norm']
+                context_observation[i,:,:] = res['context_observation']
+                context_observation_norm[i,:,:] = res['context_observation_norm']
+                context_action[i,:,:] = res['context_action']
+                context_action_norm[i,:,:] = res['context_action_norm']
+                target_state[i,:,:] = res['target_state']
+                target_action[i,:,:] = res['target_action']
+                context_rtg[i,:,:] = res['context_rtg']
+                context_ctg[i,:,:] = res['context_ctg']
+                context_goal[i,:,:] = res['context_goal']
+                context_goal_norm[i,:,:] = res['context_goal_norm']
+            else:
+                i_unfeas_artMPC += [ i ]
 
-            #  Save dataset (local folder for the workstation)
-            print('DAGGER ITERATION', n_dagger , ': Saving the dataset as', root_folder + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name + '.npz')
-            np.savez_compressed(root_folder + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name,
-                                J_cvx = J_cvx,
-                                J_artMPC = J_artMPC,
-                                time_artMPC = time_artMPC,
-                                cvx_problem = cvx_problem,
-                                dataset_ix = dataset_ix,
-                                i_unfeas_cvx = i_unfeas_cvx,
-                                i_unfeas_artMPC = i_unfeas_artMPC,
-                                plan_steps = plan_steps,
-                                context_state = context_state,
-                                context_state_norm = context_state_norm,
-                                context_action = context_action,
-                                context_action_norm = context_action_norm,
-                                target_state = target_state,
-                                target_action = target_action,
-                                context_rtg = context_rtg,
-                                context_ctg = context_ctg,
-                                context_goal = context_goal,
-                                context_goal_norm = context_goal_norm
-                                )
-        else:
-            print('DAGGER ITERATION', n_dagger , ': Skipping dataset generation because it has already been completed!')
+        #  Save dataset (local folder for the workstation)
+        print('DAGGER ITERATION', n_dagger , ': Saving the dataset as', root_folder_dag + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name + '.npz')
+        np.savez_compressed(root_folder_dag + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name,
+                            J_cvx = J_cvx,
+                            J_artMPC = J_artMPC,
+                            time_artMPC = time_artMPC,
+                            cvx_problem = cvx_problem,
+                            dataset_ix = dataset_ix,
+                            i_unfeas_cvx = i_unfeas_cvx,
+                            i_unfeas_artMPC = i_unfeas_artMPC,
+                            plan_steps = plan_steps,
+                            context_state = context_state,
+                            context_state_norm = context_state_norm,
+                            context_observation = context_observation,
+                            context_observation_norm = context_observation_norm,
+                            context_action = context_action,
+                            context_action_norm = context_action_norm,
+                            target_state = target_state,
+                            target_action = target_action,
+                            context_rtg = context_rtg,
+                            context_ctg = context_ctg,
+                            context_goal = context_goal,
+                            context_goal_norm = context_goal_norm
+                            )
         
         ########################################
 
         ########## MODEL TRAINING ##########
         # Retrieve data from the previous dagger generation
-        cl_data = np.load(root_folder + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name + '.npz')
+        cl_data = np.load(root_folder_dag + '/optimization/saved_files/closed_loop/dagger_' + current_transformer_model_name + '.npz')
         dataset_ix = cl_data['dataset_ix']
         i_unfeas_artMPC = cl_data['i_unfeas_artMPC']
         mask = (dataset_ix != -1) & (~(np.isin(np.arange(N_data_test), i_unfeas_artMPC)))
@@ -371,6 +399,12 @@ if __name__ == '__main__':
             context_ttg_norm = train_loader_ol.dataset.data['ttgs'][dataset_ix[mask],:]#torch.from_numpy(cl_data['context_ttg'][mask,:,:])
             #context_ttg_norm = (context_ttg - data_stats['ttgs_mean']) / (data_stats['ttgs_std'] + 1e-6)
             data_param_cl['final_time'] = train_loader_ol.dataset.data['data_param']['final_time'][dataset_ix[mask]]
+        if ff.generalized_obs:
+            context_observation = torch.from_numpy(cl_data['context_observation'][mask,:,:])
+            context_observation_norm = (context_observation - data_stats['observations_mean']) / (data_stats['observations_std'] + 1e-6)
+            data_param_cl['n_obs'] = train_loader_ol.dataset.data['data_param']['n_obs'][dataset_ix[mask]]
+            data_param_cl['obs_position'] = train_loader_ol.dataset.data['data_param']['obs_position'][dataset_ix[mask],:,:]
+            data_param_cl['obs_radius'] = train_loader_ol.dataset.data['data_param']['obs_radius'][dataset_ix[mask],:]
 
         # Get CURRENT closed-loop train and eval data
         n = int(0.9*context_state_norm.shape[0])
@@ -407,6 +441,15 @@ if __name__ == '__main__':
             cl_train_data['data_param']['final_time'] = data_param_cl['final_time'][:n]
             cl_val_data['ttgs'] = context_ttg_norm[n:, :]
             cl_val_data['data_param']['final_time'] = data_param_cl['final_time'][n:]
+        if ff.generalized_obs:
+            cl_train_data['observations'] = context_observation_norm[:n, :]
+            cl_train_data['data_param']['n_obs'] = data_param_cl['n_obs'][:n]
+            cl_train_data['data_param']['obs_position'] = data_param_cl['obs_position'][:n, :]  
+            cl_train_data['data_param']['obs_radius'] = data_param_cl['obs_radius'][:n, :]
+            cl_val_data['observations'] = context_observation_norm[n:, :]
+            cl_val_data['data_param']['n_obs'] = data_param_cl['n_obs'][n:]
+            cl_val_data['data_param']['obs_position'] = data_param_cl['obs_position'][n:, :]  
+            cl_val_data['data_param']['obs_radius'] = data_param_cl['obs_radius'][n:, :]
 
         # Compute the aggregation of the closed-loop dataset
         # If we are at the first iteration --> initialize cl_train_data_dagger with only closed_loop data
@@ -429,10 +472,15 @@ if __name__ == '__main__':
             if ff.generalized_time:
                 cl_train_data_dagger['ttgs'] = cl_train_data['ttgs'].clone().detach()
                 cl_train_data_dagger['data_param']['final_time'] = cl_train_data['data_param']['final_time'].copy()
+            if ff.generalized_obs:
+                cl_train_data_dagger['observations'] = cl_train_data['observations'].clone().detach()
+                cl_train_data_dagger['data_param']['n_obs'] = cl_train_data['data_param']['n_obs'].copy()
+                cl_train_data_dagger['data_param']['obs_position'] = cl_train_data['data_param']['obs_position'].copy()
+                cl_train_data_dagger['data_param']['obs_radius'] = cl_train_data['data_param']['obs_radius'].copy()
 
         else:
             # Load the previous cl_train_data_dagger
-            cl_train_data_dagger_prev = torch.load(root_folder + '/optimization/saved_files/closed_loop/dagger_cl_dataset/cl_train_data_dagger_' + previous_transformer_model_name + '.pth')
+            cl_train_data_dagger_prev = torch.load(root_folder_dag + '/optimization/saved_files/closed_loop/dagger_cl_dataset/cl_train_data_dagger_' + previous_transformer_model_name + '.pth')
             # Extend cl_train_data_dagger with current closed_loop data
             cl_train_data_dagger = {
                 'states' : torch.concatenate((cl_train_data_dagger_prev['states'], cl_train_data['states'])),
@@ -451,8 +499,13 @@ if __name__ == '__main__':
             if ff.generalized_time:
                 cl_train_data_dagger['ttgs'] = torch.concatenate((cl_train_data_dagger_prev['ttgs'], cl_train_data['ttgs']))
                 cl_train_data_dagger['data_param']['final_time'] = np.concatenate((cl_train_data_dagger_prev['data_param']['final_time'], cl_train_data['data_param']['final_time']))
+            if ff.generalized_obs:
+                cl_train_data_dagger['observations'] = torch.concatenate((cl_train_data_dagger_prev['observations'], cl_train_data['observations']))
+                cl_train_data_dagger['data_param']['n_obs'] = np.concatenate((cl_train_data_dagger_prev['data_param']['n_obs'], cl_train_data['data_param']['n_obs']))
+                cl_train_data_dagger['data_param']['obs_position'] = np.concatenate((cl_train_data_dagger_prev['data_param']['obs_position'], cl_train_data['data_param']['obs_position']))
+                cl_train_data_dagger['data_param']['obs_radius'] = np.concatenate((cl_train_data_dagger_prev['data_param']['obs_radius'], cl_train_data['data_param']['obs_radius']))
         # Save the dataset (in case the dagger training crashes and has to be resumed)
-        torch.save(cl_train_data_dagger, root_folder + '/optimization/saved_files/closed_loop/dagger_cl_dataset/cl_train_data_dagger_' + current_transformer_model_name + '.pth')
+        torch.save(cl_train_data_dagger, root_folder_dag + '/optimization/saved_files/closed_loop/dagger_cl_dataset/cl_train_data_dagger_' + current_transformer_model_name + '.pth')
 
         # Part of the training dataset coming from open-loop dataset
         n_ol = n*9 if (not train_only_on_cl) else 0
@@ -474,6 +527,11 @@ if __name__ == '__main__':
         if ff.generalized_time:
             ol_train_data['ttgs'] = train_loader_ol.dataset.data['ttgs'][rand_ix, :]
             ol_train_data['data_param']['final_time'] = train_loader_ol.dataset.data['data_param']['final_time'][rand_ix]
+        if ff.generalized_obs:
+            ol_train_data['observations'] = train_loader_ol.dataset.data['observations'][rand_ix, :]
+            ol_train_data['data_param']['n_obs'] = train_loader_ol.dataset.data['data_param']['n_obs'][rand_ix]
+            ol_train_data['data_param']['obs_position'] = train_loader_ol.dataset.data['data_param']['obs_position'][rand_ix, :]
+            ol_train_data['data_param']['obs_radius'] = train_loader_ol.dataset.data['data_param']['obs_radius'][rand_ix, :]
         # Extend train_data_dagger with current closed_loop data
         train_data_dagger = {
             'states' : torch.concatenate((ol_train_data['states'], cl_train_data_dagger['states'])),
@@ -492,11 +550,16 @@ if __name__ == '__main__':
         if ff.generalized_time:
             train_data_dagger['ttgs'] = torch.concatenate((ol_train_data['ttgs'], cl_train_data_dagger['ttgs']))
             train_data_dagger['data_param']['final_time'] = np.concatenate((ol_train_data['data_param']['final_time'], cl_train_data_dagger['data_param']['final_time']))
+        if ff.generalized_obs:
+            train_data_dagger['observations'] = torch.concatenate((ol_train_data['observations'], cl_train_data_dagger['observations']))
+            train_data_dagger['data_param']['n_obs'] = np.concatenate((ol_train_data['data_param']['n_obs'], cl_train_data_dagger['data_param']['n_obs']))
+            train_data_dagger['data_param']['obs_position'] = np.concatenate((ol_train_data['data_param']['obs_position'], cl_train_data_dagger['data_param']['obs_position']))
+            train_data_dagger['data_param']['obs_radius'] = np.concatenate((ol_train_data['data_param']['obs_radius'], cl_train_data_dagger['data_param']['obs_radius']))
 
         # Create Dataset and Dataloaders for the aggragated training
-        train_dataset = TTO_manager.RpodDataset(train_data_dagger, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True)
-        ol_val_dataset = TTO_manager.RpodDataset(eval_loader_ol.dataset.data, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True) # !!!!!!!!!!!!! CONSTANT?
-        cl_val_dataset = TTO_manager.RpodDataset(cl_val_data, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True)
+        train_dataset = TTO_manager.RpodDataset(train_data_dagger, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True, relative_observations=relative_observations)
+        ol_val_dataset = TTO_manager.RpodDataset(eval_loader_ol.dataset.data, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True, relative_observations=relative_observations) # CONSTANT
+        cl_val_dataset = TTO_manager.RpodDataset(cl_val_data, mdp_constr, chunksize=chunksize, random_chunk=random_chunk, target=True, relative_observations=relative_observations)
         train_loader = TTO_manager.DataLoader(
             train_dataset,
             sampler=torch.utils.data.RandomSampler(
@@ -527,7 +590,10 @@ if __name__ == '__main__':
 
         # Create the transformer model with the model used for this iteration of dagger generation
         config = DecisionTransformerConfig(
-            state_dim=train_loader.dataset.n_state, 
+            state_dim=train_loader.dataset.n_state,
+            obs_dim=train_loader.dataset.n_observation,
+            single_obs_dim=train_loader.dataset.n_single_observation,
+            embed_entire_observation=ff.embed_entire_observation,
             act_dim=train_loader.dataset.n_action,
             hidden_size=384,
             max_ep_len=ff.n_time_max,
@@ -543,8 +609,15 @@ if __name__ == '__main__':
             )
         if ff.generalized_time and (not ff.generalized_obs):
             model = AutonomousFreeflyerTransformer_pred_time(config)
+        elif ff.generalized_obs and (not ff.generalized_time):
+            if ('concat_after' in current_transformer_model_name) or ('_cae_' in current_transformer_model_name):
+                model = AutonomousFreeflyerTransformer_VarObs_ConcatObservations(config)
+            else:
+                model = AutonomousFreeflyerTransformer_VarObs(config)
         elif (not ff.generalized_time) and (not ff.generalized_obs):
             model = AutonomousFreeflyerTransformer(config)
+        else:
+            raise ValueError('No implementation for both generalized final time and obstacles!')
         model_size = sum(t.numel() for t in model.parameters())
         print(f"GPT size: {model_size/1000**2:.1f}M parameters")
         model.to(TTO_manager.device);
@@ -560,10 +633,10 @@ if __name__ == '__main__':
             num_warmup_steps=10,
             num_training_steps=num_training_steps,
         )
-        accelerator.load_state(root_folder + '/decision_transformer/saved_files/checkpoints/' + current_transformer_model_name)
+        accelerator.load_state(root_folder_dag + '/decision_transformer/saved_files/checkpoints/' + current_transformer_model_name)
 
         # Training loop
-        print('DAGGER ITERATION', n_dagger , ': Starting the training of model loaded from', root_folder + '/decision_transformer/saved_files/checkpoints/' + current_transformer_model_name)
+        print('DAGGER ITERATION', n_dagger , ': Starting the training of model loaded from', root_folder_dag + '/decision_transformer/saved_files/checkpoints/' + current_transformer_model_name)
         eval_iters = 100
         eval_steps = 500
         n_eval_max = 50
@@ -716,7 +789,133 @@ if __name__ == '__main__':
                     if step >= n_eval_max*eval_steps:
                         # At the end of the current training break the for cycle
                         break
-            
+        
+        elif ff.generalized_obs and (not ff.generalized_time):
+            @torch.no_grad()
+            def evaluate():
+                model.eval()
+                losses_ol = []
+                losses_cl = []
+                losses_state_ol = []
+                losses_state_cl = []
+                losses_action_ol = []
+                losses_action_cl = []
+                for step in range(eval_iters):
+                    # Evaluate Open-loop data
+                    data_iter_ol = iter(ol_eval_loader)
+                    states_i, observations_i, n_obs_i, actions_i, rtgs_i, ctgs_i, goal_i, target_states_i, target_actions_i, timesteps_i, attention_mask_i, _, _, _, _, _ = next(data_iter_ol)
+                    with torch.no_grad():
+                        state_preds, action_preds = model(
+                            states=states_i.to(TTO_manager.device),
+                            observations=observations_i.to(TTO_manager.device),
+                            num_obstacles=n_obs_i.to(TTO_manager.device),
+                            actions=actions_i.to(TTO_manager.device),
+                            goal=goal_i.to(TTO_manager.device),
+                            returns_to_go=rtgs_i.to(TTO_manager.device),
+                            constraints_to_go=ctgs_i.to(TTO_manager.device),
+                            timesteps=timesteps_i.to(TTO_manager.device),
+                            attention_mask=attention_mask_i.to(TTO_manager.device),
+                            return_dict=False,
+                        )
+                    loss_i = torch.mean((action_preds - target_actions_i.to(TTO_manager.device)) ** 2)
+                    loss_i_state = torch.mean((state_preds[:,:-1,:] - target_states_i.to(TTO_manager.device)) ** 2)
+                    losses_ol.append(accelerator.gather(loss_i + loss_i_state))
+                    losses_state_ol.append(accelerator.gather(loss_i_state))
+                    losses_action_ol.append(accelerator.gather(loss_i))
+
+                    # Evaluate Open-loop data
+                    data_iter_cl = iter(cl_eval_loader)
+                    states_i, observations_i, n_obs_i, actions_i, rtgs_i, ctgs_i, goal_i, target_states_i, target_actions_i, timesteps_i, attention_mask_i, _, _, _, _, _ = next(data_iter_cl)
+                    with torch.no_grad():
+                        state_preds, action_preds = model(
+                            states=states_i.to(TTO_manager.device),
+                            observations=observations_i.to(TTO_manager.device),
+                            num_obstacles=n_obs_i.to(TTO_manager.device),
+                            actions=actions_i.to(TTO_manager.device),
+                            goal=goal_i.to(TTO_manager.device),
+                            returns_to_go=rtgs_i.to(TTO_manager.device),
+                            constraints_to_go=ctgs_i.to(TTO_manager.device),
+                            timesteps=timesteps_i.to(TTO_manager.device),
+                            attention_mask=attention_mask_i.to(TTO_manager.device),
+                            return_dict=False,
+                        )
+                    loss_i = torch.mean((action_preds - target_actions_i.to(TTO_manager.device)) ** 2)
+                    loss_i_state = torch.mean((state_preds[:,:-1,:] - target_states_i.to(TTO_manager.device)) ** 2)
+                    losses_cl.append(accelerator.gather(loss_i + loss_i_state))
+                    losses_state_cl.append(accelerator.gather(loss_i_state))
+                    losses_action_cl.append(accelerator.gather(loss_i))
+                    
+                loss_ol = torch.mean(torch.tensor(losses_ol))
+                loss_state_ol = torch.mean(torch.tensor(losses_state_ol))
+                loss_action_ol = torch.mean(torch.tensor(losses_action_ol))
+
+                loss_cl = torch.mean(torch.tensor(losses_cl))
+                loss_state_cl = torch.mean(torch.tensor(losses_state_cl))
+                loss_action_cl = torch.mean(torch.tensor(losses_action_cl))
+                model.train()
+                return (loss_ol.item(), loss_cl.item()), (loss_state_ol.item(), loss_state_cl.item()), (loss_action_ol.item(), loss_action_cl.item())
+
+            model.train()
+            completed_steps = 0
+            log = {
+                'loss_ol':[],
+                'loss_state_ol':[],
+                'loss_action_ol':[],
+                'loss_cl':[],
+                'loss_state_cl':[],
+                'loss_action_cl':[]
+            }
+            for step, batch in enumerate(train_loader, start=0):
+                with accelerator.accumulate(model):
+                    states_i, observations_i, n_obs_i, actions_i, rtgs_i, ctgs_i, goal_i, target_states_i, target_actions_i, timesteps_i, attention_mask_i, _, _, _, _, _ = batch
+                    state_preds, action_preds = model(
+                        states=states_i.to(TTO_manager.device),
+                        observations=observations_i.to(TTO_manager.device),
+                        num_obstacles=n_obs_i.to(TTO_manager.device),
+                        actions=actions_i.to(TTO_manager.device),
+                        goal=goal_i.to(TTO_manager.device),
+                        returns_to_go=rtgs_i.to(TTO_manager.device),
+                        constraints_to_go=ctgs_i.to(TTO_manager.device),
+                        timesteps=timesteps_i.to(TTO_manager.device),
+                        attention_mask=attention_mask_i.to(TTO_manager.device),
+                        return_dict=False,
+                    )
+                    loss_i_action = torch.mean((action_preds - target_actions_i.to(TTO_manager.device)) ** 2)
+                    loss_i_state = torch.mean((state_preds[:,:-1,:] - target_states_i.to(TTO_manager.device)) ** 2)
+                    loss = loss_i_action + loss_i_state
+                    if step % 100 == 0:
+                        accelerator.print(
+                            {
+                                "lr": lr_scheduler.get_lr(),
+                                "samples": step * samples_per_step,
+                                "steps": completed_steps,
+                                "loss/train": loss.item(),
+                            }
+                        )
+                    accelerator.backward(loss)
+                    accelerator.clip_grad_norm_(model.parameters(), 1.0)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+                    completed_steps += 1
+                    if (step % (eval_steps)) == 0:
+                        (eval_loss_ol, eval_loss_cl), (loss_state_ol, loss_state_cl), (loss_action_ol, loss_action_cl) = evaluate()
+                        accelerator.print({"OL EVAL:  loss": eval_loss_ol, "loss/state": loss_state_ol, "loss/action": loss_action_ol})
+                        accelerator.print({"CL EVAL:  loss": eval_loss_cl, "loss/state": loss_state_cl, "loss/action": loss_action_cl})
+
+                        log['loss_ol'].append(eval_loss_ol)
+                        log['loss_cl'].append(eval_loss_cl)
+                        log['loss_state_ol'].append(loss_state_ol)
+                        log['loss_state_cl'].append(loss_state_cl)
+                        log['loss_action_ol'].append(loss_action_ol)
+                        log['loss_action_cl'].append(loss_action_cl)
+                        model.train()
+                        accelerator.wait_for_everyone()
+                    
+                    if step >= n_eval_max*eval_steps:
+                        # At the end of the current training break the for cycle
+                        break
+
         elif (not ff.generalized_time) and (not ff.generalized_obs):
             @torch.no_grad()
             def evaluate():
@@ -839,9 +1038,9 @@ if __name__ == '__main__':
         
         # Save model and log
         transformer_model_name_4_saving = initial_transformer_name + '_cl_' + str(n_dagger)
-        print('DAGGER ITERATION', n_dagger , ': Saving the model and the training log in', root_folder + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving)
-        accelerator.save_state(root_folder + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving)
-        np.savez_compressed(root_folder + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving + '/log',
+        print('DAGGER ITERATION', n_dagger , ': Saving the model and the training log in', root_folder_dag + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving)
+        accelerator.save_state(root_folder_dag + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving)
+        np.savez_compressed(root_folder_dag + '/decision_transformer/saved_files/checkpoints/' + transformer_model_name_4_saving + '/log',
                             log = log
                             )
 

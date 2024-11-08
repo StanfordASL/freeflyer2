@@ -657,8 +657,8 @@ class AutonomousFreeflyerTransformer_VarObs(DecisionTransformerPreTrainedModel):
             observation_embeddings = []
             for j, obs in enumerate(observation_blocks):
                 obs_embedding = self.embed_observation(obs)
-                # num_obstacles.shape is (batch_size, 1)
-                condition_mask = (j < num_obstacles.squeeze()).unsqueeze(1).unsqueeze(2)
+                num_obstacles = torch.tensor([[num_obstacles]]).to(0) if isinstance(num_obstacles, int) else num_obstacles
+                condition_mask = (j < num_obstacles.squeeze(axis=1)).unsqueeze(1).unsqueeze(2)
                 obs_mask = torch.where(condition_mask.expand_as(obs_embedding),
                                        torch.ones_like(obs_embedding),
                                        torch.zeros_like(obs_embedding))
@@ -843,11 +843,12 @@ class AutonomousFreeflyerTransformer_VarObs_ConcatObservations(DecisionTransform
             observation_embeddings = []
             for j, obs in enumerate(observation_blocks):
                 obs_embedding = self.embed_observation(obs)
-                '''condition_mask = (j < num_obstacles[0]).unsqueeze(1).unsqueeze(2)
+                num_obstacles = torch.tensor([[num_obstacles]]).to(0) if isinstance(num_obstacles, int) else num_obstacles
+                condition_mask = (j < num_obstacles.squeeze(axis=1)).unsqueeze(1).unsqueeze(2)
                 obs_mask = torch.where(condition_mask.expand_as(obs_embedding),
                                        torch.ones_like(obs_embedding),
-                                       torch.zeros_like(obs_embedding))'''
-                obs_mask = j < num_obstacles
+                                       torch.zeros_like(obs_embedding))
+                # obs_mask = j < num_obstacles
                 observation_embeddings.append(obs_embedding * obs_mask)
 
         action_embeddings = self.embed_action(actions)

@@ -34,6 +34,7 @@ class AutonomousFreeflyerTransformerMPC():
     # Problem dimensions
     N_STATE = ff.N_STATE
     N_ACTION = ff.N_ACTION
+    N_OBSERVATION = ff.N_OBSERVATION
     # SCP data
     iter_max_SCP = ff.iter_max_SCP # [-]
     trust_region0 = ff.trust_region0 # [m]
@@ -54,6 +55,7 @@ class AutonomousFreeflyerTransformerMPC():
         self.ctg_clipped = ctg_clipped
         self.scp_mode = scp_mode
         self.chunksize = ff.chunksize
+        self.relative_observations = ff.relative_observations
 
         # Save data statistics
         self.data_stats = copy.deepcopy(test_loader.dataset.data_stats)
@@ -66,6 +68,9 @@ class AutonomousFreeflyerTransformerMPC():
         if self.generalized_time:
             self.data_stats['ttgs_mean'] = self.data_stats['ttgs_mean'].float().to(TTO_manager.device)
             self.data_stats['ttgs_std'] = self.data_stats['ttgs_std'].float().to(TTO_manager.device)
+        if self.generalized_obs:
+            self.data_stats['observations_mean'] = self.data_stats['observations_mean'].float().to(TTO_manager.device)
+            self.data_stats['observations_std'] = self.data_stats['observations_std'].float().to(TTO_manager.device)
         if not test_loader.dataset.mdp_constr:
             self.data_stats['rtgs_mean'] = self.data_stats['rtgs_mean'].float().to(TTO_manager.device)
             self.data_stats['rtgs_std'] = self.data_stats['rtgs_std'].float().to(TTO_manager.device)
@@ -96,8 +101,10 @@ class AutonomousFreeflyerTransformerMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
-        obs_positions = torch.tensor(current_env.obs['position']).to(TTO_manager.device)
-        obs_radii = torch.tensor((current_env.obs['radius']+current_env.robot_radius)*current_env.safety_margin).to(TTO_manager.device)
+        current_observation = current_obs['rel_observation' if self.relative_observations else 'abs_observation']
+        current_obs_positions = torch.from_numpy(current_obs['obs']['position']).to(TTO_manager.device)
+        current_obs_radii = torch.from_numpy(((current_obs['obs']['radius'] + current_env.robot_radius) * current_env.safety_margin)).to(TTO_manager.device)
+        current_n_obs = current_obs['n_obs']
         if self.generalized_time:
             current_ttg = current_obs['ttg']
 
@@ -107,6 +114,9 @@ class AutonomousFreeflyerTransformerMPC():
 
             # Impose the goal
             self.__extend_goal_context(current_goal, t_i)
+
+            # Impose the scenario observation
+            self.__extend_observation_context(current_observation, t_i, n_obs=current_n_obs)
 
             # Impose the initial rtg0 and (eventually) ctg0
             if self.test_loader.dataset.mdp_constr:
@@ -131,12 +141,15 @@ class AutonomousFreeflyerTransformerMPC():
             # Extend the goal
             self.__extend_goal_context(current_goal, t_i)
 
+            # Extend the scenario observations
+            self.__extend_observation_context(current_observation, t_i)
+
             # Extend rtgs and (eventually) ctgs
             if self.test_loader.dataset.mdp_constr:
                 # For Offline-RL model compute unnormalized unnormalized rtgs and ctgs and ttgs
                 past_reward = - np.linalg.norm(latest_dv, ord=1)
                 self.__extend_rtgs_context(self.rtgs_context[:,t_i-1,:].item() - past_reward, t_i)
-                viol_dyn = TTO_manager.torch_check_koz_constraint(self.state_context[:,t_i], obs_positions, obs_radii)
+                viol_dyn = TTO_manager.torch_check_koz_constraint(self.state_context[:,t_i], current_obs_positions, current_obs_radii)
                 self.__extend_ctgs_context(self.ctgs_context[:,t_i-1,:].item() - viol_dyn, t_i)
                 if self.generalized_time:
                     if current_ttg != self.ttgs_context[:,t_i-1].item() - current_env.dt:
@@ -168,14 +181,20 @@ class AutonomousFreeflyerTransformerMPC():
         if self.generalized_time:
             past_context['ttgs_context'] = self.ttgs_context if self.test_loader.dataset.mdp_constr else None
             past_context['norm_ttgs_context'] = self.norm_ttgs_context if self.test_loader.dataset.mdp_constr else None
-        
+        if self.generalized_obs:
+            past_context['observation_context'] = self.observation_context
+            past_context['norm_observation_context'] = self.norm_observation_context
+            past_context['n_obs_context'] = self.n_obs_context
+
         # To be modified in future for obstacle generalization
-        generalization = '_time' if self.generalized_time else ''
+        generalization = '_time' if (self.generalized_time and (not self.generalized_obs)) else ('_obs' if (self.generalized_obs and (not self.generalized_time)) else '')
         inference_func = getattr(self, '_AutonomousFreeflyerTransformerMPC__torch_model_inference_'+self.transformer_mode+generalization+'_closed_loop')
         if self.test_loader.dataset.mdp_constr:
-            ART_trajectory, ART_runtime = inference_func(self.model, self.test_loader, time_context, past_context, obs_positions, obs_radii, ctg_clipped=self.ctg_clipped)
+            ART_trajectory, ART_runtime = inference_func(self.model, self.test_loader, time_context, past_context, current_obs_positions, current_obs_radii,
+                                                         ctg_clipped=self.ctg_clipped, relative_observations=self.relative_observations)
         else:
-            ART_trajectory, ART_runtime = inference_func(self.model, self.test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i, ctg_clipped=self.ctg_clipped)
+            ART_trajectory, ART_runtime = inference_func(self.model, self.test_loader, time_context, past_context, current_obs_positions, current_obs_radii,
+                                                         rtgs_i, ctg_clipped=self.ctg_clipped, relative_observations=self.relative_observations)
 
         return ART_trajectory
     
@@ -204,6 +223,7 @@ class AutonomousFreeflyerTransformerMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
+        current_obstacles = current_obs['obs']
 
         # Makse sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
         states_ref = states_ref.T
@@ -220,7 +240,8 @@ class AutonomousFreeflyerTransformerMPC():
             '''print("scp_iter =", scp_iter)'''
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref,
+                                                                         t_i, t_f, current_env, current_obstacles, trust_region, self.scp_mode)
             except:
                 states = None
                 actions = None
@@ -269,6 +290,8 @@ class AutonomousFreeflyerTransformerMPC():
         # Context initialization (N_batch x N_time x N_state/N_action/N_rtgs/N_ctgs) -> saved as torch to use them with transformer
         self.norm_state_context = torch.zeros((1, self.test_loader.dataset.max_len, self.N_STATE)).float().to(TTO_manager.device)
         self.state_context = torch.zeros((self.N_STATE, self.test_loader.dataset.max_len)).float().to(TTO_manager.device)
+        self.norm_observation_context = torch.zeros((1, self.test_loader.dataset.max_len, self.N_OBSERVATION)).float().to(TTO_manager.device)
+        self.observation_context = torch.zeros((self.N_OBSERVATION, self.test_loader.dataset.max_len)).float().to(TTO_manager.device)
         self.norm_action_context = torch.zeros((1, self.test_loader.dataset.max_len, self.N_ACTION)).float().to(TTO_manager.device)
         self.dv_context = torch.zeros((self.N_ACTION, self.test_loader.dataset.max_len)).float().to(TTO_manager.device)
         self.norm_goal_context = torch.zeros((1, self.test_loader.dataset.max_len, self.N_STATE)).float().to(TTO_manager.device)
@@ -286,7 +309,18 @@ class AutonomousFreeflyerTransformerMPC():
         # Update state context
         self.state_context[:,t] = torch.tensor(state).float().to(TTO_manager.device)
         self.norm_state_context[:,t,:] = (self.state_context[:,t] - self.data_stats['states_mean'][t]) / (self.data_stats['states_std'][t] + 1e-6)
-    
+
+    def __extend_observation_context(self, observation, t, n_obs=None):
+        '''
+        Function to extend the current scenario observation context with the information provided in input.
+        '''
+        # Update observations context
+        self.observation_context[:,t] = torch.tensor(observation).float().to(TTO_manager.device)
+        self.norm_observation_context[:,t,:] = (self.observation_context[:,t] - self.data_stats['observations_mean'][t]) / (self.data_stats['observations_std'][t] + 1e-6)
+        # If at the first timesteps, set the number of obstacles
+        if t == 0:
+            self.n_obs_context = torch.tensor([n_obs])[None,:].to(TTO_manager.device)
+
     def __extend_action_context(self, action_dv, t):
         '''
         Function to extend the current action context with the information provided in input.
@@ -327,7 +361,107 @@ class AutonomousFreeflyerTransformerMPC():
     
     ########## STATIC METHODS ##########
     @staticmethod
-    def __torch_model_inference_dyn_time_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True):
+    def __torch_model_inference_dyn_obs_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True, relative_observations=True):
+    
+        # Get dimensions and statistics from the dataset
+        data_stats = copy.deepcopy(test_loader.dataset.data_stats)
+        data_stats['states_mean'] = data_stats['states_mean'].float().to(TTO_manager.device)
+        data_stats['states_std'] = data_stats['states_std'].float().to(TTO_manager.device)
+        data_stats['observations_mean'] = data_stats['observations_mean'].float().to(TTO_manager.device)
+        data_stats['observations_std'] = data_stats['observations_std'].float().to(TTO_manager.device)
+        data_stats['actions_mean'] = data_stats['actions_mean'].float().to(TTO_manager.device)
+        data_stats['actions_std'] = data_stats['actions_std'].float().to(TTO_manager.device)
+        data_stats['goal_mean'] = data_stats['goal_mean'].float().to(TTO_manager.device)
+        data_stats['goal_std'] = data_stats['goal_std'].float().to(TTO_manager.device)
+
+        # Extract the time information over the horizon
+        dt = time_context['dt']
+        t_i = time_context['t_i']
+        t_f = time_context['t_f']
+
+        # Extract the past context for states, actions, rtgs and ctg -> !!!MAKE SURE TO COPY THEM!!!
+        xypsi_dyn = past_context['state_context'].clone().detach()
+        observations_dyn_unnorm = past_context['observation_context'].clone().detach()
+        n_obs_dyn = past_context['n_obs_context'].clone().detach()
+        dv_dyn = past_context['dv_context'].clone().detach()
+        states_dyn = past_context['norm_state_context'].clone().detach()
+        observations_dyn = past_context['norm_observation_context'].clone().detach()
+        actions_dyn = past_context['norm_action_context'].clone().detach()
+        rtgs_dyn = past_context['rtgs_context'].clone().detach()
+        norm_goal_dyn = past_context['norm_goal_context'].clone().detach()
+        if test_loader.dataset.mdp_constr:
+            ctgs_dyn = past_context['ctgs_context'].clone().detach()
+        timesteps_i = torch.arange(0,t_f)[None,:].long().to(TTO_manager.device)
+        attention_mask_i = torch.ones(timesteps_i.shape).long().to(TTO_manager.device)
+        obs_radii_original = (obs_radii / ff.safety_margin) - ff.robot_radius
+
+        # Extract dynamic informations
+        ff_model = FreeflyerModel()
+        Ak, B_imp = torch.tensor(ff_model.Ak).to(TTO_manager.device).float(), torch.tensor(ff_model.B_imp).to(TTO_manager.device).float()
+
+        runtime0_DT = time.time()
+        # For loop trajectory generation
+        for t in np.arange(t_i, t_f):
+            
+            ##### Dynamics inference  
+            # Compute action pred for dynamics model
+            with torch.no_grad():
+                if test_loader.dataset.mdp_constr:
+                    output_dyn = model(
+                        states=states_dyn[:,:t+1,:],
+                        observations=observations_dyn[:,:t+1,:],
+                        num_obstacles=n_obs_dyn,
+                        actions=actions_dyn[:,:t+1,:],
+                        goal=norm_goal_dyn[:,:t+1,:],
+                        returns_to_go=rtgs_dyn[:,:t+1,:],
+                        constraints_to_go=ctgs_dyn[:,:t+1,:],
+                        timesteps=timesteps_i[:,:t+1],
+                        attention_mask=attention_mask_i[:,:t+1],
+                        return_dict=False,
+                    )
+                    (_, action_preds_dyn) = output_dyn
+                else:
+                    raise ValueError('Function only working with ctgs and scenario conditioning!')
+
+            action_dyn_t = action_preds_dyn[0,-1]
+            actions_dyn[:,t,:] = action_dyn_t
+            dv_dyn[:, t] = (action_dyn_t * (data_stats['actions_std'][t]+1e-6)) + data_stats['actions_mean'][t]
+
+            # Dynamics propagation of state variable 
+            if t != t_f-1:
+                xypsi_dyn[:,t+1] = Ak @ (xypsi_dyn[:, t] + B_imp @ dv_dyn[:, t])
+                states_dyn_norm = (xypsi_dyn[:,t+1] - data_stats['states_mean'][t+1]) / (data_stats['states_std'][t+1] + 1e-6)
+                states_dyn[:,t+1,:] = states_dyn_norm
+                
+                # Update reward, constraints and observations
+                reward_dyn_t = - torch.linalg.norm(dv_dyn[:, t], ord=1)
+                rtgs_dyn[:,t+1,:] = rtgs_dyn[0,t] - reward_dyn_t
+                viol_dyn = TTO_manager.torch_check_koz_constraint(xypsi_dyn[:,t+1], obs_positions, obs_radii)
+                ctgs_dyn[:,t+1,:] = ctgs_dyn[0,t] - (viol_dyn if (not ctg_clipped) else 0)
+                if relative_observations:
+                    observations_dyn_unnorm[:,t+1] = TTO_manager.torch_compute_relative_observations(xypsi_dyn[:2, t+1], obs_positions, obs_radii)
+                    observations_dyn[:,t+1,:] = (observations_dyn_unnorm[:,t+1] - data_stats['observations_mean'][t+1]) / (data_stats['observations_std'][t+1] + 1e-6)
+                else:
+                    observations_dyn[:,t+1,:] = TTO_manager.torch_generate_perfect_observations(obs_positions, obs_radii_original)
+                    observations_dyn_unnorm[:,t+1] = observations_dyn[0,t+1,:] * (data_stats['observations_std'][t+1] + 1e-6) + data_stats['observations_mean'][t+1]
+                actions_dyn[:,t+1,:] = 0
+                norm_goal_dyn[:,t+1,:] = norm_goal_dyn[0,t,:]
+            
+        time_sec = timesteps_i*dt
+
+        # Pack trajectory's data in a dictionary and compute runtime
+        runtime1_DT = time.time()
+        runtime_DT = runtime1_DT - runtime0_DT
+        DT_trajectory = {
+            'state' : xypsi_dyn[:,t_i:t_f].cpu().numpy(),
+            'dv' : dv_dyn[:,t_i:t_f].cpu().numpy(),
+            'time' : time_sec[0,t_i:t_f].cpu().numpy()
+        }
+
+        return DT_trajectory, runtime_DT
+
+    @staticmethod
+    def __torch_model_inference_dyn_time_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True, relative_observations=True):
     
         # Get dimensions and statistics from the dataset
         data_stats = copy.deepcopy(test_loader.dataset.data_stats)
@@ -389,7 +523,7 @@ class AutonomousFreeflyerTransformerMPC():
                     )
                     (_, action_preds_dyn, _) = output_dyn
                 else:
-                    raise ValueError('Function only working with ctgs and ttgs ocnditioning!')
+                    raise ValueError('Function only working with ctgs and ttgs conditioning!')
 
             action_dyn_t = action_preds_dyn[0,-1]
             actions_dyn[:,t,:] = action_dyn_t
@@ -426,7 +560,7 @@ class AutonomousFreeflyerTransformerMPC():
         return DT_trajectory, runtime_DT
     
     @staticmethod
-    def __torch_model_inference_dyn_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True):
+    def __torch_model_inference_dyn_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True, relative_observations=True):
     
         # Get dimensions and statistics from the dataset
         data_stats = copy.deepcopy(test_loader.dataset.data_stats)
@@ -525,7 +659,7 @@ class AutonomousFreeflyerTransformerMPC():
         return DT_trajectory, runtime_DT
 
     @staticmethod
-    def __torch_model_inference_ol_time_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True):
+    def __torch_model_inference_ol_time_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True, relative_observations=True):
     
         # Get dimensions and statistics from the dataset
         data_stats = copy.deepcopy(test_loader.dataset.data_stats)
@@ -641,7 +775,7 @@ class AutonomousFreeflyerTransformerMPC():
         return DT_trajectory, runtime_DT
     
     @staticmethod
-    def __torch_model_inference_ol_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True):
+    def __torch_model_inference_ol_closed_loop(model, test_loader, time_context, past_context, obs_positions, obs_radii, rtgs_i=None, ctg_clipped=True, relative_observations=True):
     
         # Get dimensions and statistics from the dataset
         data_stats = copy.deepcopy(test_loader.dataset.data_stats)
@@ -763,13 +897,13 @@ class AutonomousFreeflyerTransformerMPC():
         return DT_trajectory, runtime_DT
 
     @staticmethod
-    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, trust_region, scp_mode):
+    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, obs, trust_region, scp_mode, relative_observations=True):
         # IMPORTANT: state_ref and action_ref are the references and must be of shape (n_steps,n_state) and (n_steps,n_actions)
         # Setup SQP problem
         state_ref, action_ref = state_ref.T, action_ref.T
         n_time = state_ref.shape[1]
         ffm = env.ff_model
-        obs = copy.deepcopy(env.obs)
+        obs = copy.deepcopy(obs)
         obs['radius'] = (obs['radius'] + env.robot_radius)*env.safety_margin
 
         s = cp.Variable((6, n_time))
@@ -914,6 +1048,7 @@ class ConvexMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
+        current_obstacles = current_obs['obs']
         if self.generalized_time and (current_obs['ttg'] != T_rem):
             raise ValueError('current_ttg from environment different from remaining time. ARE YOU MESSING WITH TIME??')
 
@@ -931,7 +1066,8 @@ class ConvexMPC():
         for scp_iter in range(self.iter_max_SCP):
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, obs_av=False)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f,
+                                                                         current_env, current_obstacles, trust_region, self.scp_mode, obs_av=False)
             except:
                 states = None
                 actions = None
@@ -995,6 +1131,7 @@ class ConvexMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
+        current_obstacles = current_obs['obs']
 
         # Makse sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
         states_ref = states_ref.T
@@ -1011,7 +1148,8 @@ class ConvexMPC():
             '''print("scp_iter =", scp_iter)'''
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref,
+                                                                         t_i, t_f, current_env, current_obstacles, trust_region, self.scp_mode)
             except:
                 states = None
                 actions = None
@@ -1053,13 +1191,13 @@ class ConvexMPC():
 
     ########## STATIC METHODS ##########
     @staticmethod
-    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, trust_region, scp_mode, obs_av=True):
+    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, obs, trust_region, scp_mode, obs_av=True):
         # IMPORTANT: state_ref and action_ref are the references and must be of shape (n_steps,n_state) and (n_steps,n_actions)
         # Setup SQP problem
         state_ref, action_ref = state_ref.T, action_ref.T
         n_time = state_ref.shape[1]
         ffm = env.ff_model
-        obs = copy.deepcopy(env.obs)
+        obs = copy.deepcopy(obs)
         obs['radius'] = (obs['radius'] + env.robot_radius)*env.safety_margin
 
         s = cp.Variable((6, n_time))
@@ -1207,6 +1345,7 @@ class MyopicConvexMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
+        current_obstacles = current_obs['obs']
         if self.generalized_time and (current_obs['ttg'] != T_rem):
             raise ValueError('current_ttg from environment different from remaining time. ARE YOU MESSING WITH TIME??')
 
@@ -1224,7 +1363,8 @@ class MyopicConvexMPC():
         for scp_iter in range(self.iter_max_SCP):
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, obs_av=False, rho=self.rho)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f,
+                                                                         current_env, current_obstacles, trust_region, self.scp_mode, obs_av=False, rho=self.rho)
             except:
                 states = None
                 actions = None
@@ -1289,6 +1429,7 @@ class MyopicConvexMPC():
         # Extract real state from environment observation
         current_state = current_obs['state']
         current_goal = current_obs['goal']
+        current_obstacles = current_obs['obs']
 
         # Makse sure the inputs have the correct dimensions (n_steps, n_state) and (n_steps, n_actions)
         states_ref = states_ref.T
@@ -1305,7 +1446,8 @@ class MyopicConvexMPC():
             '''print("scp_iter =", scp_iter)'''
             # Solve OCP (safe)
             try:
-                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref, t_i, t_f, current_env, trust_region, self.scp_mode, rho=self.rho)
+                states, actions, cost, feas = self.__ocp_scp_closed_loop(states_ref, actions_ref, current_state, current_goal, state_end_ref,
+                                                                         t_i, t_f, current_env, current_obstacles, trust_region, self.scp_mode, rho=self.rho)
             except:
                 states = None
                 actions = None
@@ -1347,13 +1489,13 @@ class MyopicConvexMPC():
 
     ########## STATIC METHODS ##########
     @staticmethod
-    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, trust_region, scp_mode, obs_av=True, rho=None):
+    def __ocp_scp_closed_loop(state_ref, action_ref, state_init, state_final, state_end_ref, t_i, t_f, env:FreeflyerEnv, obs, trust_region, scp_mode, obs_av=True, rho=None):
         # IMPORTANT: state_ref and action_ref are the references and must be of shape (n_steps,n_state) and (n_steps,n_actions)
         # Setup SQP problem
         state_ref, action_ref = state_ref.T, action_ref.T
         n_time = state_ref.shape[1]
         ffm = env.ff_model
-        obs = copy.deepcopy(env.obs)
+        obs = copy.deepcopy(obs)
         obs['radius'] = (obs['radius'] + env.robot_radius)*env.safety_margin
         '''dist0 = np.linalg.norm((state_ref.T)[None,:1,:2] - obs['positions'][:,None,:], axis=2) - obs['radius'][:,None]
         if (dist0 <= 0).any():

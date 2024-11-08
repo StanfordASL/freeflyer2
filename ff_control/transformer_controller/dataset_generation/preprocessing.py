@@ -10,9 +10,29 @@ import copy
 import torch
 
 from dynamics.freeflyer import compute_constraint_to_go, compute_reward_to_go
-from optimization.ff_scenario import obs, robot_radius, safety_margin, N_STATE, N_ACTION, n_time_max, dataset_scenario, generalized_time, generalized_obs
+from optimization.ff_scenario import robot_radius, safety_margin, N_STATE, N_ACTION, SINGLE_OBS_DIM, n_time_max, obs_nominal, \
+    dataset_scenario, relative_observations, generalized_time, generalized_obs
 
-if generalized_time:
+def compute_relative_observations(abs_observations, abs_states):
+    '''
+        Fuction to compute relative observations with respect to the obstacles, if required when generating the dataset.
+        ABSOLUTE OBS:                             RELATIVE OBS:
+        1) x_obs                -->               1) x_obs - x_ff
+        2) y_obs                -->               2) y_obs - y_ff
+        3) R_obs                -->               3) ((x_obs - x_ff)^2 + (y_obs - y_ff)^2)^(1/2) - (R_obs + R_robot)*safety_margin
+    '''
+    rel_observations = np.zeros_like(abs_observations)
+    for n in range(abs_observations.shape[0]):
+        for n_obs in range(data_param['n_obs'][n]):
+            i_pos = [n_obs*SINGLE_OBS_DIM, n_obs*SINGLE_OBS_DIM + 1]
+            i_R = n_obs*SINGLE_OBS_DIM + 2
+            rel_observations[n,:,i_pos] = (abs_observations[n,:,i_pos].T - abs_states[n,:,:2]).T
+            rel_observations[n,:,i_R] = (rel_observations[n,:,i_pos[0]]**2 + rel_observations[n,:,i_pos[1]]**2)**(1/2) - (abs_observations[n,:,i_R] + robot_radius)*safety_margin
+        if n%1000 == 0:
+            print(n)
+    return rel_observations
+
+if generalized_time or generalized_obs:
     dataset_scenario_folder = '/' + dataset_scenario
 else:
     dataset_scenario = ''
@@ -72,6 +92,25 @@ torch.save(torch_actions_scp, args.data_dir_torch + '/torch_actions_scp.pth')
 torch_actions_cvx = torch.from_numpy(actions_cvx)
 torch.save(torch_actions_cvx, args.data_dir_torch + '/torch_actions_cvx.pth')
 
+# Pre-compute torch observations
+if generalized_obs:
+    observations_scp = data_scp['observations_scp']
+    torch_observations_scp = torch.from_numpy(observations_scp)
+    torch.save(torch_observations_scp, args.data_dir_torch + '/torch_observations_scp.pth')
+
+    observations_cvx = data_cvx['observations_cvx']
+    torch_observations_cvx = torch.from_numpy(observations_cvx)
+    torch.save(torch_observations_cvx, args.data_dir_torch + '/torch_observations_cvx.pth')
+
+    if relative_observations:
+        rel_observations_scp = compute_relative_observations(observations_scp, states_scp)
+        torch_rel_observations_scp = torch.from_numpy(rel_observations_scp)
+        torch.save(torch_rel_observations_scp, args.data_dir_torch + '/torch_rel_observations_scp.pth')
+
+        rel_observations_cvx = compute_relative_observations(observations_cvx, states_cvx)
+        torch_rel_observations_cvx = torch.from_numpy(rel_observations_cvx)
+        torch.save(torch_rel_observations_cvx, args.data_dir_torch + '/torch_rel_observations_cvx.pth')
+
 # Pre-compute torch rewards to go and constraints to go
 torch_rtgs_scp = torch.from_numpy(compute_reward_to_go(actions_scp))
 torch.save(torch_rtgs_scp, args.data_dir_torch + '/torch_rtgs_scp.pth')
@@ -79,12 +118,20 @@ torch.save(torch_rtgs_scp, args.data_dir_torch + '/torch_rtgs_scp.pth')
 torch_rtgs_cvx = torch.from_numpy(compute_reward_to_go(actions_cvx))
 torch.save(torch_rtgs_cvx, args.data_dir_torch + '/torch_rtgs_cvx.pth')
 
-obs = copy.deepcopy(obs)
-obs['radius'] = (obs['radius'] + robot_radius)*safety_margin
-torch_ctgs_scp = torch.from_numpy(compute_constraint_to_go(states_scp, obs['position'], obs['radius']))
+if generalized_obs:
+    n_obs = data_param['n_obs']
+    obs_position = data_param['obs_position']
+    obs_radius = (data_param['obs_radius'] + robot_radius)*safety_margin
+else:
+    obs = copy.deepcopy(obs_nominal)
+    n_obs = len(obs['radius'])
+    obs_position = obs['position']
+    obs_radius = (obs['radius'] + robot_radius)*safety_margin
+
+torch_ctgs_scp = torch.from_numpy(compute_constraint_to_go(states_scp, obs_position, obs_radius, n_obs))
 torch.save(torch_ctgs_scp, args.data_dir_torch + '/torch_ctgs_scp.pth')
 
-torch_ctgs_cvx = torch.from_numpy(compute_constraint_to_go(states_cvx, obs['position'], obs['radius']))
+torch_ctgs_cvx = torch.from_numpy(compute_constraint_to_go(states_cvx, obs_position, obs_radius, n_obs))
 torch.save(torch_ctgs_cvx, args.data_dir_torch + '/torch_ctgs_cvx.pth')
 
 # Permutation
