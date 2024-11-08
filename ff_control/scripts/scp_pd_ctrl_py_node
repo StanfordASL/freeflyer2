@@ -350,10 +350,10 @@ class TransformerBasedSCPController(LinearController):
         rclpy.spin_until_future_complete(self, future)
         obs_info = future.result()
         self.obstacles = {
-            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))),
+            'position' : np.vstack((np.array(obs_info.cyl_pos_x), np.array(obs_info.cyl_pos_y))).T,
             'radius' : np.array(obs_info.cyl_rads)
         }
-        if (self.obstacles['position'] == ff_scenario.obs['position'].T).all() and (self.obstacles['radius'] == ff_scenario.obs['radius']).all():
+        if (self.obstacles['position'] == ff_scenario.obs_nominal['position']).all() and (self.obstacles['radius'] == ff_scenario.obs_nominal['radius']).all():
             self.get_logger().info(str(self.obstacles))
         else:
             raise ValueError('The obstacles specified for the ROS simulation and in ff_scenario.py don\'t match!!!')
