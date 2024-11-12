@@ -253,7 +253,7 @@ class FreeflyerEnv():
         '''
 
         self.ff_model = FreeflyerModel()
-        import optimization.ff_scenario_new as ff
+        import optimization.ff_scenario as ff
         self.N_STATE = ff.N_STATE
         self.N_ACTION = ff.N_ACTION
         self.N_CLUSTERS = ff.N_CLUSTERS

@@ -20,9 +20,9 @@ from accelerate import Accelerator
 
 from decision_transformer.art import AutonomousFreeflyerTransformer, AutonomousFreeflyerTransformer_pred_time, AutonomousFreeflyerTransformer_no_pred_time
 from decision_transformer.art import AutonomousFreeflyerTransformer_VarObs, AutonomousFreeflyerTransformer_VarObs_ConcatObservations
-from dynamics.freeflyer_new import FreeflyerModel, check_koz_constraint, generate_perfect_observations, compute_relative_observations
-from optimization.ff_scenario_new import generalized_time, safety_margin, robot_radius, N_ACTION, table, T_nominal
-from optimization.ff_scenario_new import generalized_obs, relative_observations, obs_nominal, n_obs_nominal, N_OBSERVATION, SINGLE_OBS_DIM, embed_entire_observation
+from dynamics.freeflyer import FreeflyerModel, check_koz_constraint, generate_perfect_observations, compute_relative_observations
+from optimization.ff_scenario import generalized_time, safety_margin, robot_radius, N_ACTION, table, T_nominal
+from optimization.ff_scenario import generalized_obs, relative_observations, obs_nominal, n_obs_nominal, N_OBSERVATION, SINGLE_OBS_DIM, embed_entire_observation
 import time
 # select device based on availability of GPU
 verbose = False # set to True to get additional print statements
@@ -257,7 +257,7 @@ def transformer_import_config(model_name):
         raise NameError('Trying to use a transformer model without scenario conditioning, but generalized_obs is set to ' + str(generalized_obs) +'!')
     
     if 'whole_table' in model_name:
-        from optimization.ff_scenario_new import dataset_scenario, chunksize, random_chunk
+        from optimization.ff_scenario import dataset_scenario, chunksize, random_chunk
         config['chunksize'] = chunksize
         config['random_chunk'] = random_chunk
         if not('whole_table' in dataset_scenario):
@@ -265,7 +265,7 @@ def transformer_import_config(model_name):
         else:
             config['dataset_scenario'] = dataset_scenario
     elif 'time_constant' in model_name:
-        from optimization.ff_scenario_new import dataset_scenario, chunksize, random_chunk
+        from optimization.ff_scenario import dataset_scenario, chunksize, random_chunk
         config['chunksize'] = chunksize
         config['random_chunk'] = random_chunk
         if not('time_constant' in dataset_scenario):
@@ -273,7 +273,7 @@ def transformer_import_config(model_name):
         else:
             config['dataset_scenario'] = dataset_scenario
     elif 'time' in model_name:
-        from optimization.ff_scenario_new import dataset_scenario, chunksize, random_chunk
+        from optimization.ff_scenario import dataset_scenario, chunksize, random_chunk
         config['chunksize'] = chunksize
         config['random_chunk'] = random_chunk
         if not('time' in dataset_scenario):
@@ -281,7 +281,7 @@ def transformer_import_config(model_name):
         else:
             config['dataset_scenario'] = dataset_scenario
     elif 'obs' in model_name:
-        from optimization.ff_scenario_new import dataset_scenario
+        from optimization.ff_scenario import dataset_scenario
         config['chunksize'] = None
         config['random_chunk'] = None
         if not('obs' in dataset_scenario):
