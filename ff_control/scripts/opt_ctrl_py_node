@@ -49,6 +49,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     """
     STATE_DIM = 6
     CONTROL_DIM = 4
+    TERMINAL_COST_FACTOR = 300
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -65,7 +66,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
         self._deadband = np.array([0.01, 0.01, 0.05, 0.005, 0.005, 0.02])
-        self._readjust_controller_bounds = np.sqrt(2)*0.1 #np.array([0.1, 0.1])#np.array([0.4, 0.4])
+        self._readjust_controller_bounds = 0.1
         self._def_controller = True
         self._w0 = None
 
@@ -109,7 +110,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('close_opt_gain_kvelo', 290.0)
         self.declare_parameter('close_opt_gain_komega', 1.0)
 
-        # To start, Frequency based on default control frequency in the optimizer (3Hz)
+        # To start, Frequency based on default control frequency in the optimizer (6Hz)
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
     def param_update_callback(self):
@@ -123,7 +124,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         :param state_des: desired state
         """
         t = time.time()
-        # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
             return
@@ -144,12 +144,11 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if np.all(np.abs(state_des - curr_state) < self._deadband):
             self._u = np.zeros(4)
         else:
+            pos_err = np.abs(state_des[:2] - curr_state[:2])
             if self._def_controller:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
                 if np.linalg.norm(pos_err) < self._readjust_controller_bounds:
                     self.set_close_hyperparameters()
             else:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
                 if np.linalg.norm(pos_err) > self._readjust_controller_bounds:
                     self.set_default_hyperparameters()
 
@@ -315,8 +314,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 300*self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + 300*self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
-              300*self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + 300*self.k_omega*sumsqr(Xk_end[5]-goal[5])
+        J = J + self.TERMINAL_COST_FACTOR * ( self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
+              self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + self.k_omega*sumsqr(Xk_end[5]-goal[5]))
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -345,7 +344,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     def get_next_warm_start(self, w_opt):
         output = w_opt.full().flatten()     
         x = [output[10*i:6+10*i] for i in range(w_opt.size()[0]//10+1)]
-        # self.get_logger().info(str(x))
         u = [output[6+10*i:10+10*i] for i in range(w_opt.size()[0]//10)]
 
         w0 = [DM(x[1])]
