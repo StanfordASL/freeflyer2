@@ -50,6 +50,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     STATE_DIM = 6
     CONTROL_DIM = 4
     TERMINAL_COST_FACTOR = 300
+    SOLVE_TIME_BUFFER = 0.005 # time [s] to leave for auxiliary calculations
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -82,28 +83,13 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Allow external module to trigger a reinitialization (eg when changing bounds/constraints)
         self._reinit_solver_sub = self.create_subscription(Bool, 'ctrl/reinit_solver', self._reinit_callback, 10)
 
-        # Optimization far hyperparameters/gains
-        # self.declare_parameter('def_opt_horizon_secs', 2.667)
-        # self.declare_parameter('def_opt_freq', 3.0)
-        # self.declare_parameter('def_opt_gain_kth', 1.0)
-        # self.declare_parameter('def_opt_gain_kpos', 2.5)
-        # self.declare_parameter('def_opt_gain_kinput', 20.0)
-        # self.declare_parameter('def_opt_gain_kvelo', 40.0)
-
-        # self.declare_parameter('close_opt_horizon_secs', 0.4)
-        # self.declare_parameter('close_opt_freq', 10.0)
-        # self.declare_parameter('close_opt_gain_kth', 5.5)
-        # self.declare_parameter('close_opt_gain_kpos', 90.0)
-        # self.declare_parameter('close_opt_gain_kinput', 5.5)
-        # self.declare_parameter('close_opt_gain_kvelo', 125.0)
-
         # Parameters for objective function
         self.declare_parameter('def_opt_horizon_secs', 8)
         self.declare_parameter('def_opt_freq', 6.0)
         self.declare_parameter('def_opt_gain_kth', 1.0)
         self.declare_parameter('def_opt_gain_kpos', 3.5)
-        self.declare_parameter('def_opt_gain_kinput', 200.0)
-        self.declare_parameter('def_opt_gain_kvelo', 2500.0)
+        self.declare_parameter('def_opt_gain_kinput', 80.0)
+        self.declare_parameter('def_opt_gain_kvelo', 250.0)
         self.declare_parameter('def_opt_gain_komega', 100.0)
 
         self.declare_parameter('close_opt_horizon_secs', 0.9)
@@ -338,7 +324,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Create an NLP solver
         nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
-        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
+        opts = {'ipopt.max_cpu_time': 1.0 / self.freq - self.SOLVE_TIME_BUFFER}
+        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob, opts); # Solve relaxed problem
         w0 = None # Reset w0
         return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
@@ -349,7 +336,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         x = w_opt[0::10]
         y = w_opt[1::10]
         th = w_opt[2::10]
-        self.get_logger().info(str(th))
         u0_opt = w_opt[6::10]
         u1_opt = w_opt[7::10]
         u2_opt = w_opt[8::10]
