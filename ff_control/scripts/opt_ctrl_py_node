@@ -35,7 +35,7 @@ from ff_control.utils import state2vec, map_to_force
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 
 
 class ThrusterOptControlNode(TrinaryThrusterController):
@@ -79,6 +79,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
 
+        # Allow external module to trigger a reinitialization (eg when changing bounds/constraints)
+        self._reinit_solver_sub = self.create_subscription(Bool, 'ctrl/reinit_solver', self._reinit_callback, 10)
+
         # Optimization far hyperparameters/gains
         # self.declare_parameter('def_opt_horizon_secs', 2.667)
         # self.declare_parameter('def_opt_freq', 3.0)
@@ -94,6 +97,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # self.declare_parameter('close_opt_gain_kinput', 5.5)
         # self.declare_parameter('close_opt_gain_kvelo', 125.0)
 
+        # Parameters for objective function
         self.declare_parameter('def_opt_horizon_secs', 8)
         self.declare_parameter('def_opt_freq', 6.0)
         self.declare_parameter('def_opt_gain_kth', 1.0)
@@ -109,6 +113,17 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.declare_parameter('close_opt_gain_kinput', 35.0)
         self.declare_parameter('close_opt_gain_kvelo', 290.0)
         self.declare_parameter('close_opt_gain_komega', 1.0)
+
+        # Parameters for optimization constraints
+        self.declare_parameter('x_lb_m', 0.0)
+        self.declare_parameter('x_ub_m', 4.0)
+        self.declare_parameter('y_lb_m', 0.0)
+        self.declare_parameter('y_ub_m', 2.0)
+        self.declare_parameter('theta_lb_rad', -np.pi)
+        self.declare_parameter('theta_ub_rad', np.pi)
+        self.declare_parameter('vx_ub_mps', 0.5)
+        self.declare_parameter('vy_ub_mps', 0.5)
+        self.declare_parameter('omega_ub_radps', 0.5)
 
         # To start, Frequency based on default control frequency in the optimizer (6Hz)
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
@@ -223,9 +238,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.send_control(self.get_state(), self._state_desired.state)
 
     def init_solver(self):
-        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
-        lbx = [0., 0., -np.pi, -0.5, -0.5, -0.5]
-        ubx = [4., 2., np.pi, 0.5, 0.5, 0.5]
+        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)    
+        lbx = [self.x_lb, self.y_lb, self.theta_lb, -self.vx_ub, -self.vy_ub, -self.omega_ub]
+        ubx = [self.x_ub, self.y_ub, self.theta_ub, self.vx_ub, self.vy_ub, self.omega_ub]
         lbu = [-self.Fmax] * 4 
         ubu = [self.Fmax] * 4 
 
@@ -421,6 +436,42 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             return self.get_parameter('def_opt_freq').value
         else:
             return self.get_parameter('close_opt_freq').value
+        
+    @property
+    def x_lb(self):
+        return self.get_parameter('x_lb_m').value
+    
+    @property
+    def x_ub(self):
+        return self.get_parameter('x_ub_m').value
+    
+    @property
+    def y_lb(self):
+        return self.get_parameter('y_lb_m').value
+    
+    @property
+    def y_ub(self):
+        return self.get_parameter('y_ub_m').value
+    
+    @property
+    def theta_lb(self):
+        return self.get_parameter('theta_lb_rad').value
+    
+    @property
+    def theta_ub(self):
+        return self.get_parameter('theta_ub_rad').value
+    
+    @property
+    def vx_ub(self):
+        return self.get_parameter('vx_ub_mps').value
+    
+    @property
+    def vy_ub(self):
+        return self.get_parameter('vy_ub_mps').value
+    
+    @property
+    def omega_ub(self):
+        return self.get_parameter('omega_ub_radps').value
 
     def state_is_ready(self) -> bool:
         """
@@ -439,6 +490,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if not self._state_ready:
             self._state_ready = True
             self.state_ready_callback()
+
+    def _reinit_callback(self, msg: Bool) -> None:
+        if msg.data:
+            self.init_solver()
 
     def set_default_hyperparameters(self) -> None:
         # Optimization for default longer trajectories hyperparameters/gains

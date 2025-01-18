@@ -23,6 +23,7 @@
 import numpy as np
 from ff_msgs.msg import FreeFlyerState
 
+
 ##################### Helper Functions to unpack FreeFlyerState #####################
 def state2vec(state: FreeFlyerState) -> np.ndarray:
     """
@@ -60,12 +61,14 @@ def vec2state(vec: np.ndarray) -> FreeFlyerState:
 
     return state
 
+
 def map_to_force(u, r):
     # Compute body-frame force from trinary thrusters
-    Fx = -u[0] + u[2] 
-    Fy = -u[1] + u[3] 
-    M = r * (u[0]+u[1]+u[2]+u[3])
+    Fx = -u[0] + u[2]
+    Fy = -u[1] + u[3]
+    M = r * (u[0] + u[1] + u[2] + u[3])
     return Fx, Fy, M
+
 
 def tri_to_bin_thrusters(tri_switches):
     """
@@ -107,6 +110,7 @@ def tri_to_bin_thrusters(tri_switches):
     switches = [lastVal] + switches
     return switches
 
+
 def bin_to_tri_thrusters(bin_switches):
     """
     In: 4 Trinary thrusters (-1, 0, 1)
@@ -135,13 +139,13 @@ def bin_to_tri_thrusters(bin_switches):
         <--       -->
             (5)     (6)
     """
-    if (len(bin_switches) % 2 != 0):
+    if len(bin_switches) % 2 != 0:
         raise ValueError("Invalid size of binary switches")
 
     tri_switches = []
-    for i in range(len(bin_switches)//2):
-        ind1 = 2*i+1
-        ind2 = (2*i+2) % len(bin_switches)
+    for i in range(len(bin_switches) // 2):
+        ind1 = 2 * i + 1
+        ind2 = (2 * i + 2) % len(bin_switches)
         if bin_switches[ind1] and not bin_switches[ind2]:
             tri_switches.append(1)
         elif not bin_switches[ind1] and bin_switches[ind2]:
