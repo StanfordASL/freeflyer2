@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 from ff_control.ll_ctrl import LowLevelController
+from ff_control.utils import tri_to_bin_thrusters
 from ff_msgs.msg import ThrusterCommand
 
 import numpy as np
@@ -62,15 +63,6 @@ class TrinaryThrusterController(LowLevelController):
             self.get_logger().error("Incompatible thruster length sent." + str(len(tri_switches)))
             return
 
-        switches = []
-        for i in range(len(tri_switches)):
-            if tri_switches[i] > 0:
-                switches.extend([True, False])
-            elif tri_switches[i] == 0:
-                switches.extend([False, False])
-            else:
-                switches.extend([False, True])
-        lastVal = switches.pop(-1)
-        switches = [lastVal] + switches
+        switches = tri_to_bin_thrusters(tri_switches)
 
         self.set_thrust_binary(switches)
