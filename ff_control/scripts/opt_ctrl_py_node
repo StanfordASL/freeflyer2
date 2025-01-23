@@ -31,11 +31,11 @@ import typing as T
 import matplotlib.pyplot as plt
 import time
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
-from ff_control.utils import state2vec
+from ff_control.utils import state2vec, map_to_force
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from geometry_msgs.msg import PoseStamped
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 
 
 class ThrusterOptControlNode(TrinaryThrusterController):
@@ -49,6 +49,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
     """
     STATE_DIM = 6
     CONTROL_DIM = 4
+    TERMINAL_COST_FACTOR = 300
+    SOLVE_TIME_BUFFER = 0.005 # time [s] to leave for auxiliary calculations
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -64,9 +66,10 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
-        self._deadband = np.array([0.03, 0.03, 0.05, 0.001, 0.001, 0.02])
-        self._readjust_controller_bounds = np.array([0.4, 0.4])
+        self._deadband = np.array([0.01, 0.01, 0.05, 0.005, 0.005, 0.02])
+        self._readjust_controller_bounds = 0.15
         self._def_controller = True
+        self._w0 = None
 
         # Goal State command
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
@@ -77,27 +80,42 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
 
-        # Optimization far hyperparameters/gains
-        self.get_logger().info("*** Reset to default hyperparams ***")
-        self.declare_parameter('def_opt_horizon_secs', 2.667)
-        self.declare_parameter('def_opt_freq', 3.0)
+        # Allow external module to trigger a reinitialization (eg when changing bounds/constraints)
+        self._reinit_solver_sub = self.create_subscription(Bool, 'ctrl/reinit_solver', self._reinit_callback, 10)
+
+        # Parameters for objective function
+        self.declare_parameter('def_opt_horizon_secs', 8)
+        self.declare_parameter('def_opt_freq', 6.0)
         self.declare_parameter('def_opt_gain_kth', 1.0)
-        self.declare_parameter('def_opt_gain_kpos', 2.5)
-        self.declare_parameter('def_opt_gain_kinput', 20.0)
-        self.declare_parameter('def_opt_gain_kvelo', 40.0)
+        self.declare_parameter('def_opt_gain_kpos', 3.5)
+        self.declare_parameter('def_opt_gain_kinput', 150.0)
+        self.declare_parameter('def_opt_gain_kvelo', 250.0)
+        self.declare_parameter('def_opt_gain_komega', 1.0)
 
-        self.declare_parameter('close_opt_horizon_secs', 0.4)
-        self.declare_parameter('close_opt_freq', 10.0)
-        self.declare_parameter('close_opt_gain_kth', 5.5)
-        self.declare_parameter('close_opt_gain_kpos', 90.0)
-        self.declare_parameter('close_opt_gain_kinput', 5.5)
-        self.declare_parameter('close_opt_gain_kvelo', 125.0)
+        self.declare_parameter('close_opt_horizon_secs', 0.9)
+        self.declare_parameter('close_opt_freq', 40.0)
+        self.declare_parameter('close_opt_gain_kth', 1.25)
+        self.declare_parameter('close_opt_gain_kpos', 35.0)
+        self.declare_parameter('close_opt_gain_kinput', 45.0)
+        self.declare_parameter('close_opt_gain_kvelo', 290.0)
+        self.declare_parameter('close_opt_gain_komega', 1.0)
 
-        # To start, Frequency based on default control frequency in the optimizer (3Hz)
+        # Parameters for optimization constraints
+        self.declare_parameter('x_lb_m', 0.0)
+        self.declare_parameter('x_ub_m', 4.0)
+        self.declare_parameter('y_lb_m', 0.0)
+        self.declare_parameter('y_ub_m', 2.0)
+        self.declare_parameter('theta_lb_rad', -np.pi)
+        self.declare_parameter('theta_ub_rad', np.pi)
+        self.declare_parameter('vx_ub_mps', 0.5)
+        self.declare_parameter('vy_ub_mps', 0.5)
+        self.declare_parameter('omega_ub_radps', 0.5)
+
+        # To start, Frequency based on default control frequency in the optimizer (6Hz)
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
 
     def param_update_callback(self):
-        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+        self._w0, self._cont_nlp_solver, self._lbw, self._ubw, self._lbg, self._ubg = self.init_solver()
         self._params_ready = True
     
     def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
@@ -107,7 +125,6 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         :param state_des: desired state
         """
         t = time.time()
-        # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
             self.get_logger().warn("send_control ignored, current state not yet ready")
             return
@@ -128,21 +145,27 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         if np.all(np.abs(state_des - curr_state) < self._deadband):
             self._u = np.zeros(4)
         else:
+            pos_err = np.abs(state_des[:2] - curr_state[:2])
             if self._def_controller:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
-                if np.all(pos_err < self._readjust_controller_bounds):
+                if np.linalg.norm(pos_err) < self._readjust_controller_bounds:
                     self.set_close_hyperparameters()
             else:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
-                if np.any(pos_err > self._readjust_controller_bounds):
+                if np.linalg.norm(pos_err) > self._readjust_controller_bounds:
                     self.set_default_hyperparameters()
 
+            if self._w0 is None:
+                N = int(self.T * self.freq)
+                linear_state_interp = linspace(DM(curr_state), DM(state_des), N+1).reshape((self.STATE_DIM, -1))
+                self._w0 = [linear_state_interp[:,0]]
+                for k in range(N):
+                    self._w0  += [DM([0.,0.,0.,0.])]
+                    self._w0 += [linear_state_interp[:,k+1]]
 
-            self.lbw[:len(curr_state)] = curr_state
-            self.ubw[:len(curr_state)] = curr_state
-            self.w0[0] = curr_state
+            self._lbw[:len(curr_state)] = curr_state
+            self._ubw[:len(curr_state)] = curr_state
+            self._w0[0] = curr_state
             
-            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
+            sol = self._cont_nlp_solver(x0=vertcat(*self._w0), p=DM(list(state_des)), lbx=self._lbw, ubx=self._ubw, lbg=self._lbg, ubg=self._ubg)
             output = sol['x']
             
             cost = Float32()
@@ -154,7 +177,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self._u = np.round(cont_thrust)
 
             # Warm Start next run
-            self.w0 = self.get_next_warm_start(output)
+            self._w0 = self.get_next_warm_start(output)
 
         self.set_tri_thrusters(self._u)
         self.get_logger().info("Control Computation Time: " + str(time.time()-t))
@@ -189,6 +212,8 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self._state_desired.state.twist.vx = 0.
         self._state_desired.state.twist.vy = 0.
         self._state_desired.state.twist.wz = 0.
+
+        self.get_logger().info("Set new goal"+str(self._state_desired))
     
     def control_loop(self) -> None:
         # state not yet ready
@@ -199,9 +224,9 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         self.send_control(self.get_state(), self._state_desired.state)
 
     def init_solver(self):
-        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)
-        lbx = [0., 0., -np.pi, -0.5, -0.5, -0.5]
-        ubx = [4., 4., np.pi, 0.5, 0.5, 0.5]
+        # Initialize constraints on x (x,y,th,xdot,ydot,thdot)    
+        lbx = [self.x_lb, self.y_lb, self.theta_lb, -self.vx_ub, -self.vy_ub, -self.omega_ub]
+        ubx = [self.x_ub, self.y_ub, self.theta_ub, self.vx_ub, self.vy_ub, self.omega_ub]
         lbu = [-self.Fmax] * 4 
         ubu = [self.Fmax] * 4 
 
@@ -209,11 +234,11 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         x0 = [0]*6 # Just initialize to zeros, will revise once first state measurement comes in
 
         # Declare model variables
-        x = MX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
-        u = MX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
-        goal = MX.sym("goal", self.STATE_DIM)
+        x = SX.sym('x', self.STATE_DIM) # x,y,th,xdot,ydot,thdot
+        u = SX.sym('u', self.CONTROL_DIM) # 4 trinary thrusters (-1, 0, 1)
+        goal = SX.sym("goal", self.STATE_DIM)
         
-        body_Fx, body_Fy, M = self._map_to_force(u)
+        body_Fx, body_Fy, M = map_to_force(u, self.r)
 
         th = x[2]
         world_Fx = body_Fx*cos(th) - body_Fy*sin(th)
@@ -228,14 +253,15 @@ class ThrusterOptControlNode(TrinaryThrusterController):
                        M / self.Ixx)
 
         # Stepwise Cost
-        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(self.normsq(goal[0:2]-x[0:2])) + self.k_input*(self.normsq(u)) + self.k_velo*self.normsq(goal[3:5]-x[3:5])
+        L =  self.k_th*(1-cos(goal[2]-x[2])) + self.k_pos*(sumsqr(goal[0:2]-x[0:2])) + self.k_input*(sumsqr(u)) + \
+              self.k_velo*sumsqr(goal[3:5]-x[3:5]) + self.k_omega*sumsqr(goal[5]-x[5])
 
         # Fixed step Runge-Kutta 4 integrator
         M = 4 # RK4 steps per interval
         DT = self.T/N/M
         f = Function('f', [x, u, goal], [xdot, L])    # Define function to take in current state/input and output xdot and cost
-        X0 = MX.sym('X0', 6)                
-        U = MX.sym('U', 4)
+        X0 = SX.sym('X0', 6)                
+        U = SX.sym('U', 4)
         X = X0
         Q = 0
         for j in range(M):
@@ -249,41 +275,30 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Initial guess for u
         u_start = [DM([0.,0.,0.,0.])] * N
-
-        # Get a feasible trajectory as an initial guess
-        xk = DM(x0)
-        x_start = [xk]
-        for k in range(N):
-            xk = F(x0=xk, p=u_start[k])['xf']
-            x_start += [xk]
-
+    
         # Start with an empty NLP
         w=[]
-        w0 = []
         lbw = []
         ubw = []
-        discrete = []
         J = 0
         g=[]
         lbg = []
         ubg = []
 
         # "Lift" initial conditions
-        X0 = MX.sym('X0', self.STATE_DIM)
+        X0 = SX.sym('X0', self.STATE_DIM)
         w += [X0]
         lbw += x0
         ubw += x0
-        w0 += [x_start[0]]
 
         # Formulate the NLP
         Xk = X0
         for k in range(N):
             # New NLP variable for the control
-            Uk = MX.sym('U_' + str(k), 4)
+            Uk = SX.sym('U_' + str(k), 4)
             w   += [Uk]
             lbw += lbu
             ubw += ubu
-            w0  += [u_start[k]]
 
             # Integrate till the end of the interval
             Fk = F(x0=Xk, p=Uk)
@@ -291,17 +306,17 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             J=J+Fk['qf']
 
             # New NLP variable for state at end of interval
-            Xk = MX.sym('X_' + str(k+1), 6)
+            Xk = SX.sym('X_' + str(k+1), 6)
             w   += [Xk]
             lbw += lbx
             ubw += ubx
-            w0  += [x_start[k+1]]
             # Add equality dynamics constraint 
             g   += [Xk_end-Xk]
             lbg += [0, 0, 0, 0, 0, 0]
             ubg += [0, 0, 0, 0, 0, 0]
 
-        J = J + 10*self.k_pos*(self.normsq(Xk_end[0:2]-goal[0:2])) + 10*self.k_th*(1-cos(goal[2]-Xk_end[2])) + 10*self.k_velo*self.normsq(Xk_end[3:]-goal[3:])
+        J = J + self.TERMINAL_COST_FACTOR * ( self.k_pos*(sumsqr(Xk_end[0:2]-goal[0:2])) + self.k_th*(1-cos(goal[2]-Xk_end[2])) + \
+              self.k_velo*sumsqr(Xk_end[3:5]-goal[3:5]) + self.k_omega*sumsqr(Xk_end[5]-goal[5]))
 
         # Concatenate decision variables and constraint terms
         w = vertcat(*w)
@@ -309,26 +324,18 @@ class ThrusterOptControlNode(TrinaryThrusterController):
 
         # Create an NLP solver
         nlp_prob = {'f': J, 'p':goal, 'x': w, 'g': g}
-        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob); # Solve relaxed problem
+        opts = {'ipopt.max_cpu_time': 1.0 / self.freq - self.SOLVE_TIME_BUFFER}
+        cont_nlp_solver = nlpsol('nlp_solver', 'ipopt', nlp_prob, opts); # Solve relaxed problem
+        w0 = None # Reset w0
         return w0, cont_nlp_solver, lbw, ubw, lbg, ubg
 
     ############################### Helper Functions for Opt ###############################
-    def _map_to_force(self, u):
-        # Compute body-frame force from thrusters
-        Fx = -u[0] + u[2] 
-        Fy = -u[1] + u[3] 
-        M = self.r * (u[0]+u[1]+u[2]+u[3])
-        return Fx, Fy, M
-
-    def normsq(self, x):
-        """ norm square operation for casadi variables. """
-        sum = 0
-        for i in range(x.shape[0]):
-            sum += x[i]**2
-        return sum
 
     def unpack_wopt(self, w_opt):
         w_opt = w_opt.full().flatten()
+        x = w_opt[0::10]
+        y = w_opt[1::10]
+        th = w_opt[2::10]
         u0_opt = w_opt[6::10]
         u1_opt = w_opt[7::10]
         u2_opt = w_opt[8::10]
@@ -394,7 +401,13 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             return self.get_parameter('def_opt_gain_kvelo').value
         else:
             return self.get_parameter('close_opt_gain_kvelo').value
-
+        
+    @property
+    def k_omega(self):
+        if (self._def_controller):
+            return self.get_parameter('def_opt_gain_komega').value
+        else:
+            return self.get_parameter('close_opt_gain_komega').value
 
     @property
     def T(self):
@@ -409,6 +422,42 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             return self.get_parameter('def_opt_freq').value
         else:
             return self.get_parameter('close_opt_freq').value
+        
+    @property
+    def x_lb(self):
+        return self.get_parameter('x_lb_m').value
+    
+    @property
+    def x_ub(self):
+        return self.get_parameter('x_ub_m').value
+    
+    @property
+    def y_lb(self):
+        return self.get_parameter('y_lb_m').value
+    
+    @property
+    def y_ub(self):
+        return self.get_parameter('y_ub_m').value
+    
+    @property
+    def theta_lb(self):
+        return self.get_parameter('theta_lb_rad').value
+    
+    @property
+    def theta_ub(self):
+        return self.get_parameter('theta_ub_rad').value
+    
+    @property
+    def vx_ub(self):
+        return self.get_parameter('vx_ub_mps').value
+    
+    @property
+    def vy_ub(self):
+        return self.get_parameter('vy_ub_mps').value
+    
+    @property
+    def omega_ub(self):
+        return self.get_parameter('omega_ub_radps').value
 
     def state_is_ready(self) -> bool:
         """
@@ -428,12 +477,16 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self._state_ready = True
             self.state_ready_callback()
 
+    def _reinit_callback(self, msg: Bool) -> None:
+        if msg.data:
+            self.init_solver()
+
     def set_default_hyperparameters(self) -> None:
         # Optimization for default longer trajectories hyperparameters/gains
         self.get_logger().info("*** Reset to default hyperparams ***")
         self._def_controller = True
 
-        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+        self._w0, self._cont_nlp_solver, self._lbw, self._ubw, self._lbg, self._ubg = self.init_solver()
 
         self.timer.cancel()
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
@@ -443,7 +496,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         # Optimization close-range fine-tuning trajectories hyperparameters/gains
         self.get_logger().info("*** Set to close hyperparams ***")
         self._def_controller = False
-        self.w0, self.cont_nlp_solver, self.lbw, self.ubw, self.lbg, self.ubg = self.init_solver()
+        self._w0, self._cont_nlp_solver, self._lbw, self._ubw, self._lbg, self._ubg = self.init_solver()
 
         self.timer.cancel()
         self.timer = self.create_timer(1.0/self.freq, self.control_loop)
