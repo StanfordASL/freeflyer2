@@ -28,29 +28,30 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node, SetParameter, PushRosNamespace
 from launch_ros.substitutions import FindPackageShare
 
+
 def generate_launch_description():
     robot_name = LaunchConfiguration("robot_name")
     camera_name = LaunchConfiguration("camera_name")
 
     launch_camera = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('realsense2_camera'),
-                'launch',
-                'rs_launch.py'
-            ])
-        ]),
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [FindPackageShare("realsense2_camera"), "launch", "rs_launch.py"]
+                )
+            ]
+        ),
         launch_arguments={
-            "camera_name":camera_name,
-            "initial_reset":"True",
-            "rgb_camera.profile":"640x360x30",
-            "depth_module.profile":"640x360x30",
-            "rgb.enable_auto_white_balance":"False",
-            "rgb_enable_white_balance":"3800.0",
-            "rgb_enable_auto_exposure":"False",
-            "enable_infra1":"False",
-            "enable_infra2":"False",
-        }.items()
+            "camera_name": camera_name,
+            "initial_reset": "True",
+            "rgb_camera.profile": "640x360x30",
+            "depth_module.profile": "640x360x30",
+            "rgb.enable_auto_white_balance": "False",
+            "rgb_enable_white_balance": "3800.0",
+            "rgb_enable_auto_exposure": "False",
+            "enable_infra1": "False",
+            "enable_infra2": "False",
+        }.items(),
     )
 
     return LaunchDescription(
@@ -62,7 +63,6 @@ def generate_launch_description():
                     PushRosNamespace(robot_name),
                     launch_camera,
                 ]
-            )
+            ),
         ]
     )
-
