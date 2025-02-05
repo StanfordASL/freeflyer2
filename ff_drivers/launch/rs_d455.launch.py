@@ -53,10 +53,10 @@ def generate_launch_description():
             "rgb_enable_auto_exposure": "False",
             "enable_infra1": "False",
             "enable_infra2": "False",
-            "enable_accel":"True",
+            "enable_accel": "True",
             "enable_gyro": "True",
             "accel_fps": "200",
-            "gyro_fps":"200",
+            "gyro_fps": "200",
         }.items(),
     )
 
