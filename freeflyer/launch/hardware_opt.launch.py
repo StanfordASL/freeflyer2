@@ -58,12 +58,12 @@ def generate_launch_description():
                 name="controller_metrics",
                 namespace=robot_name,
             ),
-            Node(
-                package="ff_control",
-                executable=["opt_ctrl_", impl, "_node"],
-                name="opt_ctrl_node",
-                namespace=robot_name,
-            ),
+            # Node(
+            #     package="ff_control",
+            #     executable=["opt_ctrl_", impl, "_node"],
+            #     name="opt_ctrl_node",
+            #     namespace=robot_name,
+            # ),
             Node(
                 package="ff_estimate",
                 executable="moving_avg_estimator_node",
@@ -74,7 +74,8 @@ def generate_launch_description():
                         "pose_channel": PathJoinSubstitution(
                             [
                                 "mocap",
-                                robot_name,
+                                "robot_camera_front",
+                                # robot_name,
                                 "pose",
                             ]
                         ),
