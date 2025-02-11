@@ -74,7 +74,8 @@ def generate_launch_description():
                         "pose_channel": PathJoinSubstitution(
                             [
                                 "mocap",
-                                robot_name,
+                                "robot_camera_front",
+                                # robot_name,
                                 "pose",
                             ]
                         ),

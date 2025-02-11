@@ -472,6 +472,7 @@ class ThrusterOptControlNode(TrinaryThrusterController):
         Get called when the first current state measurement comes in.
         """
         self._state_stamped = copy.deepcopy(msg)
+        self._state_stamped.state.pose.theta -= np.pi
 
         if not self._state_ready:
             self._state_ready = True
