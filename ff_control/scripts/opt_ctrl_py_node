@@ -147,16 +147,20 @@ class ThrusterOptControlNode(TrinaryThrusterController):
             self._u = np.zeros(4)
         else:
             pos_err = np.abs(state_des[:2] - curr_state[:2])
+            changed_controller = False
             if self._def_controller:
                 if np.linalg.norm(pos_err) < self._readjust_controller_bounds:
                     self.set_close_hyperparameters()
+                    changed_controller = True
             else:
                 if np.linalg.norm(pos_err) > self._readjust_controller_bounds:
                     self.set_default_hyperparameters()
+                    changed_controller = True
+
 
             ctrl = self._default_ctrl if self._def_controller else self._close_ctrl
 
-            if ctrl['w0'] is None:
+            if ctrl['w0'] is None or changed_controller:
                 N = int(self.T * self.freq)
                 linear_state_interp = linspace(DM(curr_state), DM(state_des), N+1).reshape((self.STATE_DIM, -1))
                 ctrl['w0'] = [linear_state_interp[:,0]]
