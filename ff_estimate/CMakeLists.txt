@@ -43,6 +43,10 @@ install(
 add_executable(moving_avg_estimator_node src/moving_avg_estimator_node.cpp)
 target_link_libraries(moving_avg_estimator_node est_lib)
 
+#add Kalman filter node
+add_executable(ConstVelKF src/ConstVelKF.cpp)
+target_link_libraries(ConstVelKF est_lib)
+
 install(TARGETS moving_avg_estimator_node
         DESTINATION lib/${PROJECT_NAME})
 
