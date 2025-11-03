@@ -27,8 +27,10 @@ import copy
 import rclpy
 import sys
 import os
-username = os.getenv("USERNAME")
-sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
+username = os.getenv("USER")  # Linux username
+sys.path.append(f'/home/{username}/Transformer/lib/python3.10/site-packages')
+# username = os.getenv("USERNAME")
+# sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
 import numpy as np
 import cvxpy as cp
 import typing as T
@@ -64,7 +66,7 @@ class TransformerBasedSCPController(LinearController):
     N_OBS_MAX = ff_scenario.N_OBS_MAX
     TRANSFORMER_MODEL = ff_scenario.TRANSFORMER_MODEL #'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
     TRANSFORMER_WS = 'dyn'
-    EMBD_OBS_FLAG = True
+    EMBD_OBS_FLAG = False
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -250,9 +252,10 @@ class TransformerBasedSCPController(LinearController):
         self.get_logger().info('State final '+str(state_final))
         self.get_logger().info('Time final '+str(final_time))
         self.get_logger().info('Obstacles '+str(self.obstacles))
-        traj_cvx, _, _, _ = ocp_no_obstacle_avoidance(ffm, state_init, state_final, final_time, self.obstacles)
+        traj_cvx, J, scp_iter, feas_scp = ocp_no_obstacle_avoidance(ffm, state_init, state_final, final_time, self.obstacles)
         _, actions_ws_cvx = traj_cvx['states'], traj_cvx['actions_G']
 
+        self.get_logger().info('problem feasibility: ' + str(feas_scp))
         # Use Transformer to infer the warm-starting trajectory
         rtg = - np.sum(np.linalg.norm(actions_ws_cvx, ord=1, axis=0))
         if (not self.generalized_obs) and (not self.generalized_time):
@@ -272,8 +275,10 @@ class TransformerBasedSCPController(LinearController):
         states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
                                  (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
         actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
+        # log the actions_ws_DT output
+        self.get_logger().info('Output action from Transformer: '+str(actions_ws_DT))
         self.ws_pub.publish(self.traj2path(states_ws_DT, height=0.08))
-        
+
         # Solve SCP
         scp_time0 = time.time()
         traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final, self.obstacles)

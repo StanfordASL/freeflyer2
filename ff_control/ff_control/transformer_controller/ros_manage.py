@@ -24,7 +24,7 @@ print(device)
         
 '''
 
-def get_DT_model(model_name, n_state, n_action, n_observation, n_single_obs, embed_observation_flag):
+def get_DT_model(model_name, n_state, n_action, n_observation = 12, n_single_obs = 3, embed_observation_flag = False):
     # DT model creation
     config = DecisionTransformerConfig(
         state_dim=n_state,

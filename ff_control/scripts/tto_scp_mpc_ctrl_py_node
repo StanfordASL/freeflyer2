@@ -27,8 +27,10 @@ import copy
 import rclpy
 import sys
 import os
-username = os.getenv("USERNAME")
-sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
+username = os.getenv("USER")  # Linux username
+sys.path.append(f'/home/{username}/Transformer/lib/python3.10/site-packages')
+# username = os.getenv("USERNAME")
+# sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
 import numpy as np
 import cvxpy as cp
 import typing as T
@@ -59,7 +61,7 @@ class TransformerBasedSCPClosedLoopController(LinearController):
     """
     STATE_DIM = 6
     CONTROL_DIM = 3
-    TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg_art_cl_4'
+    TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg_art_cl_9' #'checkpoint_ff_ctgrtg_art_cl_4'
     TRANSFORMER_WS = 'dyn'
 
     def __init__(self):
@@ -88,7 +90,7 @@ class TransformerBasedSCPClosedLoopController(LinearController):
         # Load Transformer model and FreeFlyer model
         self.TTO_model = TTO_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM)
         self.TTO_model.eval()
-        self.data_stats = TTO_manager.get_data_stats()
+        self.data_stats = TTO_manager.get_data_stats(self.TRANSFORMER_MODEL)
         self.get_logger().info('Transformer model '+self.TRANSFORMER_MODEL+' imported, LET\'S FLY!!!')
         self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
 

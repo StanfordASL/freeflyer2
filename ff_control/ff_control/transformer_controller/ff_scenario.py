@@ -13,11 +13,11 @@ N_CLUSTERS = 4
 N_OBS_MAX = 4
 SINGLE_OBS_DIM = 3
 N_OBSERVATION = N_OBS_MAX*SINGLE_OBS_DIM
-TRANSFORMER_MODEL = 'checkpoint_ff_obs_15scen_cbe_rel_ctgrtg'#'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
+TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg_art'#'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
 
 # Generalization level
 generalized_time = False
-generalized_obs = True
+generalized_obs = False
 
 # time problem constants
 if generalized_time:
@@ -64,6 +64,7 @@ min_init_dist = 0.5
 
 # Time discretization and bounds
 dt = 0.5 if generalized_time else 0.4
+T = 40.0
 # T_const = 40.0 # max final time horizon in sec
 '''T_min = T_const if dataset_scenario == 'time_constant' else (10.0 if dataset_scenario == 'time_whole_table' else 20.0)
 T_max = T_const if dataset_scenario == 'time_constant' else 100.0
@@ -82,6 +83,13 @@ obs_nominal = {
                            [2.5, 1.75]]),
     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
 }
+obs = {
+    'position' : np.array([[1.0,  0.7],
+                           [1.5,  1.7],
+                           [2.5, 0.75],
+                           [2.5, 1.75]]),
+    'radius' : np.array([0.2, 0.2, 0.2, 0.2])
+}
 '''obs_nominal = {
     'position' : np.array([[1. , 0.7],
                            [1.8, 1.1],
@@ -90,6 +98,7 @@ obs_nominal = {
     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
 }'''
 n_obs_nominal = obs_nominal['position'].shape[0]
+n_obs = obs_nominal['position'].shape[0]
 relative_observations = True #True/False
 if generalized_obs:
     obs1 = {
