@@ -81,5 +81,12 @@ def generate_launch_description():
                 name="moving_avg_estimator_node",
                 namespace=robot_name,
             ),
+            Node(
+                package="ff_control",
+                executable="text_command_gui",
+                name="text_command_gui",
+                # no namespace strictly needed since it publishes to /robot/user_command explicitly
+                output="screen",
+            ),
         ]
     )

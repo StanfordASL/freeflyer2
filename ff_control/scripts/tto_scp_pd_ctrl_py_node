@@ -27,28 +27,33 @@ import copy
 import rclpy
 import sys
 import os
+
 username = os.getenv("USER")  # Linux username
 sys.path.append(f'/home/{username}/Transformer/lib/python3.10/site-packages')
-# username = os.getenv("USERNAME")
-# sys.path.append('/home/'+username+'/Transformer/lib/python3.10/site-packages')
+
 import numpy as np
 import cvxpy as cp
 import typing as T
 import time
 
+# ros msg imports
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+from std_msgs.msg import Float32
+from std_msgs.msg import String
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import MutuallyExclusiveCallbackGroup
+
+# /src imports
 from ff_control.tri_thruster_ctrl import TrinaryThrusterController
 from ff_control.linear_ctrl import LinearController
-import ff_control.transformer_controller.ros_manage as TTO_manager
-from ff_control.transformer_controller.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance
+import ff_control.transformer_controller.ros_manage as DT_manager
+from ff_control.transformer_controller.adapter import FrozenTextAdapter
+from ff_control.transformer_controller.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, ocp_obstacle_avoidance_feasibility
 import ff_control.transformer_controller.ff_scenario as ff_scenario
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
 from ff_srvs.srv import ObsInfo
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Path
-from std_msgs.msg import Float32
-from rclpy.executors import MultiThreadedExecutor
-from rclpy.node import MutuallyExclusiveCallbackGroup
 
 class TransformerBasedSCPController(LinearController):
     """
@@ -64,9 +69,9 @@ class TransformerBasedSCPController(LinearController):
     OBSERVATION_DIM = ff_scenario.N_OBSERVATION
     SINGLE_OBS_DIM = ff_scenario.SINGLE_OBS_DIM
     N_OBS_MAX = ff_scenario.N_OBS_MAX
-    TRANSFORMER_MODEL = ff_scenario.TRANSFORMER_MODEL #'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
-    TRANSFORMER_WS = 'dyn'
-    EMBD_OBS_FLAG = False
+    TRANSFORMER_MODEL = ff_scenario.TRANSFORMER_MODEL 
+    TARGET_STATE = ff_scenario.state_target
+    CTG_CONDITION = ff_scenario.CTG_CONDITION
 
     def __init__(self):
         super().__init__('thrust_opt_control_node')
@@ -79,6 +84,9 @@ class TransformerBasedSCPController(LinearController):
             10,
         )'''
         self._state_ready = False
+        self._last_command = ""
+        self._command_received = False
+        self._plan_computed = False
         self._state_stamped = FreeFlyerStateStamped()
         self._state_desired = FreeFlyerStateStamped()
         self._params_ready = False
@@ -91,21 +99,21 @@ class TransformerBasedSCPController(LinearController):
             self.get_logger().info('obstales_info server not available yet, waiting...')
         self.get_obs_info_request()
 
-        # Load Transformer model and FreeFlyer model
-        self.TTO_model = TTO_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM, self.OBSERVATION_DIM, self.SINGLE_OBS_DIM, self.EMBD_OBS_FLAG)
-        self.TTO_model.eval()
-        self.data_stats = TTO_manager.get_data_stats(self.TRANSFORMER_MODEL)
+        # Load Transformer model and FreeFlyer model model_name, n_state, n_action, ctg_condition
+        self.DT_model, self.TEXT_ENCODER_MODEL = DT_manager.get_DT_model(self.TRANSFORMER_MODEL, self.STATE_DIM, self.CONTROL_DIM, self.CTG_CONDITION)
+        self.DT_model.eval()
+        self.data_stats = DT_manager.get_data_stats(self.TRANSFORMER_MODEL)
         self.get_logger().info('Transformer model '+self.TRANSFORMER_MODEL+' imported, LET\'S FLY!!!')
-        self.get_logger().info('Device used for the transfomer: '+str(TTO_manager.device))
-        self.generalized_time = ff_scenario.generalized_time
-        self.generalized_obs = ff_scenario.generalized_obs
+        self.get_logger().info('Device used for the transfomer: '+str(DT_manager.device))
 
-        # Goal State command
+        # Callback group setup
         self.state_callback_group = MutuallyExclusiveCallbackGroup()
+        self.command_sub = self.create_subscription(String,
+            'user_command', self.command_callback, 10, callback_group=self.state_callback_group)
         self.state_sp_sub = self.create_subscription(FreeFlyerStateStamped,
             'ctrl/state', self.state_setpoint_callback, 10, callback_group=self.state_callback_group)
-        self.rviz_sp_sub = self.create_subscription(PoseStamped,
-            '/goal_pose', self.rviz_setpoint_callback, 10, callback_group=self.state_callback_group)
+        # self.rviz_sp_sub = self.create_subscription(PoseStamped,
+        #     '/goal_pose', self.rviz_setpoint_callback, 10, callback_group=self.state_callback_group)
         
         self.goal_repeater_pub = self.create_publisher(FreeFlyerStateStamped, "robot/goal", 10)
         self.opt_cost_pub = self.create_publisher(Float32, "cost", 10)
@@ -116,9 +124,9 @@ class TransformerBasedSCPController(LinearController):
         # feedback gain params
         self.control_callback_group = MutuallyExclusiveCallbackGroup()
         self.declare_parameter('gain_f', 2.0)
-        self.declare_parameter('gain_df', 10.0)
+        self.declare_parameter('gain_df', 10.0) # 10.0
         self.declare_parameter('gain_t', 0.2)
-        self.declare_parameter('gain_dt', 0.4)
+        self.declare_parameter('gain_dt', 0.4) # 0.4
         self.declare_parameter('total_time', ff_scenario.T_nominal)
         self.n_timesteps = int(ff_scenario.T_nominal/ff_scenario.dt) + 1
         self._trajectory_ready = False
@@ -126,67 +134,57 @@ class TransformerBasedSCPController(LinearController):
         self.timer = self.create_timer(self.control_period, self.control_loop, callback_group=self.control_callback_group)
         self.trajectory_timer = self.create_timer(2*self.control_period, self.trajectory_loop, callback_group=self.state_callback_group)
     
-    '''def send_control(self, curr_state: T.Union[FreeFlyerState, np.ndarray], state_des: T.Union[FreeFlyerState, np.ndarray]) -> None:
+    def maybe_plan_fixed_goal(self) -> None:
         """
-        Send desirable target state for optimization-based control.
+        Trigger planning once both:
+        - state is ready, and
+        - a user command has been received.
 
-        :param state_des: desired state
+        It does this by calling rviz_setpoint_callback with a synthetic goal pose
+        corresponding to ff_scenario.state_target.
         """
-        t = time.time()
-        # self.get_logger().info("Goal"+str(state_des) + "\n")
         if not self._state_ready:
-            self.get_logger().warn("send_control ignored, current state not yet ready")
             return
 
-        if not self._params_ready:
-            self.get_logger().warn("send_control ignored, parameters not yet ready")
+        if not self._command_received:
             return
 
-        self.goal_repeater_pub.publish(self._state_desired)
+        if self._plan_computed:
+            return
 
-        # convert desired state to vector form
-        if isinstance(state_des, FreeFlyerState):
-            state_des = self.state2vec(state_des)
+        self._plan_computed = True
+        self.get_logger().info(
+            "State and user_command ready -> planning to fixed goal from ff_scenario.state_target"
+        )
 
-        if isinstance(curr_state, FreeFlyerState):
-            curr_state = self.state2vec(curr_state)
+        # Build a PoseStamped corresponding to state_target
+        goal_vec = self.TARGET_STATE
+        goal_pose = PoseStamped()
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.header.frame_id = 'world'
 
-        if np.all(np.abs(state_des - curr_state) < self._deadband):
-            self._u = np.zeros(4)
-        else:
-            if not self._close_controller:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
-                # state_err_vec = np.abs(np.append(pos_err, th_err))
-                if np.all(pos_err < self._readjust_controller_bounds):
-                    self.set_close_hyperparameters()
-            else:
-                pos_err = np.abs(state_des[:2] - curr_state[:2])
-                # state_err_vec = np.abs(np.append(pos_err, th_err))
-                if np.any(pos_err > self._readjust_controller_bounds):
-                    self.set_default_hyperparameters()
+        goal_pose.pose.position.x = float(goal_vec[0])
+        goal_pose.pose.position.y = float(goal_vec[1])
+        goal_pose.pose.position.z = 0.0
+
+        theta = float(goal_vec[2])
+        goal_pose.pose.orientation.z = np.sin(theta / 2.0)
+        goal_pose.pose.orientation.w = np.cos(theta / 2.0)
+
+        # Reuse existing planning pipeline
+        self.rviz_setpoint_callback(goal_pose)
 
 
-            self.lbw[:len(curr_state)] = curr_state
-            self.ubw[:len(curr_state)] = curr_state
-            self.w0[0] = curr_state
-            
-            sol = self.cont_nlp_solver(x0=vertcat(*self.w0), p=DM(list(state_des)), lbx=self.lbw, ubx=self.ubw, lbg=self.lbg, ubg=self.ubg)
-            output = sol['x']
-            
-            cost = Float32()
-            cost.data = float(sol['f'])
-            self.opt_cost_pub.publish(cost)   
+    def command_callback(self, msg: String) -> None:
+        """
+        Callback for natural-language command input.
+        Later we'll pass this into the transformer inference.
+        """
+        self._last_command = msg.data
+        self._command_received = True
+        self.get_logger().info(f"[CMD] Received user command: '{self._last_command}'")
+        self.maybe_plan_fixed_goal()
 
-            u0_opt, u1_opt, u2_opt, u3_opt = self.unpack_wopt(output)
-            cont_thrust = np.array([u0_opt[0], u1_opt[0], u2_opt[0], u3_opt[0]]).reshape((4,1)) / self.Fmax
-            self._u = np.round(cont_thrust)
-
-            # Warm Start next run
-            self.w0 = self.get_next_warm_start(output)
-
-        self.set_tri_thrusters(self._u)
-        self.get_logger().info("Control Computation Time: " + str(time.time()-t))'''
-    
     def get_obs_info_request(self):
         future = self.obs_info_cli.call_async(ObsInfo.Request())
         rclpy.spin_until_future_complete(self, future)
@@ -203,7 +201,7 @@ class TransformerBasedSCPController(LinearController):
     def get_state(self) -> T.Optional[FreeFlyerState]:
         """Get the current latest state."""
         if not self._state_ready:
-            self.get_logger().error("get_state failed: state not yet ready")
+            self.get_logger().info("get_state failed: state not yet ready")
             return None
 
         return self._state_stamped.state
@@ -213,22 +211,43 @@ class TransformerBasedSCPController(LinearController):
         self._state_desired.header.stamp = self.get_clock().now().to_msg()
         self._state_desired.state = self.get_state()
         self.get_logger().info('Initial state desired: '+str(self._state_desired))
+        self.maybe_plan_fixed_goal()
 
     def state_setpoint_callback(self, msg: FreeFlyerStateStamped) -> None:
         self._state_desired = copy.deepcopy(msg)
 
-    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:
-        # Goal pose computation
+    def rviz_setpoint_callback(self, msg: PoseStamped) -> None:    
+        # NEW: do not start planning until a command has been provided
+        if not getattr(self, "_command_received", False):
+            self.get_logger().warn(
+                "Ignoring goal until a text command is published on /robot/user_command."
+            )
+            return
+
+        # Goal pose / state from fixed ff_scenario.state_target (ignore msg.pose for goal)
+        goal_vec = self.TARGET_STATE
+
         state_desired = FreeFlyerStateStamped()
-        state_desired.header.stamp = msg.header.stamp
-        state_desired.state.pose.x = msg.pose.position.x
-        state_desired.state.pose.y = msg.pose.position.y
-        z = msg.pose.orientation.z
-        w = msg.pose.orientation.w
-        state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
-        state_desired.state.twist.vx = 0.
-        state_desired.state.twist.vy = 0.
-        state_desired.state.twist.wz = 0.
+        state_desired.header.stamp = self.get_clock().now().to_msg()
+        state_desired.state.pose.x = float(goal_vec[0])
+        state_desired.state.pose.y = float(goal_vec[1])
+        state_desired.state.pose.theta = float(goal_vec[2])
+        state_desired.state.twist.vx = float(goal_vec[3])
+        state_desired.state.twist.vy = float(goal_vec[4])
+        state_desired.state.twist.wz = float(goal_vec[5])
+
+        # # Goal pose computation
+        # state_desired = FreeFlyerStateStamped()
+        # state_desired.header.stamp = msg.header.stamp
+        # state_desired.state.pose.x = msg.pose.position.x
+        # state_desired.state.pose.y = msg.pose.position.y
+        # z = msg.pose.orientation.z
+        # w = msg.pose.orientation.w
+        # state_desired.state.pose.theta = np.arctan2(2 * w * z, w * w - z * z)
+        # state_desired.state.twist.vx = 0.
+        # state_desired.state.twist.vy = 0.
+        # state_desired.state.twist.wz = 0.
+
         state_init = self.state2vec(self.get_state())
         state_init[3:] = 0
         state_final = self.state2vec(state_desired.state)
@@ -252,37 +271,24 @@ class TransformerBasedSCPController(LinearController):
         self.get_logger().info('State final '+str(state_final))
         self.get_logger().info('Time final '+str(final_time))
         self.get_logger().info('Obstacles '+str(self.obstacles))
-        traj_cvx, J, scp_iter, feas_scp = ocp_no_obstacle_avoidance(ffm, state_init, state_final, final_time, self.obstacles)
-        _, actions_ws_cvx = traj_cvx['states'], traj_cvx['actions_G']
 
-        self.get_logger().info('problem feasibility: ' + str(feas_scp))
         # Use Transformer to infer the warm-starting trajectory
-        rtg = - np.sum(np.linalg.norm(actions_ws_cvx, ord=1, axis=0))
-        if (not self.generalized_obs) and (not self.generalized_time):
-            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS)
-            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
-        elif (not self.generalized_obs) and (self.generalized_time):
-            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS+'_time')
-            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, rtg_perc=1., ctg_perc=0., rtg=rtg, ttg=final_time,
-                                                       ctg_clipped=True, chunksize=ff_scenario.chunksize, end_on_ttg=True)
-        elif (self.generalized_obs) and (not self.generalized_time):
-            inference_func = getattr(TTO_manager, 'ros_model_inference_'+self.TRANSFORMER_WS+'_obs')
-            DT_trajectory, DT_runtime = inference_func(self.TTO_model, self.data_stats, state_init, state_final, self.obstacles, self.N_OBS_MAX, rtg_perc=1., ctg_perc=0., rtg=rtg, ctg_clipped=True)
-        else:
-            raise ValueError('The formulation with generalized final time and obstacles has not been implemented yet!')
+        inference_func = getattr(DT_manager, 'ros_model_inference_dyn')
+        DT_trajectory, DT_runtime = inference_func(self.DT_model, self.data_stats, state_init, state_final, self.TEXT_ENCODER_MODEL, ctg_condition=True, text_command=self._last_command)
         
-        # np.savez_compressed('/home/dcelestini/ff_ws/src/freeflyer2/ff_control/ff_control/transformer_controller/debug_ros_obs.npz', DT_trajectory=DT_trajectory)
-        states_ws_DT = np.append(DT_trajectory['xypsi_' + self.TRANSFORMER_WS],
-                                 (DT_trajectory['xypsi_' + self.TRANSFORMER_WS][:,-1] + ffm.B_imp @ DT_trajectory['dv_' + self.TRANSFORMER_WS][:, -1]).reshape((6,1)), 1)
-        actions_ws_DT = DT_trajectory['dv_' + self.TRANSFORMER_WS]
+        states_ws_DT = np.append(DT_trajectory['xypsi_dyn'], (DT_trajectory['xypsi_dyn'][:,-1] + ffm.B_imp @ DT_trajectory['dv_dyn'][:, -1]).reshape((6,1)), 1)
+        actions_ws_DT = DT_trajectory['dv_dyn']
         # log the actions_ws_DT output
         self.get_logger().info('Output action from Transformer: '+str(actions_ws_DT))
         self.ws_pub.publish(self.traj2path(states_ws_DT, height=0.08))
 
-        # Solve SCP
+        # Solve SCP for feasibility problem
         scp_time0 = time.time()
-        traj_scp_DT, _, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance(ffm, states_ws_DT, actions_ws_DT, state_init, state_final, self.obstacles)
+        traj_scp_DT, J_vect_scp_DT_ctg, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance_feasibility(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
         scp_runtime = time.time() - scp_time0
+        if feas_scp_DT == 'infeasible':
+            self.get_logger().error("==============SCP failed in computing an optimal path! No action will be executed-===================")
+            
         self.path_pub.publish(self.traj2path(traj_scp_DT['states'], height=0.1))
 
         self.trajectory_timer.cancel()
@@ -304,7 +310,7 @@ class TransformerBasedSCPController(LinearController):
     def control_loop(self) -> None:
         # state not yet ready
         if not self.state_is_ready():
-            self.get_logger().error("control_loop not started: state not yet ready")
+            self.get_logger().info("control_loop not started: state not yet ready")
             return
 
         # build feedback gain matrix
@@ -321,7 +327,7 @@ class TransformerBasedSCPController(LinearController):
     def trajectory_loop(self) -> None:
         # If no trajectory has been computed yet, do nothing, else change periodically the _state_desired
         if (self._trajectory_ready) and (self._desired_trajectory['timestep'] < self.n_timesteps):
-            self.get_logger().error('Current timesteps: ' + str(self._desired_trajectory['timestep']))
+            self.get_logger().info('Current timesteps: ' + str(self._desired_trajectory['timestep']))
             current_state_desired = FreeFlyerStateStamped()
             current_state_desired.header.stamp = self.get_clock().now().to_msg()
             current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['states'][:,self._desired_trajectory['timestep']]))

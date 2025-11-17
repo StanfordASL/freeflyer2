@@ -42,10 +42,10 @@ class ObstaclesSimulator(Node):
         p_obstacles = self.declare_parameters(
             "obstacles",
             [
-                ("cyl_pos_x", [1., 1.5, 2.5, 2.5]),#("cyl_pos_x", []),#
-                ("cyl_pos_y", [0.7, 1.7, 0.75, 1.75]),#("cyl_pos_y", []),#
-                ("cyl_rads", [0.2, 0.2, 0.2, 0.2]),#("cyl_rads", []),#
-                ("cyl_heights", [0.6, 0.6, 0.6, 0.6]),#("cyl_heights", []),#
+                ("cyl_pos_x", [1.95, 1.35,  1.95]),#("cyl_pos_x", []),#
+                ("cyl_pos_y", [2.2, 1.25, 0.3]),#("cyl_pos_y", []),#
+                ("cyl_rads", [0.2, 0.2, 0.2]), #[0.18, 0.15, 0.12, 0.2]),#("cyl_rads", []),#
+                ("cyl_heights", [0.6, 0.6, 0.6]),#("cyl_heights", []),#
             ],
         )
         self.obstacles = {

@@ -77,6 +77,7 @@ install(PROGRAMS
   scripts/tto_scp_pd_ctrl_py_node
   scripts/tto_scp_mpc_ctrl_py_node
   scripts/scp_mpc_ctrl_py_node
+  scripts/text_command_gui
   DESTINATION lib/${PROJECT_NAME}
 )
 

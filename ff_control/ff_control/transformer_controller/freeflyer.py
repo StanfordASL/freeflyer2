@@ -140,6 +140,65 @@ class FreeflyerModel:
             J = prob.value
 
         return s_opt, a_opt, J, prob.status
+    
+    def ocp_scp_track(self, state_ref, action_ref, state_init, state_final, obs,
+                  trust_region, obs_av=True, waypoint=None,
+                  w_state=1.0, w_action=1.0):
+        """
+        One convex tracking step:
+        min  w_state * ||s - state_ref[:,:n_time]||_F^2 + w_action * ||a - action_ref||_F^2  (+ waypoint soft band)
+        subject to: same linearized constraints as ocp_scp (init/final, dynamics, bounds, KOZ linearization, action box, trust region).
+        """
+        n_time = action_ref.shape[1]
+        s_ref_use = state_ref[:, :n_time]  # (N_STATE, n_time)
+
+        s = cp.Variable((self.N_STATE, n_time))
+        a = cp.Variable((self.N_ACTION, n_time))
+        constraints = []
+
+        # Initial + dynamics + post-last-impulse terminal = state_final
+        constraints += [s[:, 0] == state_init]
+        constraints += [s[:, k+1] == self.Ak @ (s[:, k] + self.B_imp @ a[:, k]) for k in range(n_time-1)]
+        constraints += [(s[:, -1] + self.B_imp @ a[:, -1]) == state_final]
+
+        # Table bounds
+        constraints += [s[:2, :] >= ff.start_region['xy_low'][:, None]]
+        constraints += [s[:2, :] <= ff.goal_region['xy_up'][:, None]]
+
+        # Trust region, KOZ linearization, action bounding box
+        for k in range(n_time):
+            constraints += [cp.SOC(trust_region, s[:, k] - s_ref_use[:, k])]
+            if obs_av:
+                for n_obs in range(len(obs['radius'])):
+                    c_koz_k = (s_ref_use[:2, k] - obs['position'][n_obs, :]).T @ (np.eye(2) / (obs['radius'][n_obs]**2))
+                    b_koz_k = np.sqrt(c_koz_k @ (s_ref_use[:2, k] - obs['position'][n_obs, :]))
+                    constraints += [c_koz_k @ (s[:2, k] - obs['position'][n_obs, :]) >= b_koz_k]
+
+            A_bb_k, B_bb_k = self.action_bounding_box_lin(s_ref_use[2, k], action_ref[:, k])
+            constraints += [A_bb_k * (s[2, k] - s_ref_use[2, k]) + B_bb_k @ a[:, k] >= -self.Dv_t_M]
+            constraints += [A_bb_k * (s[2, k] - s_ref_use[2, k]) + B_bb_k @ a[:, k] <=  self.Dv_t_M]
+
+
+        # Tracking objective
+        cost_track = (w_state * cp.sum_squares(s - s_ref_use) +
+                    w_action * cp.sum_squares(a - action_ref))
+        prob = cp.Problem(cp.Minimize(cost_track), constraints)
+
+        try:
+            prob.solve(solver=cp.CLARABEL, verbose=False)
+        except Exception as e:
+            print(f"[Status]: solver exception: {e}  [obs_av]: {obs_av}")
+            return None, None, None, 'infeasible'
+
+        if "optimal" not in prob.status.lower():
+            print(f"[Status]: {prob.status}. [obs_av]: {obs_av}")
+            return None, None, None, 'infeasible'
+
+        s_opt = s.value
+        a_opt = a.value
+        # append terminal (post-impulse) state to keep 'states = actions + 1'
+        s_opt = np.vstack((s_opt.T, s_opt[:, -1] + self.B_imp @ a_opt[:, -1])).T
+        return s_opt, a_opt, prob.value, 'optimal'
 
     ################## STATIC METHODS ######################
     @staticmethod
@@ -201,54 +260,6 @@ def sample_init_target(sample_time=False, obs=ff.obs_nominal):
     else:
         return state_init, state_target
 
-'''def generate_random_obstacles(num_obstacles=2, xy_low=ff.obs_region['xy_low'], xy_up=ff.obs_region['xy_up'],
-                              radii_range=(0.1, 0.2), uniform_radius=False, fixed_radius=None, prevent_overlap=True,
-                              max_iter=1000, margin_between_obstacles=0., margin_to_boundaries=0.):
-    """
-    Generate a set of random obstacles within specified 2D table limits, ensuring that the entire obstacle (including
-    its radius and specified margins) fits within the table boundaries and optionally preventing overlapping
-    obstacles. If obstacles cannot be placed without overlap after a number of iterations, an error is raised.
-
-    Args:
-        num_obstacles (int): Number of obstacles to generate.
-        xy_low (np.array): Lower bounds (x, y) of the table area.
-        xy_up (np.array): Upper bounds (x, y) of the table area.
-        radii_range (tuple): Min and max radii of obstacles.
-        uniform_radius (bool): If True, all obstacles have the same radius.
-        fixed_radius (float): Fixed radius for all obstacles if uniform_radius is True.
-        prevent_overlap (bool): If True, ensures that obstacles do not overlap.
-        max_iter (int): Maximum number of attempts to place each obstacle without overlapping.
-        margin_between_obstacles (float): Minimum required margin between any two obstacles.
-        margin_to_boundaries (float): Minimum required margin between obstacles and table boundaries.
-
-    Returns:
-        dict: A dictionary containing 'position' and 'radius' keys with numpy arrays.
-    """
-    radii = np.full((num_obstacles,), fixed_radius) if uniform_radius and fixed_radius is not None \
-        else np.random.uniform(low=radii_range[0], high=radii_range[1], size=(num_obstacles,))
-    positions = np.zeros((num_obstacles, 2))
-
-    for i in range(num_obstacles):
-        effective_radius = radii[i] + margin_to_boundaries
-        adjusted_xy_low = xy_low + effective_radius
-        adjusted_xy_up = xy_up - effective_radius
-        for _ in range(max_iter):
-            candidate_position = np.random.uniform(low=adjusted_xy_low, high=adjusted_xy_up)
-
-            # Check for overlap if required, considering the margin between obstacles
-            if prevent_overlap and i > 0:
-                min_distance = (radii[i] + radii[:i] + 2 * ff.robot_radius) * ff.safety_margin + margin_between_obstacles
-                if any(np.linalg.norm(candidate_position - positions[:i], axis=1) < min_distance):
-                    continue  # If overlap or insufficient margin occurs, try again
-            positions[i] = candidate_position
-            break
-        else:
-            # If no valid position is found after max_iter attempts
-            raise ValueError(
-                f"Unable to place obstacles without overlap after {max_iter} attempts. Consider reducing the number "
-                f"or size of obstacles, increasing the table area, or adjusting the margins.")
-
-    return {'position': positions, 'radius': radii}'''
 
 def generate_perfect_observations(positions, radii):
     """
@@ -398,6 +409,92 @@ def ocp_obstacle_avoidance(model:FreeflyerModel, state_ref, action_ref, state_in
     }
 
     return traj_opt, J_vect, scp_iter, feas_scp
+
+def ocp_obstacle_avoidance_feasibility(model: FreeflyerModel,
+                                       state_ref, action_ref,
+                                       state_init, state_final,
+                                       n_time_override=None, waypoint=None,
+                                       w_state=1.0, w_action=1.0,
+                                       trust_region0=None, trust_regionf=None,
+                                       iter_max=None, J_tol=None):
+    """
+    Sequential Convex Programming (SCP) loop that repeatedly solves the convex tracking subproblem.
+
+    Returns:
+        traj_opt : dict(time, states, actions_G, actions_t)
+        J_vect   : (iter_max,) tracking objective values per SCP iter (inf for unused tail)
+        iter_scp : last iteration index
+        status   : 'optimal' or 'infeasible'
+    """
+    # Horizon handling
+    if n_time_override is not None:
+        state_ref  = state_ref[:, :n_time_override+1]  # states usually +1
+        action_ref = action_ref[:, :n_time_override]   # actions = n_time
+
+    # Scenario params
+    obs = copy.deepcopy(ff.obs)
+    obs['radius'] = (obs['radius'] + model.param['radius']) * ff.safety_margin
+
+    # Defaults from your scenario file
+    trust_region0 = trust_region0 if trust_region0 is not None else ff.trust_region0
+    trust_regionf = trust_regionf if trust_regionf is not None else ff.trust_regionf
+    iter_max      = iter_max      if iter_max      is not None else ff.iter_max_SCP
+    J_tol         = J_tol         if J_tol         is not None else ff.J_tol
+
+    # SCP bookkeeping
+    trust_region = float(trust_region0)
+    beta_SCP = (trust_regionf / trust_region0) ** (1.0 / max(1, iter_max))
+    J_vect = np.ones((iter_max,), dtype=float) * 1e12
+
+    # References for next convexification
+    s_ref = state_ref.copy()
+    a_ref = action_ref.copy()
+
+    feas = 'optimal'
+    J_prev = None
+    for it in range(iter_max):
+        s_opt, a_opt, J_k, status = model.ocp_scp_track(
+            s_ref, a_ref, state_init, state_final, obs,
+            trust_region, obs_av=True, waypoint=waypoint,
+            w_state=w_state, w_action=w_action
+        )
+        if status != 'optimal':
+            feas = 'infeasible'
+            break
+
+        # record and check progress
+        J_vect[it] = J_k
+        # trust error uses the pre-terminal columns
+        trust_err = np.max(np.linalg.norm(s_opt[:, :-1] - s_ref[:, :a_ref.shape[1]], axis=0))
+        dJ = (J_prev - J_k) if (J_prev is not None) else np.inf
+
+        # update references and trust region
+        s_ref = s_opt
+        a_ref = a_opt
+        J_prev = J_k
+        trust_region = max(trust_regionf, beta_SCP * trust_region)
+
+        # stopping (same flavor as your other OCPs)
+        if it >= 1 and (trust_err <= trust_regionf and abs(dJ) < J_tol):
+            break
+
+    if feas != 'optimal':
+        return (
+            {'time': None, 'states': None, 'actions_G': None, 'actions_t': None},
+            J_vect, it, 'infeasible'
+        )
+
+    # Recover thruster cluster actions (like your other solvers)
+    a_opt_t = (model.param['Lambda_inv'] @
+               (model.R_BG(s_ref[2, :-1]) @ a_ref[:, None, :].transpose(2, 0, 1)))[:, :, 0].T
+
+    traj_opt = {
+        'time'      : np.arange(0, ff.T + ff.dt/2, ff.dt),
+        'states'    : s_ref,   # (6, n_time+1)
+        'actions_G' : a_ref,   # (3, n_time)
+        'actions_t' : a_opt_t  # (N_CLUSTERS, n_time)
+    }
+    return traj_opt, J_vect, it, 'optimal'
 
 # Reward to go and constraints to go
 def compute_reward_to_go(actions):

@@ -122,12 +122,13 @@ class FreeFlyerSimulator(Node):
         p_obstacles = self.declare_parameters(
             "obstacles",
             [
-                ("cyl_pos_x", [1., 1.5, 2.5, 2.5]),#("cyl_pos_x", []),#
-                ("cyl_pos_y", [0.7, 1.7, 0.75, 1.75]),#("cyl_pos_y", []),#
-                ("cyl_rads", [0.2, 0.2, 0.2, 0.2]), #[0.18, 0.15, 0.12, 0.2]),#("cyl_rads", []),#
-                ("cyl_heights", [0.6, 0.6, 0.6, 0.6]),#("cyl_heights", []),#
+                ("cyl_pos_x", [1.95, 1.35,  1.95]),#("cyl_pos_x", []),#
+                ("cyl_pos_y", [2.2, 1.25, 0.3]),#("cyl_pos_y", []),#
+                ("cyl_rads", [0.2, 0.2, 0.2]), #[0.18, 0.15, 0.12, 0.2]),#("cyl_rads", []),#
+                ("cyl_heights", [0.6, 0.6, 0.6]),#("cyl_heights", []),#
             ],
         )
+
         self.obstacles = {
             "cyl_pos_x": p_obstacles[0].get_parameter_value().double_array_value,
             "cyl_pos_y": p_obstacles[1].get_parameter_value().double_array_value,
@@ -167,7 +168,7 @@ class FreeFlyerSimulator(Node):
             [
                 ("sim_dt", 0.001),  # update period in [s]
                 ("discretization", "Euler"),  # discretization scheme from {"Euler", "RungeKutta"}
-                ("x_0", [0.22, 2.14, 1.53, 0.0, 0.0, 0.0]),#[0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
+                ("x_0", [0.20, 1.25, 1.53, 0.0, 0.0, 0.0]),#[0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
                 ("B_sim_contacts", True),  # if True, simulates contacts
             ],
         )

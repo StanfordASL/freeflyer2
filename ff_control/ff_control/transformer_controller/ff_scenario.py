@@ -13,7 +13,8 @@ N_CLUSTERS = 4
 N_OBS_MAX = 4
 SINGLE_OBS_DIM = 3
 N_OBSERVATION = N_OBS_MAX*SINGLE_OBS_DIM
-TRANSFORMER_MODEL = 'checkpoint_ff_ctgrtg_art'#'checkpoint_ff_obs_4scen_rel_ctgrtg'#'checkpoint_ff_time40_100_chunk100R_ctgrtg'#'checkpoint_ff_ctgrtg'#
+TRANSFORMER_MODEL = 'v_03'  
+CTG_CONDITION = True
 
 # Generalization level
 generalized_time = False
@@ -62,6 +63,16 @@ obs_region = {
 }
 min_init_dist = 0.5
 
+### fixed target for art lang
+state_target = np.array([
+    (goal_region['xy_low'][0] + goal_region['xy_up'][0]) / 2.0,
+    (goal_region['xy_low'][1] + goal_region['xy_up'][1]) / 2.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+])
+
 # Time discretization and bounds
 dt = 0.5 if generalized_time else 0.4
 T = 40.0
@@ -76,62 +87,42 @@ final_time_choices = np.arange(T_min, T_max+1, 20.0)
 n_time_max = int(T_max/dt)
 
 # Obstacle
+# obs_nominal = {
+#     'position' : np.array([[1.0,  0.7],
+#                            [1.5,  1.7],
+#                            [2.5, 0.75],
+#                            [2.5, 1.75]]),
+#     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
+# }
+# obs = {
+#     'position' : np.array([[1.0,  0.7],
+#                            [1.5,  1.7],
+#                            [2.5, 0.75],
+#                            [2.5, 1.75]]),
+#     'radius' : np.array([0.2, 0.2, 0.2, 0.2])
+# }
 obs_nominal = {
-    'position' : np.array([[1.0,  0.7],
-                           [1.5,  1.7],
-                           [2.5, 0.75],
-                           [2.5, 1.75]]),
-    'radius' : np.array([0.2, 0.2, 0.2, 0.2])
+    'position' : np.array([
+        [1.95,  2.2],   # left body
+        [1.35, 1.25],   # middle obstacle
+        [1.95,  0.3]    # right body
+    ]),
+    'radius' : np.array([0.2, 0.2, 0.2])
 }
+
 obs = {
-    'position' : np.array([[1.0,  0.7],
-                           [1.5,  1.7],
-                           [2.5, 0.75],
-                           [2.5, 1.75]]),
-    'radius' : np.array([0.2, 0.2, 0.2, 0.2])
+    'position' : np.array([
+        [1.95,  2.2],   # left body
+        [1.35, 1.25],   # middle obstacle
+        [1.95,  0.3]    # right body
+    ]),
+    'radius' : np.array([0.2, 0.2, 0.2])
 }
-'''obs_nominal = {
-    'position' : np.array([[1. , 0.7],
-                           [1.8, 1.1],
-                           [1. , 1.8],
-                           [2.5, 1.7]]),
-    'radius' : np.array([0.2, 0.2, 0.2, 0.2])
-}'''
+
 n_obs_nominal = obs_nominal['position'].shape[0]
 n_obs = obs_nominal['position'].shape[0]
 relative_observations = True #True/False
-if generalized_obs:
-    obs1 = {
-        'position': np.array([[1.0, 0.7],
-                              [1.5, 1.7],
-                              [2.5, 0.75],
-                              [2.5, 1.75]]),
-        'radius': np.array([0.18, 0.15, 0.12, 0.2])
-    }
-    obs2 = {
-        'position': np.array([[.8, .5],
-                              [1.3, 1.7],
-                              [2, 1.05],
-                              [2.6, 2.05]]),
-        'radius': np.array([0.17, 0.2, 0.14, 0.13])
-    }
-    obs3 = {
-        'position': np.array([[1.5, .6],
-                              [2.1, 1.13],
-                              [1.1, 1.45],
-                              [1.9, 2.05]]),
-        'radius': np.array([0.138, 0.11, 0.15, 0.19])
-    }
-    obs4 = {
-        'position': np.array([[1, 1],
-                              [1.75, 1.5],
-                              [2.5, 2],
-                              [2.4, .45]]),
-        'radius': np.array([0.123, 0.151, 0.131, 0.184])
-    }
-    obs_list = [obs1, obs2, obs3, obs4]
-    n_obs_list = [4, 4, 4, 4]
-    #obs_nominal = obs1 # Set this variable to the desired obs configuations (one of the four above)
+
 safety_margin = 1.1
 
 '''# PID Controller
@@ -143,7 +134,21 @@ K = np.array([[gain_f, 0, 0, gain_df, 0, 0],
               [0, gain_f, 0, 0, gain_df, 0],
               [0, 0, gain_t, 0, 0, gain_dt]])'''
 
+
+# --------------------------------------------------------------------------------
+# --- Waypoint additoin & timing helpers (for dataset_gen to import) ---
+# --------------------------------------------------------------------------------
+# Waypoint is placed along the outward normal from table center, at a safe standoff.
+WAYPOINT_MARGIN = 0.01  # extra over inflated KOZ radius (meters)
+FAST_TIDX_RANGE = (65, 75)  # inclusive bounds on terminal time index (0..n_time_rpod-1)
+SLOW_TIDX      = n_time_rpod  # default = 100 (full horizon)
+
+
+# --------------------------------------------------------------------------------
 # Optimization interface
+# --------------------------------------------------------------------------------
+FUEL_WEIGHT = 1e0
+WAYPOINT_WEIGHT = 1e3
 iter_max_SCP = 20
 trust_region0 = 10.
 trust_regionf = 0.005
