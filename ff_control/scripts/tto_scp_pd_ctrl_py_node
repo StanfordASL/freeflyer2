@@ -123,9 +123,9 @@ class TransformerBasedSCPController(LinearController):
         # Control loop
         # feedback gain params
         self.control_callback_group = MutuallyExclusiveCallbackGroup()
-        self.declare_parameter('gain_f', 2.0)
-        self.declare_parameter('gain_df', 10.0) # 10.0
-        self.declare_parameter('gain_t', 0.2)
+        self.declare_parameter('gain_f', 2.0) # 2.0
+        self.declare_parameter('gain_df', 45.0) # 10.0, Aroit 45.0
+        self.declare_parameter('gain_t', 0.2) # 0.2
         self.declare_parameter('gain_dt', 0.4) # 0.4
         self.declare_parameter('total_time', ff_scenario.T_nominal)
         self.n_timesteps = int(ff_scenario.T_nominal/ff_scenario.dt) + 1
@@ -286,8 +286,16 @@ class TransformerBasedSCPController(LinearController):
         scp_time0 = time.time()
         traj_scp_DT, J_vect_scp_DT_ctg, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance_feasibility(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
         scp_runtime = time.time() - scp_time0
-        if feas_scp_DT == 'infeasible':
-            self.get_logger().error("==============SCP failed in computing an optimal path! No action will be executed-===================")
+        
+        if feas_scp_DT == 'infeasible' or traj_scp_DT is None or traj_scp_DT.get('states') is None:
+            self.get_logger().error(
+                "============== SCP failed in computing an optimal path! "
+                "No action will be executed. Skipping trajectory publishing. ==============="
+            )
+            self.get_logger().info(f"SCP iterations: {iter_scp_DT}, runtime: {scp_runtime} s")
+            # Make sure we don't start trajectory tracking
+            self._trajectory_ready = False
+            return
             
         self.path_pub.publish(self.traj2path(traj_scp_DT['states'], height=0.1))
 
@@ -327,7 +335,11 @@ class TransformerBasedSCPController(LinearController):
     def trajectory_loop(self) -> None:
         # If no trajectory has been computed yet, do nothing, else change periodically the _state_desired
         if (self._trajectory_ready) and (self._desired_trajectory['timestep'] < self.n_timesteps):
-            self.get_logger().info('Current timesteps: ' + str(self._desired_trajectory['timestep']))
+            red = "\033[31m"
+            reset = "\033[0m"
+
+            self.get_logger().info(red + 'Current timesteps: ' + str(self._desired_trajectory['timestep']) + reset)
+            # self.get_logger().info('Current timesteps: ' + str(self._desired_trajectory['timestep']))
             current_state_desired = FreeFlyerStateStamped()
             current_state_desired.header.stamp = self.get_clock().now().to_msg()
             current_state_desired.state = self.vec2state(copy.deepcopy(self._desired_trajectory['states'][:,self._desired_trajectory['timestep']]))

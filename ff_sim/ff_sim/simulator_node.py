@@ -154,10 +154,16 @@ class FreeFlyerSimulator(Node):
             obs_marker.pose.orientation.y = 0.
             obs_marker.pose.orientation.z = 0.
             obs_marker.pose.orientation.w = 1.
-            obs_marker.color.r = 1.
-            obs_marker.color.g = 0.
-            obs_marker.color.b = 0.
-            obs_marker.color.a = 0.5
+            if n_obs == 1:
+                obs_marker.color.r = 1.
+                obs_marker.color.g = 0.
+                obs_marker.color.b = 0.
+                obs_marker.color.a = 0.5
+            else: # the prximity points are marked green as we want to pass nearby
+                obs_marker.color.r = 0.
+                obs_marker.color.g = 1.
+                obs_marker.color.b = 0.
+                obs_marker.color.a = 0.5
             self.obstacles_array_msg.markers.append(obs_marker)
 
         self.B_ideal = self.declare_parameter("B_ideal", False).get_parameter_value().bool_value
@@ -168,10 +174,17 @@ class FreeFlyerSimulator(Node):
             [
                 ("sim_dt", 0.001),  # update period in [s]
                 ("discretization", "Euler"),  # discretization scheme from {"Euler", "RungeKutta"}
-                ("x_0", [0.20, 1.25, 1.53, 0.0, 0.0, 0.0]),#[0.6, 2.0, 0.0, 0.0, 0.0, 0.0]),  # initial state
+                ("x_0", [0.20, 0.75, 1.53, 0.0, 0.0, 0.0]),# Centre [0.20, 1.25, 1.53, 0.0, 0.0, 0.0]) ==== left positioned [0.23, 1.65, 2.53, 0.0, 0.0, 0.0])
                 ("B_sim_contacts", True),  # if True, simulates contacts
             ],
         )
+        '''
+        Note: If you keep the ff static while the computation is being performed: we are good to go
+        Positioned at centre and can do left slow (cmd 93), left fast (cmd 85), right fast(cmd 91), right slow (cmd 99)
+            [0.20, 1.25, 1.53, 0.0, 0.0, 0.0]) 
+        Positioned at right and can do  right fast(cmd 91), right slow (cmd 99)
+            [0.20, 0.75, 1.53, 0.0, 0.0, 0.0])
+        '''
         self.SIM_DT = p_sim[0].get_parameter_value().double_value
         self.DISCRETIZATION = p_sim[1].get_parameter_value().string_value
         self.x_0 = np.array(p_sim[2].get_parameter_value().double_array_value)
@@ -419,7 +432,7 @@ class FreeFlyerSimulator(Node):
         f[5] = thetaddot
 
         # add constant force due to table tilt
-        f[3:5] = f[3:5] + F_tilt / m
+        f[3:5] = f[3:5] + F_tilt / m # commenting this out to remove unnecessary movement of the robot
 
         return f
 

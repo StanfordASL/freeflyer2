@@ -73,10 +73,16 @@ class ObstaclesSimulator(Node):
             obs_marker.pose.orientation.y = 0.
             obs_marker.pose.orientation.z = 0.
             obs_marker.pose.orientation.w = 1.
-            obs_marker.color.r = 1.
-            obs_marker.color.g = 0.
-            obs_marker.color.b = 0.
-            obs_marker.color.a = 0.5
+            if n_obs == 1:
+                obs_marker.color.r = 1.
+                obs_marker.color.g = 0.
+                obs_marker.color.b = 0.
+                obs_marker.color.a = 0.5
+            else: # the prximity points are marked green as we want to pass nearby
+                obs_marker.color.r = 0.
+                obs_marker.color.g = 1.
+                obs_marker.color.b = 0.
+                obs_marker.color.a = 0.5
             self.obstacles_array_msg.markers.append(obs_marker)
 
         # obstacles publisher
