@@ -199,6 +199,68 @@ class FreeflyerModel:
         # append terminal (post-impulse) state to keep 'states = actions + 1'
         s_opt = np.vstack((s_opt.T, s_opt[:, -1] + self.B_imp @ a_opt[:, -1])).T
         return s_opt, a_opt, prob.value, 'optimal'
+    
+    ######################################################### Extended Demo #########################################################
+    def ocp_scp_track_no_goal(self, state_ref, action_ref, state_init, obs, trust_region, obs_av=True, waypoint=None, w_state=1.0, w_action=1.0, w_tracking=1.0):
+        """
+        Same as ocp_scp_track but without terminal state constraint: refines the warm start
+        to satisfy dynamics and avoid obstacles, without forcing arrival at any goal state.
+        """
+        n_time = action_ref.shape[1]
+        s_ref_use = state_ref[:, :n_time]  # (N_STATE, n_time)
+
+        s = cp.Variable((self.N_STATE, n_time))
+        a = cp.Variable((self.N_ACTION, n_time))
+        constraints = []
+
+        # Initial + dynamics only (no terminal state constraint)
+        constraints += [s[:, 0] == state_init]
+        constraints += [s[:, k+1] == self.Ak @ (s[:, k] + self.B_imp @ a[:, k]) for k in range(n_time-1)]
+
+        # Table bounds
+        constraints += [s[:2, :] >= ff.start_region['xy_low'][:, None]]
+        constraints += [s[:2, :] <= ff.goal_region['xy_up'][:, None]]
+
+        # Trust region, KOZ linearization, action bounding box
+        for k in range(n_time):
+            constraints += [cp.SOC(trust_region, s[:, k] - s_ref_use[:, k])]
+            if obs_av:
+                for n_obs in range(len(obs['radius'])):
+                    c_koz_k = (s_ref_use[:2, k] - obs['position'][n_obs, :]).T @ (np.eye(2) / (obs['radius'][n_obs]**2))
+                    b_koz_k = np.sqrt(c_koz_k @ (s_ref_use[:2, k] - obs['position'][n_obs, :]))
+                    constraints += [c_koz_k @ (s[:2, k] - obs['position'][n_obs, :]) >= b_koz_k]
+
+            A_bb_k, B_bb_k = self.action_bounding_box_lin(s_ref_use[2, k], action_ref[:, k])
+            constraints += [A_bb_k * (s[2, k] - s_ref_use[2, k]) + B_bb_k @ a[:, k] >= -self.Dv_t_M]
+            constraints += [A_bb_k * (s[2, k] - s_ref_use[2, k]) + B_bb_k @ a[:, k] <=  self.Dv_t_M]
+
+        # Tracking objective + Fuel Optimality
+        cost_track = w_tracking * (w_state * cp.sum_squares(s - s_ref_use) +
+                    w_action * cp.sum_squares(a - action_ref))
+        cost_fuel = (1 - w_tracking) * cp.sum(cp.norm(a, 1, axis=0))
+
+        if w_tracking == 0.0:
+            prob = cp.Problem(cp.Minimize(cost_fuel), constraints)
+        elif w_tracking == 1.0:
+            prob = cp.Problem(cp.Minimize(cost_track), constraints)
+        else:
+            prob = cp.Problem(cp.Minimize(cost_track + cost_fuel), constraints)
+
+        try:
+            prob.solve(solver=cp.CLARABEL, verbose=False)
+        except Exception as e:
+            print(f"[Status]: solver exception: {e}  [obs_av]: {obs_av}")
+            return None, None, None, 'infeasible'
+
+        if "optimal" not in prob.status.lower():
+            print(f"[Status]: {prob.status}. [obs_av]: {obs_av}")
+            return None, None, None, 'infeasible'
+
+        s_opt = s.value
+        a_opt = a.value
+        s_opt = np.vstack((s_opt.T, s_opt[:, -1] + self.B_imp @ a_opt[:, -1])).T
+        return s_opt, a_opt, prob.value, 'optimal'
+
 
     ################## STATIC METHODS ######################
     @staticmethod
@@ -495,6 +557,87 @@ def ocp_obstacle_avoidance_feasibility(model: FreeflyerModel,
         'actions_t' : a_opt_t  # (N_CLUSTERS, n_time)
     }
     return traj_opt, J_vect, it, 'optimal'
+
+######################################################### Extended Demo #########################################################
+def ocp_obstacle_avoidance_feasibility_ST(model: FreeflyerModel,
+                                   state_ref, action_ref,
+                                   state_init,
+                                   n_time_override=None, waypoint=None,
+                                   w_state=1.0, w_action=1.0, w_tracking=1.0,
+                                   trust_region0=None, trust_regionf=None,
+                                   iter_max=None, J_tol=None):
+    """
+    Refine a warm start trajectory for obstacle avoidance only (no goal state).
+    Same SCP loop as ocp_obstacle_avoidance_feasibility but the convex subproblem
+    does not enforce a terminal state; the warm start is assumed to already
+    encode the desired goal region and time from the learned policy.
+
+    Returns:
+        traj_opt : dict(time, states, actions_G, actions_t)
+        J_vect   : (iter_max,) tracking objective per SCP iter
+        iter_scp : last iteration index
+        status   : 'optimal' or 'infeasible'
+    """
+    if n_time_override is not None:
+        state_ref  = state_ref[:, :n_time_override+1]
+        action_ref = action_ref[:, :n_time_override]
+
+    obs = copy.deepcopy(ff.obs)
+    obs['radius'] = (obs['radius'] + model.param['radius']) * ff.safety_margin
+
+    trust_region0 = trust_region0 if trust_region0 is not None else ff.trust_region0
+    trust_regionf = trust_regionf if trust_regionf is not None else ff.trust_regionf
+    iter_max      = iter_max      if iter_max      is not None else ff.iter_max_SCP
+    J_tol         = J_tol         if J_tol         is not None else ff.J_tol
+
+    trust_region = float(trust_region0)
+    beta_SCP = (trust_regionf / trust_region0) ** (1.0 / max(1, iter_max))
+    J_vect = np.ones((iter_max,), dtype=float) * 1e12
+
+    s_ref = state_ref.copy()
+    a_ref = action_ref.copy()
+
+    feas = 'optimal'
+    J_prev = None
+    for it in range(iter_max):
+        s_opt, a_opt, J_k, status = model.ocp_scp_track_no_goal(
+            s_ref, a_ref, state_init, obs,
+            trust_region, obs_av=True, waypoint=waypoint,
+            w_state=w_state, w_action=w_action, w_tracking=w_tracking
+        )
+        if status != 'optimal':
+            feas = 'infeasible'
+            break
+
+        J_vect[it] = J_k
+        trust_err = np.max(np.linalg.norm(s_opt[:, :-1] - s_ref[:, :a_ref.shape[1]], axis=0))
+        dJ = (J_prev - J_k) if (J_prev is not None) else np.inf
+
+        s_ref = s_opt
+        a_ref = a_opt
+        J_prev = J_k
+        trust_region = max(trust_regionf, beta_SCP * trust_region)
+
+        if it >= 1 and (trust_err <= trust_regionf and abs(dJ) < J_tol):
+            break
+
+    if feas != 'optimal':
+        return (
+            {'time': None, 'states': None, 'actions_G': None, 'actions_t': None},
+            J_vect, it, 'infeasible'
+        )
+
+    a_opt_t = (model.param['Lambda_inv'] @
+               (model.R_BG(s_ref[2, :-1]) @ a_ref[:, None, :].transpose(2, 0, 1)))[:, :, 0].T
+
+    traj_opt = {
+        'time'      : np.arange(0, ff.T + ff.dt/2, ff.dt),
+        'states'    : s_ref,
+        'actions_G' : a_ref,
+        'actions_t' : a_opt_t
+    }
+    return traj_opt, J_vect, it, 'optimal'
+
 
 # Reward to go and constraints to go
 def compute_reward_to_go(actions):

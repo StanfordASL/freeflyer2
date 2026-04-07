@@ -172,7 +172,9 @@ def ros_model_inference_dyn(model, data_stats, state_init, state_final, text_enc
                     states=states_dyn[:,:t+1,:],
                     actions=actions_dyn[:,:t+1,:],
                     constraints=ctgs_dyn[:,:t+1,:],
-                    goal=goal_i[:,:t+1,:],
+                    ######################################################### Un-comment if want to use original sages #########################################################
+                    # goal=goal_i[:,:t+1,:],
+                    ######################################################### Comment-out if want to use extended demo #########################################################
                     commands_emb=commands_emb_i,
                     timesteps=timesteps_i[:,:t+1],
                     attention_mask=attention_mask_i[:,:t+1],
@@ -183,7 +185,9 @@ def ros_model_inference_dyn(model, data_stats, state_init, state_final, text_enc
                 output_dyn = model(
                     states=states_dyn[:,:t+1,:],
                     actions=actions_dyn[:,:t+1,:],
-                    goal=goal_i[:,:t+1,:],
+                    ######################################################### Un-comment if want to use original sages #########################################################
+                    # goal=goal_i[:,:t+1,:],
+                    ######################################################### Comment out if want to use extended demo #########################################################
                     commands_emb=commands_emb_i,
                     timesteps=timesteps_i[:,:t+1],
                     attention_mask=attention_mask_i[:,:t+1],

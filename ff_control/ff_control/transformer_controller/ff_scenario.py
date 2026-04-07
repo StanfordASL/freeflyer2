@@ -13,7 +13,8 @@ N_CLUSTERS = 4
 N_OBS_MAX = 4
 SINGLE_OBS_DIM = 3
 N_OBSERVATION = N_OBS_MAX*SINGLE_OBS_DIM
-TRANSFORMER_MODEL = 'v_03'  
+TRANSFORMER_MODEL = 'v_05' # v_04 confindet and working on a new model  
+# TRANSFORMER_MODEL = 'v_03-sages'
 CTG_CONDITION = True
 
 # Generalization level

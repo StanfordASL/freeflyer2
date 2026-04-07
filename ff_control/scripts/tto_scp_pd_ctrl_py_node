@@ -49,7 +49,7 @@ from ff_control.tri_thruster_ctrl import TrinaryThrusterController
 from ff_control.linear_ctrl import LinearController
 import ff_control.transformer_controller.ros_manage as DT_manager
 from ff_control.transformer_controller.adapter import FrozenTextAdapter
-from ff_control.transformer_controller.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, ocp_obstacle_avoidance_feasibility
+from ff_control.transformer_controller.freeflyer import FreeflyerModel, ocp_no_obstacle_avoidance, ocp_obstacle_avoidance, ocp_obstacle_avoidance_feasibility, ocp_obstacle_avoidance_feasibility_ST
 import ff_control.transformer_controller.ff_scenario as ff_scenario
 from ff_msgs.msg import FreeFlyerState
 from ff_msgs.msg import FreeFlyerStateStamped
@@ -123,7 +123,7 @@ class TransformerBasedSCPController(LinearController):
         # Control loop
         # feedback gain params
         self.control_callback_group = MutuallyExclusiveCallbackGroup()
-        self.declare_parameter('gain_f', 2.0) # 2.0
+        self.declare_parameter('gain_f', 4.0) # 2.0, Arpit 4.0
         self.declare_parameter('gain_df', 45.0) # 10.0, Aroit 45.0
         self.declare_parameter('gain_t', 0.2) # 0.2
         self.declare_parameter('gain_dt', 0.4) # 0.4
@@ -225,6 +225,7 @@ class TransformerBasedSCPController(LinearController):
             return
 
         # Goal pose / state from fixed ff_scenario.state_target (ignore msg.pose for goal)
+        # for extended demo, even though we assign the goal vec but it is not used as in forward pass goal is not used
         goal_vec = self.TARGET_STATE
 
         state_desired = FreeFlyerStateStamped()
@@ -284,7 +285,10 @@ class TransformerBasedSCPController(LinearController):
 
         # Solve SCP for feasibility problem
         scp_time0 = time.time()
-        traj_scp_DT, J_vect_scp_DT_ctg, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance_feasibility(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
+        ######################################################### Un-comment if want to use original sages #########################################################
+        # traj_scp_DT, J_vect_scp_DT_ctg, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance_feasibility(ffm, states_ws_DT, actions_ws_DT, state_init, state_final)
+        ######################################################### Comment-out if want to use extended demo #########################################################
+        traj_scp_DT, J_vect_scp_DT_ctg, iter_scp_DT, feas_scp_DT = ocp_obstacle_avoidance_feasibility_ST(ffm, states_ws_DT, actions_ws_DT, state_init)
         scp_runtime = time.time() - scp_time0
         
         if feas_scp_DT == 'infeasible' or traj_scp_DT is None or traj_scp_DT.get('states') is None:
